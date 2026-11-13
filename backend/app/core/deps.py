@@ -35,7 +35,8 @@ async def usuario_actual(request: Request, db: DB) -> Usuario:
         usuario = await db.get(Usuario, UUID(payload["sub"]))
     except (ValueError, KeyError):
         raise no_autenticado from None
-    if usuario is None or not usuario.activo:
+    if usuario is None or not usuario.activo or payload.get("ver") != usuario.version_sesion:
+        # Versión distinta = las credenciales cambiaron (o hubo robo) después de emitir el token.
         raise no_autenticado
     return usuario
 

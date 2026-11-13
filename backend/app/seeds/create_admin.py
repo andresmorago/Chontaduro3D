@@ -3,12 +3,12 @@
 import asyncio
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.config import settings
 from app.core.security import hash_password, validar_fortaleza
 from app.db import SessionLocal, engine
-from app.models import Usuario
+from app.models import SesionRefresh, Usuario
 
 
 async def crear_o_actualizar(email: str, password: str) -> str:
@@ -26,6 +26,14 @@ async def crear_o_actualizar(email: str, password: str) -> str:
         else:
             usuario.password_hash = hash_password(password)
             usuario.activo = True
+            # Recuperación tras una posible filtración: cerrar TODAS las sesiones (refresh) e
+            # invalidar los JWT de acceso ya emitidos subiendo la versión.
+            usuario.version_sesion += 1
+            await db.execute(
+                update(SesionRefresh)
+                .where(SesionRefresh.usuario_id == usuario.id)
+                .values(revocada=True)
+            )
             accion = "actualizado"
         await db.commit()
     return accion

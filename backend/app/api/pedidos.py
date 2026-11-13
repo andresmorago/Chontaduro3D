@@ -3,7 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.core.deps import DB, PROTEGIDO
+from app.core import auditoria
+from app.core.deps import DB, PROTEGIDO, Admin
 from app.models import Articulo, Pedido
 from app.schemas.dominio import EstadoPedido, PedidoEstadoIn, PedidoOut
 
@@ -32,7 +33,9 @@ async def listar(db: DB, estado: EstadoPedido | None = None, limite: int = 100) 
 
 
 @router.patch("/{pedido_id}", response_model=PedidoOut)
-async def cambiar_estado(pedido_id: UUID, datos: PedidoEstadoIn, db: DB) -> PedidoOut:
+async def cambiar_estado(
+    pedido_id: UUID, datos: PedidoEstadoIn, db: DB, usuario: Admin
+) -> PedidoOut:
     # Cambiar el estado de un pedido NO toca el inventario: la venta se registra aparte.
     fila = (
         await db.execute(
@@ -44,6 +47,10 @@ async def cambiar_estado(pedido_id: UUID, datos: PedidoEstadoIn, db: DB) -> Pedi
     if fila is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese pedido no existe.")
     pedido, articulo = fila
-    pedido.estado = datos.estado
+    anterior, pedido.estado = pedido.estado, datos.estado
+    auditoria.registrar(
+        db, "pedido_estado", usuario_id=usuario.id,
+        detalle={"codigo": articulo.codigo, "antes": anterior, "despues": datos.estado},
+    )  # fmt: skip
     await db.commit()
     return _salida(pedido, articulo)

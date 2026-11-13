@@ -60,7 +60,8 @@ def respaldar(desde: str | None, hasta: str) -> Path:
         )
     url = make_url(settings.database_url)
     destino = RESPALDOS / f"{PREFIJO}{datetime.now():%Y%m%d-%H%M%S}-{desde}-a-{hasta}.sql.gz"
-    entorno = {**os.environ, "PGPASSWORD": url.password or ""}
+    # Entorno mínimo: pg_dump no debe heredar los secretos del servicio (token de Cloudflare…).
+    entorno = {"PATH": os.environ.get("PATH", ""), "PGPASSWORD": url.password or ""}
     comando = [
         "pg_dump",
         "-h", url.host or "db",

@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import ipaddress
 
 from fastapi import Request
 
@@ -24,7 +25,18 @@ def ip_cliente(request: Request) -> str:
     return request.client.host if request.client else "desconocido"
 
 
+def _agrupar(ip: str) -> str:
+    """Una dirección IPv6 completa da 2^64 «orígenes» a quien tenga un /64: se agrupa por /64."""
+    try:
+        d = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if d.version == 6:
+        return str(ipaddress.ip_network(f"{d}/64", strict=False))
+    return ip
+
+
 def origen_hash(request: Request) -> str:
-    """HMAC de la IP con la clave de la app: sirve para contar, no para identificar."""
+    """HMAC del origen (IPv4 tal cual, IPv6 por /64): sirve para contar, no para identificar."""
     clave = settings.secret_key.encode()
-    return hmac.new(clave, ip_cliente(request).encode(), hashlib.sha256).hexdigest()
+    return hmac.new(clave, _agrupar(ip_cliente(request)).encode(), hashlib.sha256).hexdigest()

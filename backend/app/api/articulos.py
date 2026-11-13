@@ -122,7 +122,11 @@ async def subir_imagen(
     a = await _obtener(db, articulo_id)
     nueva = await imagenes.guardar(archivo)
     anterior, a.imagen = a.imagen, nueva
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        imagenes.borrar(nueva)  # no dejar un archivo huérfano si la base no lo registró
+        raise
     imagenes.borrar(anterior)
     return a_salida(a, (await stock_de(db, [a.id]))[a.id])
 

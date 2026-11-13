@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.config import settings
@@ -43,10 +44,21 @@ async def guardar(archivo: UploadFile) -> str:
             status.HTTP_413_CONTENT_TOO_LARGE,
             f"La imagen pesa más de {settings.max_upload_mb} MB. Achícala e inténtalo de nuevo.",
         )
+    return await run_in_threadpool(_procesar, datos)
+
+
+def _procesar(datos: bytes) -> str:
+    """Decodifica, normaliza y guarda. Corre en un hilo: Pillow es CPU pura."""
     try:
         with Image.open(io.BytesIO(datos)) as img:
             if img.format not in FORMATOS:
                 raise _invalida("Solo se aceptan imágenes JPG, PNG o WEBP.")
+            ancho, alto = img.size
+            # Pillow solo avisa (no falla) entre 1× y 2× el tope: se corta ANTES de decodificar.
+            if ancho * alto > PIXELES_MAXIMOS:
+                raise _invalida(
+                    "La imagen tiene demasiados píxeles. Reduce su tamaño e inténtalo de nuevo."
+                )
             img.load()
             img = ImageOps.exif_transpose(img)  # respeta la orientación y descarta EXIF
             if img.mode not in ("RGB", "RGBA"):

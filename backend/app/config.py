@@ -39,6 +39,11 @@ class Settings(BaseSettings):
         if self.app_env == "production" and len(self.secret_key) < 32:
             raise ValueError("SECRET_KEY es obligatoria en producción (mínimo 32 caracteres).")
         if not self.secret_key:
+            if self.trust_proxy or self.proxy_shared_secret:
+                raise ValueError(
+                    "SECRET_KEY vacía con TRUST_PROXY/PROXY_SHARED_SECRET: detrás de un túnel "
+                    "público no se puede firmar con la clave de desarrollo, que es pública."
+                )
             # Desarrollo/pruebas: clave fija y evidente; nunca válida en producción.
             self.secret_key = "desarrollo-no-usar-en-produccion-0123456789abcdef"
         return self

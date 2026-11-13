@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.api import articulos, auth, inventario, media, panel, pedidos, produccion, publico, ventas
 from app.config import settings
+from app.core.limite_cuerpo import LimiteDeCuerpo
 from app.db import engine
 
 CABECERAS = {
@@ -33,6 +34,9 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None if settings.es_produccion else "/api/openapi.json",
 )
+
+
+app.add_middleware(LimiteDeCuerpo)
 
 
 @app.middleware("http")

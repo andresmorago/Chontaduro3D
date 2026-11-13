@@ -16,20 +16,26 @@ def ahora() -> datetime:
     return datetime.now(UTC)
 
 
-def crear_access_token(usuario_id: str) -> str:
+def crear_access_token(usuario_id: str, version: int = 0) -> str:
     emitido = ahora()
     payload = {
         "sub": str(usuario_id),
         "iat": emitido,
         "exp": emitido + timedelta(minutes=settings.access_token_minutes),
         "typ": "access",
+        "ver": version,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITMO)
 
 
 def leer_access_token(token: str) -> dict[str, Any] | None:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITMO])
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[ALGORITMO],
+            options={"require": ["exp", "iat", "sub"]},
+        )
     except jwt.PyJWTError:
         return None
     return payload if payload.get("typ") == "access" else None

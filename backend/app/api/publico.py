@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.api.articulos import url_imagen
 from app.config import settings
@@ -53,6 +53,9 @@ async def crear_pedido(datos: PedidoPublicoIn, request: Request, db: DB) -> Pedi
         return ok  # robot: se responde como si hubiera funcionado, sin guardar nada
 
     origen = origen_hash(request)
+    # Los límites son «contar y luego insertar»: se serializan con un candado de la transacción
+    # (se suelta con el commit) para que una ráfaga concurrente no los sobrepase.
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('pedidos-publicos', 0))"))
     desde = ahora() - timedelta(hours=1)
     del_origen = (
         await db.execute(

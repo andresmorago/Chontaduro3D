@@ -27,10 +27,26 @@ services:
     build:
       context: ./backend
       target: runtime
-    env_file: .env
+    # Solo lo que el backend necesita: el .env completo trae el token de Cloudflare y la contraseña
+    # del admin, que un backend comprometido no debe poder leer de su propio entorno.
     environment:
       TZ: America/Bogota
       APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-30}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:-}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Bogota}
+      MEDIA_DIR: ${MEDIA_DIR:-/media}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
+      WHATSAPP_NEGOCIO: ${WHATSAPP_NEGOCIO:-}
+      # Solo para `make prod-admin` (create_admin); el servidor web no los usa.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      MIGRAR_AL_ARRANCAR: ${MIGRAR_AL_ARRANCAR:-1}
     # El usuario del anfitrión: respaldos e imágenes quedan legibles por quien administra.
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,7 @@ class Pedido(MarcaDeTiempo, Base):
 
     __tablename__ = "pedidos"
     __table_args__ = (
+        Index("ix_pedidos_creado_en", "creado_en"),
         CheckConstraint(en_lista("estado", ESTADOS_PEDIDO), name="estado_valido"),
         CheckConstraint("cantidad > 0", name="cantidad_positiva"),
     )

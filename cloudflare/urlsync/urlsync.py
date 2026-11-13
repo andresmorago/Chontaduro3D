@@ -107,7 +107,8 @@ def main() -> int:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", nombre):
         sys.exit("[urlsync] WORKER_NOMBRE debe ser minúsculas, dígitos y guiones.")
     if not secreto:
-        log("AVISO: PROXY_SHARED_SECRET vacío; la URL directa del túnel seguiría sirviendo la app.")
+        # Sin secreto, el Worker no lo adjunta y el frontend no lo exige: la URL directa del túnel serviría la app.
+        sys.exit("[urlsync] PROXY_SHARED_SECRET vacío: no se publica el Worker sin la puerta de origen.")
 
     ultimo = None
     while True:

@@ -1,7 +1,9 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from sqlalchemy import func, select, update
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
+from sqlalchemy import func, select, text, update
 
 from app.config import settings
 from app.core import auditoria
@@ -59,7 +61,9 @@ async def _abrir_sesion(db, response: Response, request: Request, usuario: Usuar
             user_agent=(request.headers.get("user-agent") or "")[:255],
         )
     )
-    _poner_cookies(response, request, crear_access_token(str(usuario.id)), crudo)
+    _poner_cookies(
+        response, request, crear_access_token(str(usuario.id), usuario.version_sesion), crudo
+    )
 
 
 async def _fallos_recientes(db, **filtro) -> int:
@@ -82,6 +86,11 @@ async def login(datos: LoginIn, request: Request, response: Response, db: DB) ->
     origen = origen_hash(request)
     email = datos.email.lower()
 
+    # Un intento a la vez por correo: sin esto, ráfagas concurrentes ven todas «menos de 5 fallos»
+    # y cada una prueba la contraseña. El candado se suelta con el commit/rollback de la petición.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"login:{email}"}
+    )
     if (
         await _fallos_recientes(db, origen=origen) >= MAX_FALLOS_POR_ORIGEN
         or await _fallos_recientes(db, email=email) >= MAX_FALLOS_POR_CORREO
@@ -92,7 +101,10 @@ async def login(datos: LoginIn, request: Request, response: Response, db: DB) ->
         )
 
     usuario = (await db.execute(select(Usuario).where(Usuario.email == email))).scalar_one_or_none()
-    valido = verify_password(datos.password, usuario.password_hash if usuario else HASH_DE_RELLENO)
+    # argon2 es CPU pura: fuera del bucle de eventos, para no frenar al resto de visitantes.
+    valido = await run_in_threadpool(
+        verify_password, datos.password, usuario.password_hash if usuario else HASH_DE_RELLENO
+    )
     if usuario is None or not usuario.activo or not valido:
         auditoria.registrar(db, "login_fallido", detalle={"email": email}, origen_hash=origen)
         await db.commit()
@@ -104,12 +116,21 @@ async def login(datos: LoginIn, request: Request, response: Response, db: DB) ->
     return usuario
 
 
+def _sesion_vencida(response_cookies: bool = True) -> JSONResponse:
+    """401 que además BORRA las cookies (con HTTPException se perderían las del Response)."""
+    r = JSONResponse(
+        {"detail": "Tu sesión venció. Entra de nuevo."}, status_code=status.HTTP_401_UNAUTHORIZED
+    )
+    _borrar_cookies(r)
+    return r
+
+
 @router.post("/refresh", status_code=status.HTTP_204_NO_CONTENT, dependencies=[])
-async def refrescar(request: Request, response: Response, db: DB) -> None:
+async def refrescar(request: Request, response: Response, db: DB):
     exigir_cabecera_csrf(request)
     crudo = request.cookies.get(COOKIE_REFRESCO)
     if not crudo:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Tu sesión venció. Entra de nuevo.")
+        return _sesion_vencida()
 
     sesion = (
         await db.execute(
@@ -119,25 +140,26 @@ async def refrescar(request: Request, response: Response, db: DB) -> None:
         )
     ).scalar_one_or_none()
     if sesion is None:
-        _borrar_cookies(response)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Tu sesión venció. Entra de nuevo.")
+        return _sesion_vencida()
 
     if sesion.revocada:
-        # Un token ya usado reapareció: alguien lo copió. Se cierran todas las sesiones.
+        # Un token ya usado reapareció: alguien lo copió. Se cierran todas las sesiones y se
+        # invalidan también los JWT de acceso vigentes.
         await db.execute(
             update(SesionRefresh)
             .where(SesionRefresh.usuario_id == sesion.usuario_id)
             .values(revocada=True)
         )
+        duenio = await db.get(Usuario, sesion.usuario_id)
+        if duenio is not None:
+            duenio.version_sesion += 1
         auditoria.registrar(db, "refresh_reutilizado", usuario_id=sesion.usuario_id)
         await db.commit()
-        _borrar_cookies(response)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Tu sesión venció. Entra de nuevo.")
+        return _sesion_vencida()
 
     usuario = await db.get(Usuario, sesion.usuario_id)
     if sesion.expira_en <= ahora() or usuario is None or not usuario.activo:
-        _borrar_cookies(response)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Tu sesión venció. Entra de nuevo.")
+        return _sesion_vencida()
 
     sesion.revocada = True
     await _abrir_sesion(db, response, request, usuario)
