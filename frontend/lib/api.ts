@@ -171,7 +171,7 @@ export const api = {
     quitarImagen: (id: string) => pedir<Articulo>(`/articulos/${id}/imagen`, { metodo: "DELETE" }),
   },
   produccion: {
-    listar: () => pedir<Produccion[]>("/produccion"),
+    listar: (limite = 30) => pedir<Produccion[]>(`/produccion${q({ limite })}`),
     registrar: (items: ItemCantidad[], nota?: string, extra: ExtraProduccion = {}) =>
       pedir<Produccion>("/produccion", { metodo: "POST", cuerpo: { items, nota: nota || null, ...extra } }),
   },

@@ -29,15 +29,21 @@ def hoy() -> date:
     return datetime.now(ZoneInfo(settings.app_timezone)).date()
 
 
-def validar_fecha(fecha: date | None) -> date:
-    """Hoy por defecto; se permite registrar algo olvidado hasta 31 días atrás, nunca el futuro."""
+DIAS_ATRAS_VENTAS = 31
+# La producción admite carga retrospectiva: hasta 5 años hacia atrás.
+DIAS_ATRAS_PRODUCCION = 5 * 366
+
+
+def validar_fecha(fecha: date | None, max_dias: int = DIAS_ATRAS_VENTAS) -> date:
+    """Hoy por defecto; se permite registrar hacia atrás hasta `max_dias`, nunca el futuro."""
     h = hoy()
     f = fecha or h
     if f > h:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "La fecha no puede ser futura.")
-    if f < h - timedelta(days=31):
+    if f < h - timedelta(days=max_dias):
+        limite = "31 días" if max_dias == DIAS_ATRAS_VENTAS else "5 años"
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "Solo puedes registrar hasta 31 días atrás."
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Solo puedes registrar hasta {limite} atrás."
         )
     return f
 
@@ -65,6 +71,7 @@ async def _salida(db, produccion: Produccion) -> ProduccionOut:
     ]
     return ProduccionOut(
         id=produccion.id, fecha=produccion.fecha, nota=produccion.nota,
+        afecta_inventario=produccion.afecta_inventario,
         creado_en=produccion.creado_en, items=items, gramos_total=produccion.gramos_total,
         filamentos=filamentos, minutos_impresion=produccion.minutos_impresion,
         potencia_w=produccion.potencia_w, precio_kwh=produccion.precio_kwh,
@@ -100,18 +107,19 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
             )
         gramos_total = suma
 
-    # Energía con los parámetros de HOY, congelados en el lote (cambiarlos después no
-    # reescribe el pasado).
+    # Energía con los parámetros de HOY (o los propios del lote), congelados en él: cambiarlos
+    # después no reescribe el pasado.
     param = await energia.parametros(db)
-    kwh, costo = energia.calcular(
-        datos.minutos_impresion, param.potencia_impresora_w, param.precio_kwh
-    )
+    potencia = datos.potencia_w if datos.potencia_w is not None else param.potencia_impresora_w
+    precio = datos.precio_kwh if datos.precio_kwh is not None else param.precio_kwh
+    kwh, costo = energia.calcular(datos.minutos_impresion, potencia, precio)
 
     p = Produccion(
-        fecha=validar_fecha(datos.fecha), nota=datos.nota or None, gramos_total=gramos_total,
+        fecha=validar_fecha(datos.fecha, DIAS_ATRAS_PRODUCCION), nota=datos.nota or None,
+        afecta_inventario=datos.afecta_inventario, gramos_total=gramos_total,
         minutos_impresion=datos.minutos_impresion,
-        potencia_w=param.potencia_impresora_w if datos.minutos_impresion else None,
-        precio_kwh=param.precio_kwh if datos.minutos_impresion else None,
+        potencia_w=potencia if datos.minutos_impresion else None,
+        precio_kwh=precio if datos.minutos_impresion else None,
         kwh=kwh, costo_energia=costo,
     )  # fmt: skip
     db.add(p)
@@ -124,14 +132,24 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
         )
     for articulo_id, cantidad in cantidades.items():
         db.add(ProduccionItem(produccion_id=p.id, articulo_id=articulo_id, cantidad=cantidad))
-        db.add(
-            MovimientoInventario(
-                articulo_id=articulo_id, tipo="produccion", cantidad=cantidad, produccion_id=p.id
+        if (
+            datos.afecta_inventario
+        ):  # carga histórica: solo historial y métricas, sin tocar el stock
+            db.add(
+                MovimientoInventario(
+                    articulo_id=articulo_id,
+                    tipo="produccion",
+                    cantidad=cantidad,
+                    produccion_id=p.id,
+                )
             )
-        )
     auditoria.registrar(
         db, "produccion_registrada", usuario_id=usuario.id,
-        detalle={"unidades": sum(cantidades.values())},
+        detalle={
+            "unidades": sum(cantidades.values()),
+            "fecha": datos.fecha.isoformat() if datos.fecha else None,
+            "afecta_inventario": datos.afecta_inventario,
+        },
     )  # fmt: skip
     await db.commit()
     await db.refresh(p)

@@ -67,6 +67,7 @@ export interface Produccion {
   nota: string | null;
   creado_en: string;
   items: ProduccionItem[];
+  afecta_inventario: boolean;
   gramos_total: number | null;
   filamentos: Filamento[];
   minutos_impresion: number | null;
@@ -77,6 +78,10 @@ export interface Produccion {
 }
 
 export interface ExtraProduccion {
+  fecha?: string;
+  afecta_inventario?: boolean;
+  precio_kwh?: number;
+  potencia_w?: number;
   gramos_total?: number;
   filamentos?: Filamento[];
   minutos_impresion?: number;

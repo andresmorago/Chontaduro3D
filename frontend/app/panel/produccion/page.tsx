@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { Contador } from "@/components/ui/Contador";
@@ -9,7 +9,7 @@ import { FilamentoTiempo } from "@/components/panel/FilamentoTiempo";
 import { ParametrosHoja } from "@/components/panel/ParametrosHoja";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
-import { dinero, fechaHora } from "@/lib/format";
+import { dinero, fechaCorta, hoyISO, restarDias } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import { aExtra, gramos, kwhTexto, loteVacio, tiempoLargo } from "@/lib/produccion";
 import type { Articulo } from "@/lib/types";
@@ -17,7 +17,13 @@ import type { Articulo } from "@/lib/types";
 export default function Produccion() {
   const { mostrar } = useAvisos();
   const articulos = useCargar(() => api.articulos.listar());
-  const historial = useCargar(api.produccion.listar);
+  const [limite, setLimite] = useState(30);
+  const historial = useCargar(() => api.produccion.listar(limite));
+  useEffect(() => {
+    void historial.recargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limite]);
+  const hoy = hoyISO();
   const parametros = useCargar(api.parametros.ver);
   const [verParametros, setVerParametros] = useState(false);
   const [lote, setLote] = useState(loteVacio());
@@ -50,8 +56,12 @@ export default function Produccion() {
       await api.produccion.registrar(items.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined, conv.extra);
       setCantidades({});
       setNota("");
-      setLote(loteVacio());
-      mostrar(unidades === 1 ? "Listo: 1 pieza entró al inventario." : `Listo: ${unidades} piezas entraron al inventario.`);
+      // Se conserva la fecha elegida: al cargar varios lotes del mismo día no hay que volver a ponerla.
+      const fechaUsada = lote.fecha;
+      const sumo = lote.sumar;
+      setLote({ ...loteVacio(fechaUsada), sumar: sumo });
+      const donde = sumo ? "entró al inventario" : "quedó en el historial (sin sumar al stock)";
+      mostrar(`Listo: ${unidades === 1 ? "1 pieza" : `${unidades} piezas`} ${donde}${fechaUsada !== hoy ? `, con fecha ${fechaCorta(fechaUsada)}` : ""}.`);
       await Promise.all([articulos.recargar(), historial.recargar()]);
     } catch (e) {
       mostrar(mensajeDe(e), { tipo: "error" });
@@ -104,6 +114,21 @@ export default function Produccion() {
               <span className="muted">Total del lote</span>
               <strong>{unidades === 1 ? "1 pieza" : `${unidades} piezas`}</strong>
             </div>
+            <div className="cuando">
+              <label className="field">
+                <span className="field__label">Fecha de producción</span>
+                <input className="input num" type="date" value={lote.fecha} max={hoy} min={restarDias(hoy, 5 * 366)} onChange={(e) => setLote({ ...lote, fecha: e.target.value })} />
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={lote.sumar} onChange={(e) => setLote({ ...lote, sumar: e.target.checked })} />
+                Sumar al inventario actual
+              </label>
+              {lote.fecha && lote.fecha < hoy && (
+                <p className="field__hint">
+                  Carga retrospectiva ({fechaCorta(lote.fecha)}). {lote.sumar ? "Estas piezas se SUMAN al stock de hoy; si ya se vendieron, desmarca la casilla y quedarán solo en el historial y las métricas." : "Solo quedará en el historial y las métricas: el stock de hoy no cambia."}
+                </p>
+              )}
+            </div>
             <FilamentoTiempo valor={lote} onCambio={setLote} parametros={parametros.datos} onAbrirParametros={() => setVerParametros(true)} />
             <Entrada etiqueta="Nota (opcional)" ayuda="Por ejemplo: PLA negro, tanda del sábado." value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} />
             <Boton variante="accent" bloque cargando={enviando} disabled={items.length === 0} onClick={registrar}>
@@ -133,12 +158,13 @@ export default function Produccion() {
                 <span className="fila__titulo">
                   <span className="fila__nombre">{p.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(", ")}</span>
                   <span className="fila__meta num">
-                    {fechaHora(p.creado_en)}
+                    {fechaCorta(p.fecha)}
                     {p.gramos_total != null ? ` · ${gramos(p.gramos_total)}` : ""}
                     {p.minutos_impresion != null ? ` · ${tiempoLargo(p.minutos_impresion)}` : ""}
                     {p.kwh != null ? ` · ${kwhTexto(p.kwh)}` : ""}
                     {p.costo_energia != null ? ` · ${dinero(p.costo_energia)}` : ""}
                     {p.nota ? ` · ${p.nota}` : ""}
+                    {!p.afecta_inventario ? " · solo historial" : ""}
                   </span>
                   {p.filamentos.length > 1 && (
                     <span className="fila__meta">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>
@@ -148,6 +174,9 @@ export default function Produccion() {
               </div>
             ))}
           </div>
+        )}
+        {(historial.datos ?? []).length >= limite && limite < 100 && (
+          <div><Boton variante="secondary" pequeno onClick={() => setLimite((n) => Math.min(100, n + 30))}>Ver más lotes</Boton></div>
         )}
       </section>
       <ParametrosHoja abierta={verParametros} actuales={parametros.datos} onCerrar={() => setVerParametros(false)} onGuardado={() => void parametros.recargar()} />

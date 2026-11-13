@@ -70,6 +70,16 @@ class ProduccionIn(Entrada):
     filamentos: list[FilamentoIn] = Field(default_factory=list, max_length=20)
     # Tiempo de impresión del lote, en minutos (máximo 30 días).
     minutos_impresion: int | None = Field(default=None, ge=1, le=60 * 24 * 30)
+    # Carga histórica: False = queda en el historial y las métricas, pero NO suma al stock de hoy.
+    afecta_inventario: bool = True
+    # Opcionales: valores de energía propios de ESTE lote (si no, se usan los parámetros de hoy).
+    # Útil al cargar lotes viejos, cuando el kWh o la impresora eran otros.
+    precio_kwh: Decimal | None = Field(
+        default=None, ge=0, le=Decimal("100000"), max_digits=12, decimal_places=2
+    )
+    potencia_w: Decimal | None = Field(
+        default=None, gt=0, le=Decimal("20000"), max_digits=8, decimal_places=1
+    )
 
 
 class ProduccionItemOut(Salida):
@@ -90,6 +100,7 @@ class ProduccionOut(Salida):
     nota: str | None
     creado_en: datetime
     items: list[ProduccionItemOut]
+    afecta_inventario: bool = True
     gramos_total: Numero | None = None
     filamentos: list[FilamentoOut] = []
     minutos_impresion: int | None = None

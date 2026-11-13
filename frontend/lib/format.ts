@@ -20,6 +20,21 @@ export function fechaLarga(iso: string): string {
   );
 }
 
+/** «12 oct 2025» a partir de YYYY-MM-DD (sin pasar por zonas horarias). */
+export function fechaCorta(iso: string): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  return new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", year: "numeric" })
+    .format(new Date(a ?? 1970, (m ?? 1) - 1, d ?? 1))
+    .replace(/\./g, "");
+}
+
+/** YYYY-MM-DD de `iso` menos `dias` días. */
+export function restarDias(iso: string, dias: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const f = new Date(Date.UTC(a ?? 1970, (m ?? 1) - 1, (d ?? 1) - dias));
+  return f.toISOString().slice(0, 10);
+}
+
 export function diaCorto(iso: string): string {
   const [a, m, d] = iso.split("-").map(Number);
   return new Intl.DateTimeFormat("es-CO", { weekday: "short" })

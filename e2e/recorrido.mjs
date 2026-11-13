@@ -178,6 +178,20 @@ const meta = (await pagina.locator(".lista .fila__meta").first().innerText()).re
 ok(meta.includes("187,5 g") && meta.includes("2 h 30 min") && meta.includes("0,5 kWh") && meta.includes("$ 400"), `el lote guarda gramos, tiempo y energía (${meta.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "producir 3 deja 3 en inventario");
 
+console.log("Carga retrospectiva");
+const FECHA_VIEJA = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
+await pagina.goto(`${BASE}/panel/produccion`);
+await pagina.locator("button.ficha", { hasText: ARTICULO }).click();
+await pagina.locator('input[type="date"]').fill(FECHA_VIEJA);
+await pagina.getByText(/Carga retrospectiva/).waitFor();
+await foto("07b-produccion-retrospectiva");
+await pagina.getByLabel("Sumar al inventario actual").uncheck();
+await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
+await pagina.getByText(/sin sumar al stock/).waitFor();
+const viejo = (await pagina.locator(".lista .fila__meta").filter({ hasText: "solo historial" }).first().innerText()).replace(/\u00a0/g, " ");
+ok(viejo.includes("solo historial"), `el lote viejo queda en el historial como «solo historial» (${viejo.replace(/\n/g, " ")})`);
+ok((await stockDe(ARTICULO)) === 3, "una carga histórica sin sumar NO cambia el inventario de hoy");
+
 console.log("Pedido público (no debe tocar el inventario)");
 const contextoPublico = await navegador.newContext({ viewport: { width: 375, height: 800 }, locale: "es-CO" });
 const publica = await contextoPublico.newPage();

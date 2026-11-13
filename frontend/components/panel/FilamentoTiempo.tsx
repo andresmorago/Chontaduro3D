@@ -20,7 +20,7 @@ export function FilamentoTiempo({ valor, onCambio, parametros, onAbrirParametros
     set({ filamentos: valor.filamentos.map((f, j) => (j === i ? { ...f, [campo]: v } : f)) });
   const minutos = minutosDe(valor);
   const suma = totalGramos(valor);
-  const energia = energiaEstimada(minutos, parametros);
+  const energia = energiaEstimada(minutos, parametros, { precio: valor.precioPropio, potencia: valor.potenciaPropia });
 
   return (
     <fieldset className="filtiempo">
@@ -86,6 +86,21 @@ export function FilamentoTiempo({ valor, onCambio, parametros, onAbrirParametros
         ) : null}
         <button type="button" className="enlace" onClick={onAbrirParametros}>Parámetros de energía</button>
       </p>
+
+      <details className="energia-propia" open={Boolean(valor.precioPropio || valor.potenciaPropia)}>
+        <summary>Usar otros valores de energía en este lote</summary>
+        <p className="field__hint">Para lotes viejos, cuando el kWh o la impresora eran otros. Vacío = los parámetros de hoy.</p>
+        <div className="tiempo">
+          <label className="field">
+            <span className="field__label">Precio del kWh de este lote (COP)</span>
+            <input className="input num" type="number" inputMode="decimal" min={0} step="0.01" placeholder={parametros?.precio_kwh != null ? String(parametros.precio_kwh) : "—"} value={valor.precioPropio} onChange={(e) => set({ precioPropio: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="field__label">Potencia de este lote (W)</span>
+            <input className="input num" type="number" inputMode="decimal" min={0} step="0.1" placeholder={parametros?.potencia_impresora_w != null ? String(parametros.potencia_impresora_w) : "—"} value={valor.potenciaPropia} onChange={(e) => set({ potenciaPropia: e.target.value })} />
+          </label>
+        </div>
+      </details>
     </fieldset>
   );
 }

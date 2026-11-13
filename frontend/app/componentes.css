@@ -129,3 +129,10 @@
 /* ---------- Administración ---------- */
 .bloque-clave { display: grid; gap: var(--space-md); padding: var(--space-lg); max-width: 520px; }
 .campo-clave .field__msg:empty { min-height: 0; } /* sin mensaje: el botón queda pegado al campo */
+
+/* ---------- Fecha del lote y energía propia ---------- */
+.cuando { display: grid; gap: var(--space-xs); padding-top: var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+.energia-propia { border-top: var(--rule-hair) solid var(--color-rule); padding-top: var(--space-sm); }
+.energia-propia summary { cursor: pointer; font-weight: 700; font-size: var(--text-sm); min-height: 44px; display: flex; align-items: center; }
+.energia-propia summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.energia-propia[open] { display: grid; gap: var(--space-sm); }

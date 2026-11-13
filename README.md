@@ -25,6 +25,7 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | Quiero… | Voy a… |
 | --- | --- |
 | Dar de alta un producto | **Artículos → Nuevo artículo** (nombre, foto, descripción, precio). El precio se puede cambiar cuando quieras; queda historial y las ventas pasadas no cambian. |
+| Cargar producción de meses atrás (carga retrospectiva) | **Producción**: elige la *Fecha de producción* (hasta 5 años atrás). Desmarca *Sumar al inventario actual* si esas piezas ya se vendieron: quedan en el historial y las métricas sin inflar el stock de hoy. Cada lote puede llevar sus propios valores de energía (kWh y potencia de esa época). |
 | Registrar lo que imprimí | **Producción**: tocar los artículos, guardar → suma al inventario. Opcional: gramos de filamento (total o **por filamento**) y **tiempo de impresión**; con los *Parámetros de energía* (precio del kWh y potencia de la impresora) cada lote guarda sus kWh y su costo de energía. |
 | Registrar una venta | **Vender**: tocar los artículos, forma de pago, *Registrar venta* → resta del inventario. Hay *Deshacer* y *Anular*. |
 | Corregir un conteo | **Inventario → artículo → Corregir el conteo** (queda en el historial de movimientos). |

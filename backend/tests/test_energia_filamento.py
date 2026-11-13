@@ -124,3 +124,69 @@ async def test_el_cambio_de_parametros_queda_auditado(admin, db):
         )
     ).scalar_one()
     assert fila.detalle["despues"] == {"precio_kwh": 900.0, "potencia_w": 250.0}
+
+
+# --- Carga retrospectiva ------------------------------------------------------------------
+async def test_lote_con_fecha_pasada_ordena_por_fecha_de_produccion(admin):
+    from datetime import date, timedelta
+
+    a = await crear_articulo(admin)
+    hace_2_anios = (date.today() - timedelta(days=730)).isoformat()
+    hace_40_dias = (date.today() - timedelta(days=40)).isoformat()
+    for f in (hace_40_dias, hace_2_anios):
+        assert (await lote(admin, a["id"], fecha=f)).status_code == 201
+    await lote(admin, a["id"])  # hoy
+    fechas = [x["fecha"] for x in (await admin.get("/api/produccion")).json()]
+    assert fechas == sorted(fechas, reverse=True) and fechas[-1] == hace_2_anios
+
+
+async def test_limites_de_fecha_de_produccion(admin):
+    from datetime import date, timedelta
+
+    a = await crear_articulo(admin)
+    futura = (date.today() + timedelta(days=1)).isoformat()
+    muy_vieja = (date.today() - timedelta(days=6 * 366)).isoformat()
+    assert (await lote(admin, a["id"], fecha=futura)).status_code == 422
+    r = await lote(admin, a["id"], fecha=muy_vieja)
+    assert r.status_code == 422 and "5 años" in r.json()["detail"]
+    assert (await lote(admin, a["id"], fecha="no-es-fecha")).status_code == 422
+
+
+async def test_carga_historica_no_suma_al_inventario_de_hoy(admin):
+    from datetime import date, timedelta
+
+    a = await crear_articulo(admin)
+    vieja = (date.today() - timedelta(days=200)).isoformat()
+    r = await lote(admin, a["id"], fecha=vieja, afecta_inventario=False, gramos_total=100)
+    assert r.status_code == 201 and r.json()["afecta_inventario"] is False
+    assert (await admin.get(f"/api/articulos/{a['id']}")).json()["stock"] == 0
+    movs = (await admin.get(f"/api/inventario/movimientos?articulo_id={a['id']}")).json()
+    assert movs == []  # sin movimiento: el kardex tampoco cambia
+    # …pero queda en el historial con sus datos (para métricas).
+    hist = (await admin.get("/api/produccion")).json()
+    assert (
+        hist[0]["fecha"] == vieja
+        and hist[0]["gramos_total"] == 100
+        and hist[0]["items"][0]["cantidad"] == 2
+    )
+    # Y un lote retrospectivo que SÍ afecta suma al stock actual.
+    assert (await lote(admin, a["id"], fecha=vieja)).status_code == 201
+    assert (await admin.get(f"/api/articulos/{a['id']}")).json()["stock"] == 2
+
+
+async def test_lote_viejo_con_su_propia_energia(admin):
+    a = await crear_articulo(admin)
+    await admin.put("/api/parametros", json={"precio_kwh": 900, "potencia_impresora_w": 300})
+    # Con los valores de ese lote (no los de hoy): 150 W × 2 h = 0,3 kWh × 600 = 180
+    j = (await lote(admin, a["id"], minutos_impresion=120, potencia_w=150, precio_kwh=600)).json()
+    assert (
+        j["kwh"] == 0.3
+        and j["costo_energia"] == 180
+        and j["potencia_w"] == 150
+        and j["precio_kwh"] == 600
+    )
+    # Sin sobrescribir, usa los de hoy: 300 W × 2 h = 0,6 kWh × 900 = 540
+    j = (await lote(admin, a["id"], minutos_impresion=120)).json()
+    assert j["kwh"] == 0.6 and j["costo_energia"] == 540
+    for malo in ({"potencia_w": 0}, {"precio_kwh": -1}, {"potencia_w": 99999}):
+        assert (await lote(admin, a["id"], minutos_impresion=60, **malo)).status_code == 422

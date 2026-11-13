@@ -2,7 +2,17 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, Numeric, SmallInteger, String
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +32,11 @@ class Produccion(MarcaDeTiempo, Base):
     id: Mapped[uuid.UUID] = uuid_pk()
     fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     nota: Mapped[str | None] = mapped_column(String(300))
+    # False = carga histórica: queda para el historial y las métricas, pero NO suma al stock de hoy
+    # (p. ej. un lote de hace meses que ya se vendió).
+    afecta_inventario: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
     # Filamento y tiempo del lote (opcionales). Los gramos son el TOTAL: se escribe directo o es la
     # suma de `produccion_filamentos` (por filamento).
     gramos_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))

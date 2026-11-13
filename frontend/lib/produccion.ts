@@ -1,3 +1,4 @@
+import { hoyISO } from "./format";
 import type { ExtraProduccion, Parametros } from "./types";
 
 export type ModoFilamento = "total" | "por_filamento";
@@ -9,14 +10,25 @@ export interface EstadoLote {
   filamentos: { descripcion: string; gramos: string }[];
   horas: string;
   minutos: string;
+  /** Fecha de producción (YYYY-MM-DD): hoy, o una pasada para cargar lotes viejos. */
+  fecha: string;
+  /** false = carga histórica: solo historial y métricas, sin sumar al stock de hoy. */
+  sumar: boolean;
+  /** Energía propia de este lote (vacío = usar los parámetros de hoy). */
+  precioPropio: string;
+  potenciaPropia: string;
 }
 
-export const loteVacio = (): EstadoLote => ({
+export const loteVacio = (fecha: string = hoyISO()): EstadoLote => ({
   modo: "total",
   total: "",
   filamentos: [{ descripcion: "", gramos: "" }],
   horas: "",
   minutos: "",
+  fecha,
+  sumar: true,
+  precioPropio: "",
+  potenciaPropia: "",
 });
 
 const num = (s: string): number => (s.trim() === "" ? NaN : Number(s.replace(",", ".")));
@@ -39,6 +51,20 @@ export function totalGramos(e: EstadoLote): number | null {
 /** Convierte el formulario en lo que espera la API, o devuelve el mensaje del primer problema. */
 export function aExtra(e: EstadoLote): { extra: ExtraProduccion } | { error: string } {
   const extra: ExtraProduccion = {};
+  if (!e.fecha) return { error: "Pon la fecha de producción." };
+  if (e.fecha > hoyISO()) return { error: "La fecha de producción no puede ser futura." };
+  if (e.fecha !== hoyISO()) extra.fecha = e.fecha;
+  if (!e.sumar) extra.afecta_inventario = false;
+  if (e.precioPropio.trim() !== "") {
+    const v = num(e.precioPropio);
+    if (!Number.isFinite(v) || v < 0) return { error: "El precio del kWh de este lote debe ser 0 o más." };
+    extra.precio_kwh = v;
+  }
+  if (e.potenciaPropia.trim() !== "") {
+    const v = num(e.potenciaPropia);
+    if (!Number.isFinite(v) || v <= 0) return { error: "La potencia de este lote debe ser mayor que 0." };
+    extra.potencia_w = v;
+  }
   if (e.modo === "total") {
     if (e.total.trim() !== "") {
       const t = num(e.total);
@@ -66,10 +92,18 @@ export function aExtra(e: EstadoLote): { extra: ExtraProduccion } | { error: str
 }
 
 /** Vista previa de energía con los parámetros vigentes (el servidor calcula y congela el valor real). */
-export function energiaEstimada(minutos: number, p: Parametros | null): { kwh: number; costo: number | null } | null {
-  if (!p?.potencia_impresora_w || !minutos) return null;
-  const kwh = (p.potencia_impresora_w / 1000) * (minutos / 60);
-  return { kwh, costo: p.precio_kwh != null ? kwh * p.precio_kwh : null };
+export function energiaEstimada(
+  minutos: number,
+  p: Parametros | null,
+  propia?: { precio: string; potencia: string },
+): { kwh: number; costo: number | null } | null {
+  const potPropia = propia && propia.potencia.trim() !== "" ? num(propia.potencia) : NaN;
+  const prePropio = propia && propia.precio.trim() !== "" ? num(propia.precio) : NaN;
+  const potencia = Number.isFinite(potPropia) ? potPropia : p?.potencia_impresora_w;
+  const precio = Number.isFinite(prePropio) ? prePropio : p?.precio_kwh;
+  if (!potencia || !minutos) return null;
+  const kwh = (potencia / 1000) * (minutos / 60);
+  return { kwh, costo: precio != null ? kwh * precio : null };
 }
 
 export function tiempoLargo(min: number): string {
