@@ -32,7 +32,8 @@
 /* ---------- Campos ---------- */
 .field { display: grid; gap: var(--space-2xs); }
 .field__label { font-size: var(--text-sm); font-weight: 500; color: var(--color-ink-2); }
-.field__hint { font-size: var(--text-xs); color: var(--color-muted); }
+.field__msg { min-height: 1lh; font-size: var(--text-xs); line-height: 1.4; } /* el espacio de ayuda/error no colapsa: un error nuevo no empuja la página */
+.field__hint { color: var(--color-muted); }
 .field__error { font-size: var(--text-sm); color: var(--color-error); }
 .input, .textarea, .select {
   width: 100%; min-height: var(--touch); padding: 0 var(--space-md); border: var(--rule-bar) solid var(--color-ink);

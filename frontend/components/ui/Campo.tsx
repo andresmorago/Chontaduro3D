@@ -13,15 +13,9 @@ function Envoltorio({ etiqueta, ayuda, error, id, children }: Base & { id: strin
         {etiqueta}
       </label>
       {children}
-      {error ? (
-        <p className="field__error" id={`${id}-error`} role="alert">
-          {error}
-        </p>
-      ) : ayuda ? (
-        <p className="field__hint" id={`${id}-ayuda`}>
-          {ayuda}
-        </p>
-      ) : null}
+      <p className={`field__msg ${error ? "field__error" : "field__hint"}`} id={error ? `${id}-error` : ayuda ? `${id}-ayuda` : undefined} role={error ? "alert" : undefined}>
+        {error ?? ayuda}
+      </p>
     </div>
   );
 }

@@ -101,7 +101,7 @@ export function Catalogo({ articulos, whatsapp, negocio }: Props) {
       <footer className="sitio-pie">
         <div className="container pie-mast">
           <p className="pie-mast__marca">{negocio}</p>
-          <p className="muted">Impresión 3D hecha a mano, pieza por pieza.</p>
+          <p className="muted">Piezas impresas en 3D.</p>
           <p className="pie-mast__enlaces">
             {whatsapp && (
               <a href={enlaceWhatsapp(whatsapp, `Hola ${negocio}, quisiera hacer una consulta.`)} target="_blank" rel="noopener noreferrer">

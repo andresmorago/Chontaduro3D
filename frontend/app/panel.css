@@ -9,7 +9,7 @@
 .rail__enlace:focus-visible { outline-offset: -2px; }
 .rail__cuenta { font-size: var(--text-xs); color: var(--color-muted); padding-inline: var(--space-sm); overflow-wrap: anywhere; }
 .rail__pie { display: grid; gap: var(--space-3xs); }
-.contador-nuevos { margin-left: auto; min-width: 22px; padding: 0 6px; text-align: center; background: var(--color-accent); color: var(--color-accent-ink); font: 500 var(--text-xs)/22px var(--font-outlier); }
+.contador-nuevos { margin-left: auto; min-width: 22px; padding: 0 var(--space-xs); text-align: center; background: var(--color-accent); color: var(--color-accent-ink); font: 500 var(--text-xs)/22px var(--font-outlier); }
 .rail__enlace[aria-current="page"] .contador-nuevos { background: var(--color-paper); color: var(--color-ink); }
 
 .panel__main { padding: var(--space-xl) var(--gutter) var(--space-3xl); min-width: 0; max-width: calc(var(--container) + 2 * var(--gutter)); }
@@ -28,7 +28,7 @@
   .tope a { font: 700 var(--text-lg)/1 var(--font-display); letter-spacing: -0.03em; text-decoration: none; }
   .panel__main { padding-top: var(--space-lg); padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   .pestanas { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; z-index: var(--z-sticky); left: 0; right: 0; bottom: 0; padding-bottom: env(safe-area-inset-bottom); border-top: var(--rule-bar) solid var(--color-ink); background: var(--color-paper); }
-  .pestana { position: relative; display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 60px; padding: 0 2px; border: 0; background: transparent; text-decoration: none; font-size: 0.6875rem; font-weight: 500; white-space: nowrap; color: var(--color-ink-2); }
+  .pestana { position: relative; display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 60px; padding: 0 2px; border: 0; background: transparent; text-decoration: none; font-size: 0.75rem; font-weight: 500; white-space: nowrap; color: var(--color-ink-2); }
   .pestana[aria-current="page"] { background: var(--color-ink); color: var(--color-paper); }
   .pestana .contador-nuevos { position: absolute; top: 4px; right: 50%; margin: 0 -26px 0 0; min-width: 18px; font-size: 0.625rem; line-height: 18px; }
 }
@@ -74,6 +74,7 @@ button.fila:hover { background: var(--color-paper-2); }
 .ficha:disabled { background: var(--color-paper-3); color: var(--color-muted); cursor: not-allowed; }
 .ficha[data-en-ticket="true"] { background: var(--color-accent-soft); }
 .ficha__codigo { font-size: var(--text-xs); color: var(--color-accent); }
+.ficha[data-en-ticket="true"] .ficha__codigo { color: var(--color-ink-2); } /* acento sobre acento-suave no llega a 4.5:1 */
 .ficha__nombre { font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .ficha__meta { font-size: var(--text-xs); color: var(--color-muted); }
 .ficha__cant { position: absolute; top: -2px; right: -2px; min-width: 32px; padding: 2px var(--space-xs); text-align: center; background: var(--color-ink); color: var(--color-paper); font: 500 var(--text-sm)/1.4 var(--font-outlier); }

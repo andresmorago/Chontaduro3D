@@ -14,7 +14,7 @@
 
 /* ---------- Encabezado del catálogo ---------- */
 .catalogo-cab { padding-block: var(--space-2xl) var(--space-xl); display: grid; gap: var(--space-md); }
-.catalogo-cab__cuenta { font-family: var(--font-outlier); font-size: var(--text-sm); color: var(--color-muted); }
+.catalogo-cab__cuenta { font-size: var(--text-sm); color: var(--color-muted); max-width: 70ch; }
 
 /* ---------- Rejilla de artículos: filas iguales, el ritmo lo ponen los productos ---------- */
 .catalogo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-xl) var(--space-lg); padding-bottom: var(--section-gap); }
