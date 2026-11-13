@@ -1,0 +1,152 @@
+/* Capa del tema Squeeze sobre los componentes existentes: forma (píldoras y tarjetas redondeadas),
+   superficies de tarjeta (crema sobre verde), color de los tintes y las «capas de impresión».
+   Solo usa tokens de tokens.css. Va al final de globals.css para ganar por orden. */
+
+/* ---------- Superficies de tarjeta: crema con tinta verde oscura ---------- */
+.tarjeta, .articulo, .dato, .lista, .ticket, .pedido, .entrar__tarjeta, .hoja, .aviso, .barras, .ficha, .alerta, .contador, .segmentado {
+  --color-paper: var(--color-card);
+  --color-paper-2: var(--color-card-2);
+  --color-paper-3: var(--color-card-3);
+  --color-plate: var(--color-card-plate);
+  --color-ink: var(--color-card-ink);
+  --color-ink-2: var(--color-card-ink-2);
+  --color-muted: var(--color-card-muted);
+  --color-rule: var(--color-card-rule);
+  --color-accent: var(--color-card-accent);
+  --color-accent-ink: var(--color-card-accent-ink);
+  --color-accent-soft: var(--color-card-accent-soft);
+  --color-focus: var(--color-card-focus);
+  color: var(--color-ink);
+}
+.tarjeta, .articulo, .dato, .lista, .ticket, .pedido, .entrar__tarjeta, .barras {
+  background: var(--color-card); border: 0; border-radius: var(--radius-card);
+}
+.lista, .articulo, .ticket { overflow: hidden; }
+.vacio { border: var(--rule-bar) dashed var(--color-rule); background: transparent; border-radius: var(--radius-card); color: var(--color-ink-2); }
+.tarjeta, .articulo, .dato, .ticket, .pedido, .entrar__tarjeta, .barras { box-shadow: var(--shadow-card); }
+.pedido--nuevo { box-shadow: var(--shadow-card), 0 0 0 3px var(--color-focus); }
+.alerta { border-radius: var(--radius-control); background: var(--color-card-accent-soft); border-left-width: 6px; }
+.hoja { border-radius: var(--radius-card) 0 0 var(--radius-card); background: var(--color-card); border-left: 0; }
+.hoja::backdrop { background: var(--color-scrim); }
+@media (max-width: 40rem) { .hoja { border-radius: var(--radius-card) var(--radius-card) 0 0; border-top: 0; } }
+.hoja__cabecera, .hoja__pie { border-color: var(--color-rule); }
+.aviso { border-radius: var(--radius-control); border-color: transparent; box-shadow: var(--shadow-card); }
+.aviso--error { box-shadow: 0 0 0 3px var(--color-error), var(--shadow-card); }
+
+/* ---------- Controles: píldoras ---------- */
+.btn { border-radius: var(--radius-pill); font-weight: 700; }
+.btn--secondary { box-shadow: inset 0 0 0 var(--rule-bar) var(--color-ink); }
+.btn--small { padding: 0 var(--space-md); }
+.btn--ghost:hover { background: color-mix(in oklab, var(--color-ink) 12%, transparent); }
+.btn--accent { box-shadow: 0 3px 0 0 color-mix(in oklab, var(--color-accent) 55%, var(--color-paper-3)); }
+.btn--accent:active { box-shadow: none; transform: translateY(3px); }
+.input, .textarea, .select { border-radius: var(--radius-control); background: var(--color-card-plate); color: var(--color-card-ink); border-color: var(--color-card-rule); border-width: var(--rule-bar); }
+.input::placeholder, .textarea::placeholder { color: var(--color-card-muted); }
+.input:focus-visible, .textarea:focus-visible, .select:focus-visible { border-color: var(--color-focus); }
+.input:hover, .textarea:hover, .select:hover { box-shadow: var(--shadow-lift); }
+.contador, .segmentado { border-radius: var(--radius-pill); overflow: hidden; border-color: var(--color-card-rule); }
+.segmentado__op { border-right-color: var(--color-card-rule); }
+.segmentado__op[aria-pressed="true"] { background: var(--color-ink); color: var(--color-card); }
+.etiqueta { border-radius: var(--radius-pill); border-color: transparent; background: var(--color-card); color: var(--color-card-ink); font-weight: 700; padding: 3px var(--space-sm); }
+.etiqueta--ok { background: var(--color-tint-3); color: var(--color-card-ink); }
+.etiqueta--aviso { background: var(--color-tint-1); }
+.etiqueta--tenue { background: var(--color-tint-2); color: var(--color-card-ink); }
+.check input { border-radius: 6px; }
+
+/* ---------- Tipografía de marca ---------- */
+.code { font-weight: 800; letter-spacing: 0.06em; }
+.code.muted { font-weight: 700; }
+.articulo__nombre, .fila__nombre, .linea__nombre { font-weight: 800; letter-spacing: -0.01em; }
+.dato__valor, .ticket__total strong, .articulo__precio, .stock-num { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; }
+
+/* ---------- Público ---------- */
+.sitio-cab { background: var(--color-paper-3); border-bottom: 0; box-shadow: var(--shadow-bar); }
+.barra__marca { font-weight: 800; }
+.buscar { gap: var(--space-xs); }
+.buscar .input { border-right: var(--rule-bar) solid var(--color-card-rule); border-radius: var(--radius-pill); padding-inline: var(--space-lg); }
+.buscar .btn { min-width: var(--touch); padding: 0 var(--space-md); }
+
+.catalogo-cab { position: relative; isolation: isolate; }
+/* «Capas de impresión»: líneas horizontales que se desvanecen, como las capas de una pieza 3D */
+.catalogo-cab::before {
+  content: ""; position: absolute; z-index: -1; inset: 0 0 0 auto; width: min(52%, 640px);
+  background: repeating-linear-gradient(0deg, transparent 0 10px, color-mix(in oklab, var(--color-accent) 38%, transparent) 10px 12px);
+  -webkit-mask-image: linear-gradient(100deg, transparent 0%, var(--color-card-ink) 70%); mask-image: linear-gradient(100deg, transparent 0%, var(--color-card-ink) 70%);
+  border-radius: var(--radius-card); pointer-events: none;
+}
+@media (max-width: 40rem) { .catalogo-cab::before { width: 100%; opacity: 0.45; } }
+.catalogo-cab h1 { text-shadow: 0 3px 0 color-mix(in oklab, var(--color-paper-3) 70%, transparent); }
+.catalogo-cab__cuenta { display: inline-block; width: fit-content; max-width: 100%; padding: var(--space-xs) var(--space-md); background: var(--color-paper-3); border-radius: var(--radius-control); color: var(--color-ink-2); font-weight: 700; }
+
+.catalogo { gap: var(--space-lg); }
+.articulo { grid-template-rows: auto 1fr; box-shadow: var(--shadow-card); transition: box-shadow var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out); }
+.articulo__foto { border-bottom: 0; }
+.articulo__codigo { color: var(--color-card-accent); }
+.articulo__desc { color: var(--color-card-ink-2); }
+.articulo__precio { font-size: var(--text-xl); }
+@media (hover: hover) and (pointer: fine) {
+  .articulo:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-6px); }
+}
+@media (max-width: 60rem) { .articulo { box-shadow: var(--shadow-card); } }
+.catalogo > li:nth-child(4n + 1) .foto { background: var(--color-tint-1); }
+.catalogo > li:nth-child(4n + 2) .foto { background: var(--color-tint-4); }
+.catalogo > li:nth-child(4n + 3) .foto { background: var(--color-tint-2); }
+.catalogo > li:nth-child(4n + 4) .foto { background: var(--color-tint-3); }
+.foto__marca { color: var(--color-card-ink); font-family: var(--font-display); font-weight: 800; opacity: 0.55; font-size: var(--text-xl); }
+
+.sitio-pie { background: var(--color-paper-3); border-top: 0; }
+.pie-mast__marca { font-weight: 800; }
+
+.entrar__tarjeta { padding: var(--space-xl) var(--space-lg); }
+
+/* ---------- Panel ---------- */
+.rail { background: var(--color-paper-3); border-right: 0; box-shadow: var(--shadow-rail); }
+.rail__marca, .tope a { font-weight: 800; }
+.rail__enlace { border-radius: var(--radius-pill); font-weight: 700; }
+.rail__enlace:hover { background: color-mix(in oklab, var(--color-ink) 10%, transparent); }
+.rail__enlace[aria-current="page"] { background: var(--color-accent); color: var(--color-accent-ink); }
+.rail__enlace[aria-current="page"] .contador-nuevos { background: var(--color-accent-ink); color: var(--color-accent); }
+.contador-nuevos { border-radius: var(--radius-pill); font-family: var(--font-display); font-weight: 800; }
+.tope { background: var(--color-paper-3); border-bottom: 0; }
+.pestanas { background: var(--color-paper-3); border-top: 0; box-shadow: var(--shadow-tabs); }
+.pestana { font-weight: 700; color: var(--color-ink-2); }
+.pestana[aria-current="page"] { background: var(--color-accent); color: var(--color-accent-ink); }
+.barra-cobro { background: var(--color-accent); color: var(--color-accent-ink); border-top: 0; box-shadow: var(--shadow-tabs); }
+.barra-cobro strong { color: var(--color-accent-ink); }
+
+.pagina-cab h1 { text-shadow: 0 3px 0 color-mix(in oklab, var(--color-paper-3) 70%, transparent); }
+.dato { border: 0; }
+.estadisticas > :nth-child(1) { background: var(--color-tint-1); }
+.estadisticas > :nth-child(2) { background: var(--color-tint-3); }
+.estadisticas > :nth-child(3) { background: var(--color-tint-2); }
+.dato__etiqueta, .dato__nota { color: var(--color-card-ink-2); }
+.dato__valor { font-size: var(--text-3xl); }
+.barras { background: var(--color-card); border: 0; }
+.barra-dia__col { border-radius: var(--radius-control) var(--radius-control) 0 0; background: var(--color-card-accent); }
+.barra-dia--vacio .barra-dia__col { background: var(--color-card-3); }
+
+.lista { border: 0; }
+button.fila:hover { background: var(--color-card-2); }
+.fila--aviso { background: var(--color-card-accent-soft); }
+.fila__foto .foto { border-radius: var(--radius-control); }
+.lista > :nth-child(4n + 1) .foto { background: var(--color-tint-1); }
+.lista > :nth-child(4n + 2) .foto { background: var(--color-tint-4); }
+.lista > :nth-child(4n + 3) .foto { background: var(--color-tint-2); }
+.lista > :nth-child(4n + 4) .foto { background: var(--color-tint-3); }
+.fila__foto .foto__marca { display: none; }
+
+.ficha { border: 0; border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card); }
+.ficha:hover:not(:disabled) { box-shadow: var(--shadow-card-hover); transform: translateY(-3px); }
+.ficha:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-card); }
+.ficha:disabled { background: color-mix(in oklab, var(--color-card) 55%, var(--color-paper)); color: var(--color-card-muted); box-shadow: none; }
+.ficha[data-en-ticket="true"] { background: var(--color-tint-1); }
+.ficha[data-en-ticket="true"] .ficha__codigo { color: var(--color-card-ink-2); }
+.ficha__cant { border-radius: var(--radius-pill); top: var(--space-xs); right: var(--space-xs); font-family: var(--font-display); font-weight: 800; background: var(--color-card-ink); color: var(--color-card); }
+.ticket { border: 0; }
+.linea__precio .input { border-radius: var(--radius-control); border-width: var(--rule-hair); }
+.pedido { border: 0; }
+.subida__vista { border: 0; border-radius: var(--radius-card); }
+
+@media (prefers-reduced-motion: reduce) {
+  .articulo:hover, .ficha:hover:not(:disabled) { transform: none; }
+}
