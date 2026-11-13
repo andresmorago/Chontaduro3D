@@ -184,3 +184,8 @@ async def test_cabecera_csrf_sigue_siendo_obligatoria_en_login(publico):
     )
     assert r.status_code == 403
     assert CSRF["X-Requested-With"] == "fetch"
+
+
+def test_cookie_secure_vacio_significa_decidir_por_peticion():
+    assert Settings(secret_key="", cookie_secure="").cookie_secure is None
+    assert Settings(secret_key="", cookie_secure="true").cookie_secure is True

@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     max_upload_mb: int = 5
 
     whatsapp_negocio: str = ""
+
+    @field_validator("cookie_secure", mode="before")
+    @classmethod
+    def _cookie_secure_vacio(cls, v):
+        # Compose pasa `COOKIE_SECURE=` (vacío) cuando no se define: vacío = decidir por petición.
+        return None if isinstance(v, str) and not v.strip() else v
 
     @model_validator(mode="after")
     def _validar(self) -> "Settings":

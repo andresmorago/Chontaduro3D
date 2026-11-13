@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const SECRETO = process.env.PROXY_SHARED_SECRET ?? "";
 const DESARROLLO = process.env.NODE_ENV !== "production";
+const TOPE_CUERPO = 7 * 1024 * 1024;
 
 function iguales(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -32,6 +33,13 @@ export function middleware(req: NextRequest) {
 
   if (SECRETO && !iguales(req.headers.get("x-proxy-secret") ?? "", SECRETO)) {
     return new NextResponse("Acceso no permitido.", { status: 403 });
+  }
+
+  // Tope temprano al cuerpo (la subida de fotos admite 5 MB + multipart): evita proxificar al backend
+  // una subida enorme que el backend cortaría de todos modos, y devuelve un 413 limpio.
+  const largo = Number(req.headers.get("content-length") ?? "0");
+  if (req.method !== "GET" && req.method !== "HEAD" && largo > TOPE_CUERPO) {
+    return new NextResponse("El cuerpo de la petición es demasiado grande.", { status: 413 });
   }
 
   if (pathname.startsWith("/panel") && !req.cookies.has("mi_access") && !req.cookies.has("mi_refresh")) {
