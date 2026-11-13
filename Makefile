@@ -101,8 +101,8 @@ prod-db-shell: ## psql en la base de producción
 prod-admin: ## Crea o actualiza el admin en producción
 	$(PROD) exec backend python -m app.seeds.create_admin
 
-worker-publicar: ## Sube el Worker de workers.dev apuntando al túnel actual
-	$(PROD) --profile tunnel logs cloudflared 2>&1 | python3 cloudflare/urlsync/urlsync.py --una-vez
+worker-publicar: ## Sube una vez el Worker de workers.dev apuntando al túnel actual (producción)
+	$(PROD) --profile tunnel run --rm urlsync python /cloudflare/urlsync/urlsync.py --una-vez
 
 # --- Pruebas de punta a punta -------------------------------------------------
 # Solo contra el stack de DESARROLLO (make up). Los límites anti-abuso también aplican aquí

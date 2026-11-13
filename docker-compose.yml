@@ -115,11 +115,28 @@ services:
   # `urlsync` la detecta y apunta el Worker estable (workers.dev) hacia ella.
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate --url http://frontend:3000
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://frontend:3000
     environment:
       TZ: America/Bogota
     depends_on:
       - frontend
+    restart: unless-stopped
+    profiles: [tunnel]
+
+  # Mantiene el Worker de workers.dev apuntando a la URL vigente del túnel (ver docs/tunel-cloudflare.md).
+  urlsync:
+    image: python:3.13-slim
+    command: python /cloudflare/urlsync/urlsync.py
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      WORKER_NOMBRE: ${WORKER_NOMBRE:-misimpresiones}
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:-}
+      WORKER_CODIGO: /cloudflare/worker/index.js
+    volumes:
+      - ./cloudflare:/cloudflare:ro
+    depends_on:
+      - cloudflared
     restart: unless-stopped
     profiles: [tunnel]
 
