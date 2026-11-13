@@ -51,16 +51,19 @@ export function alSesionVencida(fn: (() => void) | null) {
   alVencerSesion = fn;
 }
 
-let renovando: Promise<boolean> | null = null;
-function renovarSesion(): Promise<boolean> {
+// «ok»: sesión renovada · «vencida»: el servidor dijo 401 (hay que volver a entrar) ·
+// «red»: no se pudo saber (sin conexión, petición interrumpida, error 5xx): NO es motivo para sacar al usuario.
+type ResultadoRenovar = "ok" | "vencida" | "red";
+let renovando: Promise<ResultadoRenovar> | null = null;
+function renovarSesion(): Promise<ResultadoRenovar> {
   // Varias llamadas que fallan a la vez comparten una sola renovación (el token rota).
   renovando ??= fetch(`${BASE}/auth/refresh`, {
     method: "POST",
     headers: { "X-Requested-With": "fetch" },
     credentials: "same-origin",
   })
-    .then((r) => r.ok)
-    .catch(() => false)
+    .then((r): ResultadoRenovar => (r.ok ? "ok" : r.status === 401 ? "vencida" : "red"))
+    .catch((): ResultadoRenovar => "red")
     .finally(() => {
       renovando = null;
     });
@@ -96,8 +99,10 @@ async function pedir<T>(ruta: string, o: Opciones = {}): Promise<T> {
   }
 
   if (r.status === 401 && !o.sinRenovar && !EN_SERVIDOR) {
-    if (await renovarSesion()) return pedir<T>(ruta, { ...o, sinRenovar: true });
-    alVencerSesion?.();
+    const estado = await renovarSesion();
+    if (estado === "ok") return pedir<T>(ruta, { ...o, sinRenovar: true });
+    if (estado === "vencida") alVencerSesion?.();
+    else throw new ErrorApi(0, "No hay conexión. Revisa tu internet e inténtalo de nuevo.");
   }
   if (!r.ok) {
     let detalle: Detalle;

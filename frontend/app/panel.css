@@ -87,7 +87,7 @@ button.fila:hover { background: var(--color-paper-2); }
 .linea { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs) var(--space-sm); align-items: center; padding-bottom: var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }
 .linea__nombre { font-weight: 700; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .linea__precio { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm); color: var(--color-muted); }
-.linea__precio .input { min-height: 36px; width: 110px; padding-inline: var(--space-xs); font-family: var(--font-outlier); font-size: var(--text-sm); border-width: var(--rule-hair); }
+.linea__precio .input { min-height: 40px; width: 120px; padding-inline: var(--space-xs); font-family: var(--font-outlier); font-size: var(--text-md); border-width: var(--rule-hair); } /* 16 px: Safari/iPhone hace zoom al enfocar campos menores */
 .linea__subtotal { font-family: var(--font-outlier); font-weight: 500; text-align: right; }
 .ticket__total { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-md); }
 .ticket__total strong { font: 700 var(--text-2xl)/1 var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }

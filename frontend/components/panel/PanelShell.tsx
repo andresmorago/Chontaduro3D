@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Boton } from "@/components/ui/Boton";
 import { Hoja } from "@/components/ui/Hoja";
 import { Icono, type NombreIcono } from "@/components/ui/Icono";
-import { alSesionVencida, api } from "@/lib/api";
+import { ErrorApi, alSesionVencida, api } from "@/lib/api";
 import type { Usuario } from "@/lib/types";
 
 interface Contexto {
@@ -39,7 +39,11 @@ export function PanelShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     alSesionVencida(() => window.location.assign("/entrar"));
-    api.auth.yo().then(setUsuario).catch(() => window.location.assign("/entrar"));
+    api.auth
+      .yo()
+      .then(setUsuario)
+      // Solo un 401 real manda al login; un fallo de red pasajero no debe sacar a nadie de su sesión.
+      .catch((e) => e instanceof ErrorApi && e.status === 401 && window.location.assign("/entrar"));
     return () => alSesionVencida(null);
   }, []);
 

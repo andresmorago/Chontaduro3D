@@ -49,6 +49,7 @@ Vender y ajustar bloquean la fila del artículo, así dos ventas simultáneas no
 make test    # 75 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
 make e2e     # recorrido completo con navegador real (Playwright) contra el stack de desarrollo; capturas en e2e/out
 make typecheck
+make iphone  # WebKit (el motor de Safari) con perfiles de iPhone SE, 13 y 15 Pro Max: desbordes, hoja de pedido, login con toque real y panel
 ```
 
 ## Producción y dominio público (Cloudflare, sin dominio propio)

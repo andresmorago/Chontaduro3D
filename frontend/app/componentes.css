@@ -112,5 +112,5 @@
 
 @media (pointer: coarse) { .btn--small { min-height: 44px; } }
 
-/* ---------- Verificación Turnstile: reserva su alto para que el formulario no salte al cargar ---------- */
-.turnstile { min-height: 65px; display: grid; gap: var(--space-xs); }
+/* ---------- Verificación Turnstile (modo «interaction-only»: invisible salvo que haga falta interactuar) ---------- */
+.turnstile { display: grid; gap: var(--space-xs); }

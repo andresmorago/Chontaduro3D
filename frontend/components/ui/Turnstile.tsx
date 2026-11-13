@@ -61,6 +61,8 @@ export function Turnstile({ sitekey, onToken, reinicio = 0 }: Props) {
           sitekey,
           language: "es",
           theme: "light",
+          // Invisible salvo que haga falta interacción: la mayoría de la gente nunca ve el widget.
+          appearance: "interaction-only",
           callback: (t: string) => alToken.current(t),
           "expired-callback": () => alToken.current(null),
           "error-callback": () => {
