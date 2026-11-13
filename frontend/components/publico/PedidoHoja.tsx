@@ -5,21 +5,25 @@ import { Boton } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Campo";
 import { Contador } from "@/components/ui/Contador";
 import { Hoja } from "@/components/ui/Hoja";
+import { Turnstile } from "@/components/ui/Turnstile";
 import { ErrorApi, api } from "@/lib/api";
 import { dinero } from "@/lib/format";
 import type { ArticuloPublico } from "@/lib/types";
 
 interface Props {
   articulo: ArticuloPublico | null;
+  sitekey: string;
   onCerrar: () => void;
 }
 
 /** Pedido en tres datos: quién eres, cómo te escribimos y cuántos quieres. No toca el inventario. */
-export function PedidoHoja({ articulo, onCerrar }: Props) {
+export function PedidoHoja({ articulo, sitekey, onCerrar }: Props) {
   const [nombre, setNombre] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [cantidad, setCantidad] = useState(1);
   const [trampa, setTrampa] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [reinicio, setReinicio] = useState(0);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hecho, setHecho] = useState<string | null>(null);
@@ -29,20 +33,28 @@ export function PedidoHoja({ articulo, onCerrar }: Props) {
     setCantidad(1);
     setError(null);
     setHecho(null);
+    setToken(null);
   }, [articulo?.id]);
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
     if (!articulo) return;
+    if (sitekey && !token) {
+      setError("Completa la verificación antes de enviar el pedido.");
+      return;
+    }
     setEnviando(true);
     setError(null);
     try {
-      const r = await api.publico.pedir({ articulo_id: articulo.id, nombre: nombre.trim(), whatsapp: whatsapp.trim(), cantidad, sitio_web: trampa });
+      const r = await api.publico.pedir({ articulo_id: articulo.id, nombre: nombre.trim(), whatsapp: whatsapp.trim(), cantidad, sitio_web: trampa, turnstile: token ?? "" });
       setHecho(r.mensaje);
     } catch (err) {
       setError(err instanceof ErrorApi ? err.message : "No se pudo enviar el pedido.");
     } finally {
       setEnviando(false);
+      // El token es de un solo uso: tras cada intento se pide uno nuevo.
+      setToken(null);
+      setReinicio((n) => n + 1);
     }
   }
 
@@ -64,7 +76,7 @@ export function PedidoHoja({ articulo, onCerrar }: Props) {
             <Boton variante="secondary" onClick={onCerrar}>
               Cancelar
             </Boton>
-            <Boton variante="accent" type="submit" form="form-pedido" cargando={enviando}>
+            <Boton variante="accent" type="submit" form="form-pedido" cargando={enviando} disabled={Boolean(sitekey) && !token}>
               Enviar pedido
             </Boton>
           </>
@@ -97,6 +109,7 @@ export function PedidoHoja({ articulo, onCerrar }: Props) {
               <strong>{dinero(total)}</strong>
             </p>
           )}
+          <Turnstile sitekey={sitekey} onToken={setToken} reinicio={reinicio} />
           {/* Trampa para robots: una persona nunca ve ni llena este campo. */}
           <div className="trampa" aria-hidden="true">
             <label>

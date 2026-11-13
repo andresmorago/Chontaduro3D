@@ -46,7 +46,7 @@ Vender y ajustar bloquean la fila del artículo, así dos ventas simultáneas no
 ## Pruebas
 
 ```bash
-make test    # 68 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
+make test    # 75 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
 make e2e     # recorrido completo con navegador real (Playwright) contra el stack de desarrollo; capturas en e2e/out
 make typecheck
 ```
@@ -60,6 +60,17 @@ make prod-build && make prod-up-tunnel && make prod-admin
 ```
 
 La app queda en `https://<WORKER_NOMBRE>.<tu-subdominio>.workers.dev` (estable aunque el túnel cambie de URL).
+
+## Cloudflare Turnstile (el «reCAPTCHA» de Cloudflare)
+
+Protege el **login** y el **pedido del catálogo**. El navegador solo muestra el widget; el servidor valida el token contra
+Cloudflare con la llave secreta (`backend/app/core/turnstile.py`) y **falla cerrado** si Cloudflare no responde.
+
+1. Panel de Cloudflare → **Turnstile** → *Add widget*: hostname `misimpresiones.<tu-subdominio>.workers.dev`, modo *Managed*.
+2. Copia la **Site key** (pública) y la **Secret key** a `.env` como `TURNSTILE_SITEKEY` y `TURNSTILE_SECRETKEY`.
+3. `make prod-up-tunnel` (recrea el backend). Vacías = apagado.
+
+En desarrollo se usan las llaves de prueba de Cloudflare (siempre aprueban), así el flujo con widget se ejercita sin configurar nada.
 
 ## Seguridad (lo que ya está)
 

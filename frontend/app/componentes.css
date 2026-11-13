@@ -111,3 +111,6 @@
 .foto__marca { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-outlier); font-weight: 500; font-size: var(--text-lg); color: var(--color-muted); letter-spacing: 0.04em; }
 
 @media (pointer: coarse) { .btn--small { min-height: 44px; } }
+
+/* ---------- Verificación Turnstile: reserva su alto para que el formulario no salte al cargar ---------- */
+.turnstile { min-height: 65px; display: grid; gap: var(--space-xs); }

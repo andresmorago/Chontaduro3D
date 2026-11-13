@@ -148,6 +148,7 @@ class PedidoPublicoIn(Entrada):
     cantidad: int = Field(ge=1, le=99)
     # Trampa para robots: un humano nunca ve este campo, así que debe llegar vacío.
     sitio_web: str = Field(default="", max_length=200)
+    turnstile: str = Field(default="", max_length=2048)
 
     @field_validator("whatsapp")
     @classmethod
@@ -193,6 +194,11 @@ class ArticuloPublico(Salida):
 class CatalogoPublico(Salida):
     articulos: list[ArticuloPublico]
     whatsapp_negocio: str
+    turnstile_sitekey: str = ""
+
+
+class ConfigPublica(Salida):
+    turnstile_sitekey: str = ""
 
 
 # --- Panel -------------------------------------------------------------------

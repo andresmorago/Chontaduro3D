@@ -6,6 +6,7 @@ import type {
   Articulo,
   ArticuloEntrada,
   CatalogoPublico,
+  ConfigPublica,
   EstadoPedido,
   ItemCantidad,
   Movimiento,
@@ -120,14 +121,15 @@ const q = (p: Record<string, string | number | boolean | undefined>) => {
 
 export const api = {
   auth: {
-    entrar: (email: string, password: string) =>
-      pedir<Usuario>("/auth/login", { metodo: "POST", cuerpo: { email, password }, sinRenovar: true }),
+    entrar: (email: string, password: string, turnstile = "") =>
+      pedir<Usuario>("/auth/login", { metodo: "POST", cuerpo: { email, password, turnstile }, sinRenovar: true }),
     salir: () => pedir<void>("/auth/logout", { metodo: "POST", sinRenovar: true }),
     yo: () => pedir<Usuario>("/auth/yo"),
   },
   publico: {
     catalogo: () => pedir<CatalogoPublico>("/publico/articulos"),
-    pedir: (d: { articulo_id: string; nombre: string; whatsapp: string; cantidad: number; sitio_web: string }) =>
+    config: () => pedir<ConfigPublica>("/publico/config"),
+    pedir: (d: { articulo_id: string; nombre: string; whatsapp: string; cantidad: number; sitio_web: string; turnstile: string }) =>
       pedir<{ ok: boolean; mensaje: string }>("/publico/pedidos", { metodo: "POST", cuerpo: d }),
   },
   panel: () => pedir<Panel>("/panel"),

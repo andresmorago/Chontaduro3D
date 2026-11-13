@@ -12,12 +12,13 @@ import { PedidoHoja } from "./PedidoHoja";
 interface Props {
   articulos: ArticuloPublico[];
   whatsapp: string;
+  sitekey: string;
   negocio: string;
 }
 
 const sinTildes = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-export function Catalogo({ articulos, whatsapp, negocio }: Props) {
+export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [elegido, setElegido] = useState<ArticuloPublico | null>(null);
 
@@ -113,7 +114,7 @@ export function Catalogo({ articulos, whatsapp, negocio }: Props) {
         </div>
       </footer>
 
-      <PedidoHoja articulo={elegido} onCerrar={() => setElegido(null)} />
+      <PedidoHoja articulo={elegido} sitekey={sitekey} onCerrar={() => setElegido(null)} />
     </>
   );
 }

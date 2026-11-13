@@ -43,6 +43,9 @@ services:
       MEDIA_DIR: ${MEDIA_DIR:-/media}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
       WHATSAPP_NEGOCIO: ${WHATSAPP_NEGOCIO:-}
+      # Cloudflare Turnstile (reCAPTCHA de Cloudflare) en login y pedidos; vacío = apagado.
+      TURNSTILE_SITEKEY: ${TURNSTILE_SITEKEY:-}
+      TURNSTILE_SECRETKEY: ${TURNSTILE_SECRETKEY:-}
       # Solo para `make prod-admin` (create_admin); el servidor web no los usa.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}

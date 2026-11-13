@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "pillow>=11.3",
     "tzdata>=2025.2",
+    "httpx>=0.28",
 ]
 
 [project.optional-dependencies]

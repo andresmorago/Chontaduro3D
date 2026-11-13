@@ -5,12 +5,19 @@ from sqlalchemy import func, select, text
 
 from app.api.articulos import url_imagen
 from app.config import settings
-from app.core.cliente import origen_hash
+from app.core import turnstile
+from app.core.cliente import ip_cliente, origen_hash
 from app.core.deps import DB
 from app.core.inventario import stock_de
 from app.core.tokens import ahora
 from app.models import Articulo, Pedido
-from app.schemas.dominio import ArticuloPublico, CatalogoPublico, PedidoCreado, PedidoPublicoIn
+from app.schemas.dominio import (
+    ArticuloPublico,
+    CatalogoPublico,
+    ConfigPublica,
+    PedidoCreado,
+    PedidoPublicoIn,
+)
 
 router = APIRouter(prefix="/publico", tags=["publico"])
 
@@ -42,7 +49,16 @@ async def catalogo(db: DB) -> CatalogoPublico:
             for a in articulos
         ],
         whatsapp_negocio=settings.whatsapp_negocio,
+        turnstile_sitekey=settings.turnstile_sitekey if settings.turnstile_activo else "",
     )  # fmt: skip
+
+
+@router.get("/config", response_model=ConfigPublica)
+async def configuracion() -> ConfigPublica:
+    """Lo que el navegador necesita antes de mostrar un formulario (la llave PÚBLICA del widget)."""
+    return ConfigPublica(
+        turnstile_sitekey=settings.turnstile_sitekey if settings.turnstile_activo else ""
+    )
 
 
 @router.post("/pedidos", response_model=PedidoCreado, status_code=status.HTTP_201_CREATED)
@@ -52,6 +68,7 @@ async def crear_pedido(datos: PedidoPublicoIn, request: Request, db: DB) -> Pedi
     if datos.sitio_web:
         return ok  # robot: se responde como si hubiera funcionado, sin guardar nada
 
+    await turnstile.exigir(datos.turnstile, ip_cliente(request))
     origen = origen_hash(request)
     # Los límites son «contar y luego insertar»: se serializan con un candado de la transacción
     # (se suelta con el commit) para que una ráfaga concurrente no los sobrepase.

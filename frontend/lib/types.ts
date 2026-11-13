@@ -122,6 +122,11 @@ export interface ArticuloPublico {
 export interface CatalogoPublico {
   articulos: ArticuloPublico[];
   whatsapp_negocio: string;
+  turnstile_sitekey: string;
+}
+
+export interface ConfigPublica {
+  turnstile_sitekey: string;
 }
 
 export interface VentasDia {

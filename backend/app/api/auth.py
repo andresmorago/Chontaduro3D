@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text, update
 
 from app.config import settings
-from app.core import auditoria
-from app.core.cliente import origen_hash
+from app.core import auditoria, turnstile
+from app.core.cliente import ip_cliente, origen_hash
 from app.core.deps import COOKIE_ACCESO, COOKIE_REFRESCO, DB, Admin, exigir_cabecera_csrf
 from app.core.security import HASH_DE_RELLENO, verify_password
 from app.core.tokens import (
@@ -83,6 +83,8 @@ async def _fallos_recientes(db, **filtro) -> int:
 @router.post("/login", response_model=UsuarioOut, dependencies=[])
 async def login(datos: LoginIn, request: Request, response: Response, db: DB) -> Usuario:
     exigir_cabecera_csrf(request)
+    # Antes de gastar CPU en argon2 o en la base: un robot sin verificación no llega más lejos.
+    await turnstile.exigir(datos.turnstile, ip_cliente(request))
     origen = origen_hash(request)
     email = datos.email.lower()
 

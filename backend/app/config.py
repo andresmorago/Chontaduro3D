@@ -34,6 +34,11 @@ class Settings(BaseSettings):
 
     whatsapp_negocio: str = ""
 
+    # Cloudflare Turnstile (el «reCAPTCHA» de Cloudflare). Sin SECRETKEY queda apagado (desarrollo).
+    turnstile_sitekey: str = ""
+    turnstile_secretkey: str = ""
+    turnstile_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
     @field_validator("cookie_secure", mode="before")
     @classmethod
     def _cookie_secure_vacio(cls, v):
@@ -53,6 +58,10 @@ class Settings(BaseSettings):
             # Desarrollo/pruebas: clave fija y evidente; nunca válida en producción.
             self.secret_key = "desarrollo-no-usar-en-produccion-0123456789abcdef"
         return self
+
+    @property
+    def turnstile_activo(self) -> bool:
+        return bool(self.turnstile_secretkey and self.turnstile_sitekey)
 
     @property
     def es_produccion(self) -> bool:

@@ -5,12 +5,12 @@ import type { CatalogoPublico } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function Inicio() {
-  let catalogo: CatalogoPublico = { articulos: [], whatsapp_negocio: "" };
+  let catalogo: CatalogoPublico = { articulos: [], whatsapp_negocio: "", turnstile_sitekey: "" };
   try {
     catalogo = await api.publico.catalogo();
   } catch {
     // Si la API no responde se muestra el catálogo vacío, no una página rota.
   }
   const negocio = process.env.NOMBRE_NEGOCIO || "Mis impresiones";
-  return <Catalogo articulos={catalogo.articulos} whatsapp={catalogo.whatsapp_negocio} negocio={negocio} />;
+  return <Catalogo articulos={catalogo.articulos} whatsapp={catalogo.whatsapp_negocio} sitekey={catalogo.turnstile_sitekey} negocio={negocio} />;
 }

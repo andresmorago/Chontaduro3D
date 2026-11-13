@@ -31,6 +31,10 @@ services:
     env_file: .env
     environment:
       TZ: America/Bogota
+      # Desarrollo: llaves de PRUEBA de Cloudflare (siempre aprueban) para ejercitar el flujo con widget.
+      # Para probar con tus llaves reales, define TURNSTILE_SITEKEY_DEV / TURNSTILE_SECRETKEY_DEV en .env.
+      TURNSTILE_SITEKEY: ${TURNSTILE_SITEKEY_DEV:-1x00000000000000000000AA}
+      TURNSTILE_SECRETKEY: ${TURNSTILE_SECRETKEY_DEV:-1x0000000000000000000000000000000AA}
     volumes:
       - ./backend:/app
       - ./data/imagenes:/media
