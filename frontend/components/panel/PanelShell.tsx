@@ -24,6 +24,7 @@ const DESTINOS: { href: string; etiqueta: string; corta: string; icono: NombreIc
   { href: "/panel/inventario", etiqueta: "Inventario", corta: "Stock", icono: "stock" },
   { href: "/panel/articulos", etiqueta: "Artículos", corta: "Artículos", icono: "articulos" },
   { href: "/panel/pedidos", etiqueta: "Pedidos", corta: "Pedidos", icono: "pedidos" },
+  { href: "/panel/administracion", etiqueta: "Administración", corta: "Admin", icono: "admin" },
 ];
 const PESTANAS = ["/panel/vender", "/panel/produccion", "/panel/inventario", "/panel/pedidos"];
 
@@ -123,6 +124,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
         <div style={{ display: "grid", gap: "var(--space-sm)" }}>
           <Link className="btn btn--secondary btn--block" href="/panel" onClick={() => setMenu(false)}>Inicio</Link>
           <Link className="btn btn--secondary btn--block" href="/panel/articulos" onClick={() => setMenu(false)}>Artículos</Link>
+          <Link className="btn btn--secondary btn--block" href="/panel/administracion" onClick={() => setMenu(false)}>Administración</Link>
           <a className="btn btn--secondary btn--block" href="/" target="_blank" rel="noopener noreferrer">Ver catálogo público</a>
           <Boton variante="danger" bloque onClick={salir}>Salir</Boton>
         </div>

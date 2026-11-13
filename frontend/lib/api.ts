@@ -8,13 +8,16 @@ import type {
   CatalogoPublico,
   ConfigPublica,
   EstadoPedido,
+  ExtraProduccion,
   ItemCantidad,
   Movimiento,
   Panel,
+  Parametros,
   Pedido,
   PrecioHistorial,
   Produccion,
   Usuario,
+  UsuarioAdmin,
   Venta,
   VentaEntrada,
 } from "./types";
@@ -138,6 +141,21 @@ export const api = {
       pedir<{ ok: boolean; mensaje: string }>("/publico/pedidos", { metodo: "POST", cuerpo: d }),
   },
   panel: () => pedir<Panel>("/panel"),
+  usuarios: {
+    listar: () => pedir<UsuarioAdmin[]>("/usuarios"),
+    crear: (d: { nombre: string; email: string; password: string }) =>
+      pedir<UsuarioAdmin>("/usuarios", { metodo: "POST", cuerpo: d }),
+    actualizar: (id: string, d: { nombre?: string; activo?: boolean }) =>
+      pedir<UsuarioAdmin>(`/usuarios/${id}`, { metodo: "PATCH", cuerpo: d }),
+    restablecer: (id: string, nueva: string) =>
+      pedir<void>(`/usuarios/${id}/contrasena`, { metodo: "POST", cuerpo: { nueva } }),
+    cambiarMia: (actual: string, nueva: string) =>
+      pedir<void>("/usuarios/yo/contrasena", { metodo: "POST", cuerpo: { actual, nueva } }),
+  },
+  parametros: {
+    ver: () => pedir<Parametros>("/parametros"),
+    guardar: (d: Parametros) => pedir<Parametros>("/parametros", { metodo: "PUT", cuerpo: d }),
+  },
   articulos: {
     listar: (incluirInactivos = false) =>
       pedir<Articulo[]>(`/articulos${q({ incluir_inactivos: incluirInactivos || undefined })}`),
@@ -154,8 +172,8 @@ export const api = {
   },
   produccion: {
     listar: () => pedir<Produccion[]>("/produccion"),
-    registrar: (items: ItemCantidad[], nota?: string) =>
-      pedir<Produccion>("/produccion", { metodo: "POST", cuerpo: { items, nota: nota || null } }),
+    registrar: (items: ItemCantidad[], nota?: string, extra: ExtraProduccion = {}) =>
+      pedir<Produccion>("/produccion", { metodo: "POST", cuerpo: { items, nota: nota || null, ...extra } }),
   },
   ventas: {
     deHoy: () => pedir<Venta[]>("/ventas"),

@@ -9,6 +9,7 @@ const RUTAS = {
   producir: "M4 20h16M7 20V10l5-6 5 6v10M10 20v-5h4v5",
   stock: "M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10",
   articulos: "M5 4h14v16H5zM9 9h6M9 13h6M9 17h3",
+  admin: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7",
   pedidos: "M4 5h16v11H9l-5 4zM8 9h8M8 12h5",
   salir: "M10 4H5v16h5M15 8l4 4-4 4M19 12H9",
   ver: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",

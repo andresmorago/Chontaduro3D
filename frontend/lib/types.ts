@@ -6,6 +6,16 @@ export type EstadoPedido = "nuevo" | "contactado" | "cerrado" | "descartado";
 export interface Usuario {
   id: string;
   email: string;
+  nombre?: string | null;
+}
+
+export interface UsuarioAdmin {
+  id: string;
+  email: string;
+  nombre: string | null;
+  activo: boolean;
+  creado_en: string;
+  es_yo: boolean;
 }
 
 export interface Articulo {
@@ -46,12 +56,35 @@ export interface ProduccionItem {
   cantidad: number;
 }
 
+export interface Filamento {
+  descripcion: string;
+  gramos: number;
+}
+
 export interface Produccion {
   id: string;
   fecha: string;
   nota: string | null;
   creado_en: string;
   items: ProduccionItem[];
+  gramos_total: number | null;
+  filamentos: Filamento[];
+  minutos_impresion: number | null;
+  potencia_w: number | null;
+  precio_kwh: number | null;
+  kwh: number | null;
+  costo_energia: number | null;
+}
+
+export interface ExtraProduccion {
+  gramos_total?: number;
+  filamentos?: Filamento[];
+  minutos_impresion?: number;
+}
+
+export interface Parametros {
+  precio_kwh: number | null;
+  potencia_impresora_w: number | null;
 }
 
 export interface VentaItemEntrada extends ItemCantidad {

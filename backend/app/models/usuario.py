@@ -14,6 +14,7 @@ class Usuario(MarcaDeTiempo, Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     email: Mapped[str] = mapped_column(String(254), unique=True, nullable=False)
+    nombre: Mapped[str | None] = mapped_column(String(80))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     activo: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
     # Sube cada vez que las credenciales cambian o se detecta robo de sesión: los JWT de acceso

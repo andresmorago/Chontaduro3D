@@ -15,3 +15,4 @@ class LoginIn(Entrada):
 class UsuarioOut(Salida):
     id: UUID
     email: str
+    nombre: str | None = None

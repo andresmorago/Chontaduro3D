@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -7,11 +8,17 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.config import settings
-from app.core import auditoria
+from app.core import auditoria, energia
 from app.core.deps import DB, PROTEGIDO, Admin
 from app.core.inventario import bloquear_articulos
-from app.models import Articulo, MovimientoInventario, Produccion, ProduccionItem
-from app.schemas.dominio import ProduccionIn, ProduccionItemOut, ProduccionOut
+from app.models import (
+    Articulo,
+    MovimientoInventario,
+    Produccion,
+    ProduccionFilamento,
+    ProduccionItem,
+)
+from app.schemas.dominio import FilamentoOut, ProduccionIn, ProduccionItemOut, ProduccionOut
 
 router = APIRouter(prefix="/produccion", tags=["produccion"], dependencies=PROTEGIDO)
 
@@ -46,9 +53,22 @@ async def _salida(db, produccion: Produccion) -> ProduccionOut:
         ProduccionItemOut(articulo_id=a.id, codigo=a.codigo, nombre=a.nombre, cantidad=i.cantidad)
         for i, a in filas
     ]
+    filamentos = [
+        FilamentoOut(descripcion=f.descripcion, gramos=f.gramos)
+        for f in (
+            await db.execute(
+                select(ProduccionFilamento)
+                .where(ProduccionFilamento.produccion_id == produccion.id)
+                .order_by(ProduccionFilamento.orden)
+            )
+        ).scalars()
+    ]
     return ProduccionOut(
         id=produccion.id, fecha=produccion.fecha, nota=produccion.nota,
-        creado_en=produccion.creado_en, items=items,
+        creado_en=produccion.creado_en, items=items, gramos_total=produccion.gramos_total,
+        filamentos=filamentos, minutos_impresion=produccion.minutos_impresion,
+        potencia_w=produccion.potencia_w, precio_kwh=produccion.precio_kwh,
+        kwh=produccion.kwh, costo_energia=produccion.costo_energia,
     )  # fmt: skip
 
 
@@ -68,9 +88,40 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
             + (f": {', '.join(archivados)}." if archivados else "."),
         )
 
-    p = Produccion(fecha=validar_fecha(datos.fecha), nota=datos.nota or None)
+    # Filamento: o el total directo, o por filamento (el total es la suma). Si vienen los dos,
+    # deben cuadrar.
+    gramos_total = datos.gramos_total
+    if datos.filamentos:
+        suma = sum((f.gramos for f in datos.filamentos), Decimal(0))
+        if gramos_total is not None and abs(gramos_total - suma) > Decimal("0.01"):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"El total ({gramos_total} g) no coincide con la suma por filamento ({suma} g).",
+            )
+        gramos_total = suma
+
+    # Energía con los parámetros de HOY, congelados en el lote (cambiarlos después no
+    # reescribe el pasado).
+    param = await energia.parametros(db)
+    kwh, costo = energia.calcular(
+        datos.minutos_impresion, param.potencia_impresora_w, param.precio_kwh
+    )
+
+    p = Produccion(
+        fecha=validar_fecha(datos.fecha), nota=datos.nota or None, gramos_total=gramos_total,
+        minutos_impresion=datos.minutos_impresion,
+        potencia_w=param.potencia_impresora_w if datos.minutos_impresion else None,
+        precio_kwh=param.precio_kwh if datos.minutos_impresion else None,
+        kwh=kwh, costo_energia=costo,
+    )  # fmt: skip
     db.add(p)
     await db.flush()
+    for n, f in enumerate(datos.filamentos):
+        db.add(
+            ProduccionFilamento(
+                produccion_id=p.id, orden=n, descripcion=f.descripcion, gramos=f.gramos
+            )
+        )
     for articulo_id, cantidad in cantidades.items():
         db.add(ProduccionItem(produccion_id=p.id, articulo_id=articulo_id, cantidad=cantidad))
         db.add(

@@ -110,6 +110,31 @@ await pagina.waitForURL("**/panel");
 await pagina.getByRole("heading", { name: "Hoy" }).waitFor();
 await foto("04-inicio");
 
+console.log("Administración");
+const CORREO_NUEVO = `e2e-${Date.now() % 100000}@ejemplo.co`;
+await pagina.goto(`${BASE}/panel/administracion`);
+await pagina.getByRole("heading", { name: "Usuarios" }).waitFor();
+await pagina.getByRole("button", { name: "Nuevo usuario" }).click();
+await pagina.getByLabel("Nombre").fill("Persona de Prueba");
+await pagina.getByLabel("Correo").fill(CORREO_NUEVO);
+await pagina.getByRole("button", { name: "Generar contraseña" }).click();
+ok((await pagina.getByLabel("Contraseña temporal").inputValue()).length === 16, "el generador entrega una contraseña de 16 caracteres");
+await foto("13-usuario-nuevo");
+await pagina.getByRole("button", { name: "Crear usuario" }).click();
+await pagina.locator("button.fila", { hasText: CORREO_NUEVO }).waitFor();
+ok(true, "usuario creado y listado");
+await foto("14-administracion");
+await pagina.locator("button.fila", { hasText: CORREO_NUEVO }).click();
+await pagina.getByRole("button", { name: "Generar contraseña" }).click();
+await pagina.getByRole("button", { name: "Restablecer contraseña" }).click();
+await pagina.getByText(/Contraseña restablecida/).waitFor();
+ok(true, "contraseña de otro usuario restablecida");
+await pagina.getByRole("button", { name: "Desactivar usuario" }).click();
+await pagina.getByRole("button", { name: "Sí, desactivar" }).click();
+await pagina.locator("button.fila", { hasText: CORREO_NUEVO }).getByText("Desactivado").waitFor();
+ok(true, "usuario desactivado (queda en la lista, sin acceso)");
+ok(await pagina.locator("button.fila", { hasText: EMAIL }).getByText("Tú").count() === 1, "mi propio usuario aparece marcado «Tú»");
+
 console.log("Artículos");
 await pagina.goto(`${BASE}/panel/articulos`);
 await pagina.getByRole("button", { name: /Nuevo artículo/ }).first().click();
@@ -135,9 +160,22 @@ const ficha = pagina.locator("button.ficha", { hasText: ARTICULO });
 await ficha.click();
 await ficha.click();
 await ficha.click();
+// Parámetros de energía (universales) + filamento y tiempo del lote
+await pagina.getByRole("button", { name: "Parámetros de energía" }).first().click();
+await pagina.getByLabel("Precio del kWh (COP)").fill("800");
+await pagina.getByLabel("Potencia promedio de la impresora (W)").fill("200");
+await pagina.getByRole("button", { name: "Guardar" }).click();
+await pagina.getByText(/Parámetros guardados/).waitFor();
+await pagina.getByLabel("Gramos de filamento del lote").fill("187.5");
+await pagina.getByLabel("Horas").fill("2");
+await pagina.getByLabel("Minutos").fill("30");
+ok((await pagina.locator(".filtiempo .field__hint").first().innerText()).includes("0,5 kWh") || (await pagina.locator(".filtiempo").innerText()).includes("0,5 kWh"), "vista previa: 200 W × 2 h 30 min = 0,5 kWh");
+await foto("07a-produccion-filamento");
 await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
 await pagina.getByText(/entraron al inventario/).waitFor();
 await foto("07-produccion");
+const meta = (await pagina.locator(".lista .fila__meta").first().innerText()).replace(/\u00a0/g, " ");
+ok(meta.includes("187,5 g") && meta.includes("2 h 30 min") && meta.includes("0,5 kWh") && meta.includes("$ 400"), `el lote guarda gramos, tiempo y energía (${meta.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "producir 3 deja 3 en inventario");
 
 console.log("Pedido público (no debe tocar el inventario)");
@@ -189,7 +227,7 @@ await pagina.getByText(/solo quedan 3/).waitFor();
 ok(true, "no deja vender más de lo que hay y lo explica");
 
 console.log("Responsive del panel");
-for (const ruta of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos"]) {
+for (const ruta of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos", "/administracion"]) {
   await pagina.goto(`${BASE}/panel${ruta}`);
   await pagina.getByRole("heading", { level: 1 }).waitFor();
   for (const w of [320, 375, 414, 768]) {

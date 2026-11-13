@@ -1,10 +1,11 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
 from pydantic import Field, field_validator
 
-from app.schemas.comunes import Dinero, DineroSalida, Entrada, Salida
+from app.schemas.comunes import Dinero, DineroSalida, Entrada, Numero, Salida
 
 MetodoPago = Literal["efectivo", "transferencia", "otro"]
 EstadoPedido = Literal["nuevo", "contactado", "cerrado", "descartado"]
@@ -53,10 +54,22 @@ class ItemCantidad(Entrada):
     cantidad: int = Cantidad
 
 
+class FilamentoIn(Entrada):
+    descripcion: str = Field(default="", max_length=60)  # «PLA negro», «PETG transparente»…
+    gramos: Decimal = Field(gt=0, le=Decimal("100000"), max_digits=10, decimal_places=2)
+
+
 class ProduccionIn(Entrada):
     fecha: date | None = None
     nota: str | None = Field(default=None, max_length=300)
     items: list[ItemCantidad] = Field(min_length=1, max_length=100)
+    # Filamento: o el TOTAL directo, o gramos POR filamento (el total es la suma). Ambos opcionales.
+    gramos_total: Decimal | None = Field(
+        default=None, gt=0, le=Decimal("100000"), max_digits=10, decimal_places=2
+    )
+    filamentos: list[FilamentoIn] = Field(default_factory=list, max_length=20)
+    # Tiempo de impresión del lote, en minutos (máximo 30 días).
+    minutos_impresion: int | None = Field(default=None, ge=1, le=60 * 24 * 30)
 
 
 class ProduccionItemOut(Salida):
@@ -66,12 +79,39 @@ class ProduccionItemOut(Salida):
     cantidad: int
 
 
+class FilamentoOut(Salida):
+    descripcion: str
+    gramos: Numero
+
+
 class ProduccionOut(Salida):
     id: UUID
     fecha: date
     nota: str | None
     creado_en: datetime
     items: list[ProduccionItemOut]
+    gramos_total: Numero | None = None
+    filamentos: list[FilamentoOut] = []
+    minutos_impresion: int | None = None
+    # Energía de ESTE lote, con la potencia y el precio del kWh vigentes cuando se registró.
+    potencia_w: Numero | None = None
+    precio_kwh: Numero | None = None
+    kwh: Numero | None = None
+    costo_energia: Numero | None = None
+
+
+class ParametrosIn(Entrada):
+    precio_kwh: Decimal | None = Field(
+        default=None, ge=0, le=Decimal("100000"), max_digits=12, decimal_places=2
+    )
+    potencia_impresora_w: Decimal | None = Field(
+        default=None, gt=0, le=Decimal("20000"), max_digits=8, decimal_places=1
+    )
+
+
+class ParametrosOut(Salida):
+    precio_kwh: Numero | None
+    potencia_impresora_w: Numero | None
 
 
 # --- Ventas ------------------------------------------------------------------

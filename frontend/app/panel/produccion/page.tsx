@@ -5,16 +5,22 @@ import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { Contador } from "@/components/ui/Contador";
 import { Entrada } from "@/components/ui/Campo";
+import { FilamentoTiempo } from "@/components/panel/FilamentoTiempo";
+import { ParametrosHoja } from "@/components/panel/ParametrosHoja";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
-import { fechaHora } from "@/lib/format";
+import { dinero, fechaHora } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
+import { aExtra, gramos, kwhTexto, loteVacio, tiempoLargo } from "@/lib/produccion";
 import type { Articulo } from "@/lib/types";
 
 export default function Produccion() {
   const { mostrar } = useAvisos();
   const articulos = useCargar(() => api.articulos.listar());
   const historial = useCargar(api.produccion.listar);
+  const parametros = useCargar(api.parametros.ver);
+  const [verParametros, setVerParametros] = useState(false);
+  const [lote, setLote] = useState(loteVacio());
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [nota, setNota] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -34,11 +40,17 @@ export default function Produccion() {
 
   async function registrar() {
     if (items.length === 0) return;
+    const conv = aExtra(lote);
+    if ("error" in conv) {
+      mostrar(conv.error, { tipo: "error" });
+      return;
+    }
     setEnviando(true);
     try {
-      await api.produccion.registrar(items.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined);
+      await api.produccion.registrar(items.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined, conv.extra);
       setCantidades({});
       setNota("");
+      setLote(loteVacio());
       mostrar(unidades === 1 ? "Listo: 1 pieza entró al inventario." : `Listo: ${unidades} piezas entraron al inventario.`);
       await Promise.all([articulos.recargar(), historial.recargar()]);
     } catch (e) {
@@ -53,6 +65,9 @@ export default function Produccion() {
       <div className="pagina-cab">
         <h1>Producción</h1>
         <p className="lead">Toca lo que acabas de imprimir. Al guardar, suma al inventario.</p>
+        <div className="pagina-cab__acciones">
+          <Boton variante="secondary" pequeno onClick={() => setVerParametros(true)}>Parámetros de energía</Boton>
+        </div>
       </div>
 
       {articulos.error && <p className="alerta" role="alert">{articulos.error}</p>}
@@ -89,6 +104,7 @@ export default function Produccion() {
               <span className="muted">Total del lote</span>
               <strong>{unidades === 1 ? "1 pieza" : `${unidades} piezas`}</strong>
             </div>
+            <FilamentoTiempo valor={lote} onCambio={setLote} parametros={parametros.datos} onAbrirParametros={() => setVerParametros(true)} />
             <Entrada etiqueta="Nota (opcional)" ayuda="Por ejemplo: PLA negro, tanda del sábado." value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} />
             <Boton variante="accent" bloque cargando={enviando} disabled={items.length === 0} onClick={registrar}>
               Sumar al inventario
@@ -116,7 +132,17 @@ export default function Produccion() {
               <div key={p.id} className="fila fila--sin-foto">
                 <span className="fila__titulo">
                   <span className="fila__nombre">{p.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(", ")}</span>
-                  <span className="fila__meta">{fechaHora(p.creado_en)}{p.nota ? ` · ${p.nota}` : ""}</span>
+                  <span className="fila__meta num">
+                    {fechaHora(p.creado_en)}
+                    {p.gramos_total != null ? ` · ${gramos(p.gramos_total)}` : ""}
+                    {p.minutos_impresion != null ? ` · ${tiempoLargo(p.minutos_impresion)}` : ""}
+                    {p.kwh != null ? ` · ${kwhTexto(p.kwh)}` : ""}
+                    {p.costo_energia != null ? ` · ${dinero(p.costo_energia)}` : ""}
+                    {p.nota ? ` · ${p.nota}` : ""}
+                  </span>
+                  {p.filamentos.length > 1 && (
+                    <span className="fila__meta">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>
+                  )}
                 </span>
                 <span className="fila__fin num">+{p.items.reduce((s, i) => s + i.cantidad, 0)}</span>
               </div>
@@ -124,6 +150,7 @@ export default function Produccion() {
           </div>
         )}
       </section>
+      <ParametrosHoja abierta={verParametros} actuales={parametros.datos} onCerrar={() => setVerParametros(false)} onGuardado={() => void parametros.recargar()} />
     </>
   );
 }

@@ -25,7 +25,7 @@ URL_MIG = BASE.set(database=NOMBRE).render_as_string(hide_password=False)
 TABLAS = {
     "usuarios", "sesiones_refresh", "articulos", "precio_historial", "producciones",
     "produccion_items", "ventas", "venta_items", "movimientos_inventario", "pedidos",
-    "registro_auditoria",
+    "registro_auditoria", "parametros", "produccion_filamentos",
 }  # fmt: skip
 
 

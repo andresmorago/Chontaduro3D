@@ -40,6 +40,9 @@ async def limpiar(esquema):
             )
         )
         await c.execute(text("ALTER SEQUENCE articulos_codigo_seq RESTART WITH 1"))
+        await c.execute(
+            text("UPDATE parametros SET precio_kwh = NULL, potencia_impresora_w = NULL")
+        )
     yield
 
 

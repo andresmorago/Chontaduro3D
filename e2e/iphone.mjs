@@ -44,7 +44,7 @@ const caja = await p.getByRole("button", { name: "Entrar" }).boundingBox();
 await p.touchscreen.tap(caja.x + caja.width / 2, caja.y + caja.height / 2);
 await p.waitForURL("**/panel", { timeout: 20000 });
 ok(true, "el toque en «Entrar» inicia sesión");
-  for (const r of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos"]) {
+  for (const r of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos", "/administracion"]) {
     await p.goto(`${BASE}/panel${r}`); await p.getByRole("heading", { level: 1 }).waitFor();
     ok(await sinDesborde(), `/panel${r} sin scroll horizontal`);
   }

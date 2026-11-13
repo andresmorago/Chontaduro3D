@@ -14,6 +14,12 @@ DineroSalida = Annotated[
 ]
 
 
+# Cantidades físicas (gramos, kWh, vatios): número en JSON, Decimal por dentro.
+Numero = Annotated[
+    Decimal, PlainSerializer(lambda v: float(v), return_type=float, when_used="json")
+]
+
+
 class Salida(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

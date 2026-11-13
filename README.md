@@ -25,9 +25,10 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | Quiero… | Voy a… |
 | --- | --- |
 | Dar de alta un producto | **Artículos → Nuevo artículo** (nombre, foto, descripción, precio). El precio se puede cambiar cuando quieras; queda historial y las ventas pasadas no cambian. |
-| Registrar lo que imprimí | **Producción**: tocar los artículos, guardar → suma al inventario. |
+| Registrar lo que imprimí | **Producción**: tocar los artículos, guardar → suma al inventario. Opcional: gramos de filamento (total o **por filamento**) y **tiempo de impresión**; con los *Parámetros de energía* (precio del kWh y potencia de la impresora) cada lote guarda sus kWh y su costo de energía. |
 | Registrar una venta | **Vender**: tocar los artículos, forma de pago, *Registrar venta* → resta del inventario. Hay *Deshacer* y *Anular*. |
 | Corregir un conteo | **Inventario → artículo → Corregir el conteo** (queda en el historial de movimientos). |
+| Dar acceso a otra persona o cambiar contraseñas | **Administración**: crear usuarios, restablecer la contraseña de otro (cierra sus sesiones), desactivar/activar, y *Mi cuenta* para cambiar la tuya. Sin roles por ahora. |
 | Ver lo que pidieron los clientes | **Pedidos**: botón directo a WhatsApp y estados. No descuenta inventario. |
 
 ## Modelo en una línea

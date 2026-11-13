@@ -6,7 +6,19 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import articulos, auth, inventario, media, panel, pedidos, produccion, publico, ventas
+from app.api import (
+    articulos,
+    auth,
+    inventario,
+    media,
+    panel,
+    parametros,
+    pedidos,
+    produccion,
+    publico,
+    usuarios,
+    ventas,
+)
 from app.config import settings
 from app.core.limite_cuerpo import LimiteDeCuerpo
 from app.db import engine
@@ -49,7 +61,19 @@ async def cabeceras_de_seguridad(request: Request, call_next):
     return respuesta
 
 
-for r in (auth, articulos, produccion, ventas, inventario, pedidos, panel, publico, media):
+for r in (
+    auth,
+    articulos,
+    produccion,
+    parametros,
+    usuarios,
+    ventas,
+    inventario,
+    pedidos,
+    panel,
+    publico,
+    media,
+):
     app.include_router(r.router, prefix="/api")
 
 
