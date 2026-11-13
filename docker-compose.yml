@@ -1,0 +1,126 @@
+name: misimpresiones
+
+# Desarrollo: el código se monta por volumen y recarga solo.
+# Puertos propios (no chocan con misturnos ni metalvault): 3100 web, 8100 API, 5433 BD.
+# El túnel público (perfil `tunnel`) es un quick tunnel de Cloudflare: ver docs/tunel-cloudflare.md.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-impresiones}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-impresiones}
+      POSTGRES_DB: ${POSTGRES_DB:-misimpresiones}
+      TZ: America/Bogota
+      PGTZ: America/Bogota
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-impresiones} -d ${POSTGRES_DB:-misimpresiones}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    env_file: .env
+    environment:
+      TZ: America/Bogota
+    volumes:
+      - ./backend:/app
+      - ./data/imagenes:/media
+      - ./data/respaldos:/respaldos
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8100}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      TZ: America/Bogota
+      API_INTERNAL_URL: http://backend:8000
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3100}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  # Pruebas: base desechable propia, nunca la de datos reales.
+  #   docker compose -p misimpresiones-test --profile test run --rm tests
+  tests:
+    build:
+      context: ./backend
+      target: dev
+    environment:
+      TZ: America/Bogota
+      APP_ENV: test
+      SECRET_KEY: clave-solo-para-pruebas-0123456789abcdef0123456789abcdef
+      DATABASE_URL: postgresql+asyncpg://test:test@tests-db:5432/misimpresiones_test
+      ADMIN_EMAIL: admin@prueba.co
+      ADMIN_PASSWORD: ContrasenaDePrueba-123
+      MEDIA_DIR: /tmp/media
+      RESPALDOS_DIR: /tmp/respaldos
+    volumes:
+      - ./backend:/app
+    depends_on:
+      tests-db:
+        condition: service_healthy
+    command: pytest -q
+    profiles: [test]
+
+  tests-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: misimpresiones_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d misimpresiones_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    profiles: [test]
+
+  # Quick tunnel: URL *.trycloudflare.com aleatoria, sin cuenta ni token.
+  # `urlsync` la detecta y apunta el Worker estable (workers.dev) hacia ella.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://frontend:3000
+    environment:
+      TZ: America/Bogota
+    depends_on:
+      - frontend
+    restart: unless-stopped
+    profiles: [tunnel]
+
+volumes:
+  frontend_node_modules:

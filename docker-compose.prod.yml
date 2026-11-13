@@ -1,0 +1,81 @@
+name: misimpresiones-prod
+
+# Producción: imágenes construidas, sin montar código, sin puertos publicados.
+# El backend migra la base al arrancar (backend/app/migrar.py): si hay migraciones
+# pendientes saca antes un respaldo en ./data/respaldos y, si no puede, no migra.
+# El acceso público va por el túnel (perfil `tunnel`) + Worker estable de workers.dev.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: America/Bogota
+      PGTZ: America/Bogota
+    volumes:
+      - ./data/postgres-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    env_file: .env
+    environment:
+      TZ: America/Bogota
+      APP_ENV: production
+    # El usuario del anfitrión: respaldos e imágenes quedan legibles por quien administra.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    volumes:
+      - ./data/respaldos:/respaldos
+      - ./data/imagenes:/media
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    environment:
+      TZ: America/Bogota
+      NODE_ENV: production
+      API_INTERNAL_URL: http://backend:8000
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: npm run start
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/entrar || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: always
+
+  # Quick tunnel hacia el frontend. Solo con: --profile tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://frontend:3000
+    environment:
+      TZ: America/Bogota
+    depends_on:
+      - frontend
+    restart: always
+    profiles: [tunnel]
