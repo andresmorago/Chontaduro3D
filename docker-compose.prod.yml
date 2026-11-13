@@ -56,13 +56,14 @@ services:
       TZ: America/Bogota
       NODE_ENV: production
       API_INTERNAL_URL: http://backend:8000
+      NOMBRE_NEGOCIO: ${NOMBRE_NEGOCIO:-Mis impresiones}
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:-}
     depends_on:
       backend:
         condition: service_healthy
     command: npm run start
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/entrar || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10

@@ -1,0 +1,8 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Catalogue (público) + app shell (panel) · theme: Terrazzo (studied-DNA, source: https://www.usehallmark.com/themes/terrazzo/)
+ * nav: search-led bar (público) · side rail N3 adaptado + barra inferior móvil (panel) · footer: Ft1 mast-headed · enrichment: none (fotos del negocio)
+ * axes: light / geometric-sans / warm · posture: restrained · pre-emit critique: P4 H4 E4 S4 R5 V3 */
+@import "./tokens.css";
+@import "./base.css";
+@import "./componentes.css";
+@import "./publico.css";
+@import "./panel.css";
