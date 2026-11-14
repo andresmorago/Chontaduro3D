@@ -105,3 +105,7 @@ La A1 no guarda historial; el que ves en Bambu Studio y Bambu Handy está en la 
 3. `make bambu-nube-prueba` muestra la forma de los datos de la nube (sin secretos), útil si Bambu cambia su API.
 
 Es una API **no oficial**: puede cambiar o bloquearse sin aviso. Si falla, el resto de la app sigue igual y los trabajos en vivo siguen llegando.
+
+## Un solo stack en marcha
+
+Normalmente solo corre **producción** (`misimpresiones-prod`: `make prod-up-tunnel`). El stack de **desarrollo** (`misimpresiones`: `make up`) y el de pruebas (`make test`, `make e2e`) se levantan solo mientras se trabaja, y se apagan con `make down` (conserva los datos de `data/postgres`). `make e2e` y `make iphone` necesitan el de desarrollo encendido.
