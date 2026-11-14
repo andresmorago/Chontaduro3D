@@ -19,6 +19,8 @@ function Detalle({ articulo, onCambio, onCerrar }: { articulo: Articulo | null; 
   const mov = useCargar(() => (articulo ? api.inventario.movimientos(articulo.id) : Promise.resolve([] as Movimiento[])));
   const [cantidad, setCantidad] = useState("");
   const [nota, setNota] = useState("");
+  // En un artículo con colores el ajuste se hace sobre uno de ellos (o sobre el «sin color asignado»).
+  const [colorId, setColorId] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,10 +32,17 @@ function Detalle({ articulo, onCambio, onCerrar }: { articulo: Articulo | null; 
       setError("Escribe una cantidad entera distinta de 0 (negativa para restar).");
       return;
     }
+    if (articulo.colores.length > 0 && colorId === "" ) {
+      setError("Elige a qué color corresponde el ajuste.");
+      return;
+    }
+    if (colorId === "__sin_color") {
+      if (n > 0) return setError("Al stock «sin color asignado» solo se le puede restar: súmalo al color que corresponda.");
+    }
     setEnviando(true);
     setError(null);
     try {
-      const a = await api.inventario.ajustar(articulo.id, n, nota.trim());
+      const a = await api.inventario.ajustar(articulo.id, n, nota.trim(), colorId && colorId !== "__sin_color" ? colorId : undefined);
       mostrar(`Ajuste guardado. Ahora hay ${a.stock}.`);
       setCantidad("");
       setNota("");
@@ -52,6 +61,21 @@ function Detalle({ articulo, onCambio, onCerrar }: { articulo: Articulo | null; 
         <h3>Corregir el conteo</h3>
         <p className="muted">Úsalo si contaste y no coincide, o si una pieza se dañó. Suma con un número positivo y resta con uno negativo.</p>
         {error && <p className="alerta" role="alert">{error}</p>}
+        {articulo && articulo.colores.length > 0 && (
+          <label className="field">
+            <span className="field__label">Color</span>
+            <select className="input" value={colorId} onChange={(e) => setColorId(e.target.value)} required>
+              <option value="">Elegir color…</option>
+              {articulo.colores.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre} (hay {articulo.stock_colores.find((s) => s.color_id === c.id)?.stock ?? 0})</option>
+              ))}
+              {(articulo.stock_colores.find((s) => s.color_id === null)?.stock ?? 0) > 0 && (
+                <option value="__sin_color">Sin color asignado (hay {articulo.stock_colores.find((s) => s.color_id === null)?.stock})</option>
+              )}
+            </select>
+            <span className="field__hint">Para pasar piezas «sin color asignado» a un color: resta aquí y suma en el color.</span>
+          </label>
+        )}
         <Entrada etiqueta="Cantidad (+ o −)" type="number" inputMode="numeric" step={1} value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="-2" />
         <Entrada etiqueta="Motivo" value={nota} minLength={3} maxLength={300} required onChange={(e) => setNota(e.target.value)} placeholder="Pieza rota al desmoldar" />
         <Boton variante="primary" type="submit" cargando={enviando}>Guardar ajuste</Boton>
@@ -65,7 +89,7 @@ function Detalle({ articulo, onCambio, onCerrar }: { articulo: Articulo | null; 
             {(mov.datos ?? []).map((m) => (
               <li key={m.id}>
                 <span>
-                  {TIPOS[m.tipo]}
+                  {TIPOS[m.tipo]}{m.color ? ` · ${m.color}` : ""}
                   <span className="muted"> · {fechaHora(m.creado_en)}{m.nota ? ` · ${m.nota}` : ""}</span>
                 </span>
                 <span className={m.cantidad > 0 ? "mov--mas" : "mov--menos"}>{m.cantidad > 0 ? `+${m.cantidad}` : m.cantidad}</span>
@@ -109,6 +133,16 @@ export default function Inventario() {
                   <span className="code muted">{a.codigo}</span>
                   <span className="fila__nombre">{a.nombre}</span>
                   {a.stock_minimo > 0 && <span className="fila__meta">mínimo {a.stock_minimo}</span>}
+                  {a.stock_colores.length > 0 && (
+                    <span className="stock-colores" aria-label="Stock por color">
+                      {a.stock_colores.map((s) => (
+                        <span key={s.color_id ?? "sin-color"} className={`stock-color${s.color_id === null ? " stock-color--sin" : ""}${s.stock === 0 ? " stock-color--cero" : ""}`}>
+                          <span className="muestra-mini" style={s.hex ? { background: s.hex } : undefined} aria-hidden="true" />
+                          {s.nombre ?? "Sin color asignado"} <strong className="num">{s.stock}</strong>
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
                 <span className="fila__fin">
                   <span className={`stock-num ${a.stock === 0 ? "stock-num--cero" : bajo ? "stock-num--bajo" : ""}`}>{a.stock}</span>

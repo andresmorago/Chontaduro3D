@@ -192,10 +192,16 @@ ok((await pagina.locator(".aviso--error").count()) === 0, "la foto enorme se sub
 
 console.log("Producción → inventario");
 await pagina.goto(`${BASE}/panel/produccion`);
-const ficha = pagina.locator("button.ficha", { hasText: ARTICULO });
-await ficha.click();
-await ficha.click();
-await ficha.click();
+// El artículo tiene colores (Rojo y Azul): cada color es una fila con su propio «+».
+const masRojo = pagina.locator(".selector").getByRole("button", { name: `Agregar una unidad de ${ARTICULO}, Rojo` });
+await masRojo.waitFor();
+ok((await pagina.locator("button.ficha", { hasText: ARTICULO }).count()) === 0 && (await masRojo.count()) === 1, "un artículo con colores muestra una fila por color (sin botón único)");
+await foto("07a0-selector-colores");
+await masRojo.click();
+await masRojo.click();
+await masRojo.click();
+ok((await pagina.locator(".ticket").getByText("Rojo").count()) >= 1, "la línea del lote lleva el color elegido");
+ok((await pagina.locator(".ticket").getByRole("spinbutton", { name: new RegExp(`Cantidad de ${ARTICULO}, Rojo`) }).inputValue()) === "3", "el contador del lote muestra 3 y se puede escribir");
 // Parámetros de energía (universales) + filamento y tiempo del lote
 await pagina.getByRole("button", { name: "Parámetros de energía" }).first().click();
 await pagina.getByLabel("Precio del kWh (COP)").fill("800");
@@ -216,6 +222,16 @@ await filaMeta.waitFor();
 const meta = (await filaMeta.innerText()).replace(/\u00a0/g, " ");
 ok(meta.includes("187,5 g") && meta.includes("2 h 30 min") && meta.includes("0,5 kWh") && meta.includes("$ 400"), `el lote guarda gramos, tiempo y energía (${meta.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "producir 3 deja 3 en inventario");
+await pagina.goto(`${BASE}/panel/inventario`);
+const filaInv = pagina.locator("button.fila", { hasText: ARTICULO });
+await filaInv.waitFor();
+const desglose = (await filaInv.locator(".stock-colores").innerText()).replace(/\s+/g, " ");
+ok(/Rojo 3/.test(desglose) && /Azul 0/.test(desglose), `el inventario desglosa el stock por color (${desglose})`);
+await foto("07a1-inventario-por-color");
+await filaInv.click();
+await pagina.getByRole("heading", { name: "Corregir el conteo" }).waitFor();
+ok((await pagina.locator("dialog[open] select").count()) === 1, "el ajuste de un artículo con colores pide elegir el color");
+await pagina.keyboard.press("Escape");
 
 console.log("Editar un lote ya guardado");
 await pagina.goto(`${BASE}/panel/produccion`);
@@ -239,7 +255,7 @@ ok((await stockDe(ARTICULO)) === 3, "volver el lote a 3 deja el inventario en 3"
 console.log("Carga retrospectiva");
 const FECHA_VIEJA = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
 await pagina.goto(`${BASE}/panel/produccion`);
-await pagina.locator("button.ficha", { hasText: ARTICULO }).click();
+await pagina.locator(".selector").getByRole("button", { name: `Agregar una unidad de ${ARTICULO}, Rojo` }).click();
 await pagina.locator('input[type="date"]').fill(FECHA_VIEJA);
 await pagina.getByText(/Carga retrospectiva/).waitFor();
 await foto("07b-produccion-retrospectiva");
@@ -264,7 +280,7 @@ ok((await pagina.locator(".filtiempo").innerText()).replace(/\u00a0/g, " ").incl
 ok((await pagina.getByRole("button", { name: "Por filamento" }).getAttribute("aria-pressed")) === "true", "un trabajo con varios filamentos abre en «Por filamento» automáticamente");
 const descripciones = await pagina.locator(".filtiempo input.input:not([type])").evaluateAll((els) => els.map((e) => e.value));
 ok(descripciones.includes("PLA Rojo") && descripciones.includes("PLA Blanco"), `cada filamento trae su nombre de color (${descripciones.join(", ")})`);
-await pagina.locator("button.ficha", { hasText: ARTICULO }).click();
+await pagina.locator(".selector").getByRole("button", { name: `Agregar una unidad de ${ARTICULO}, Rojo` }).click();
 await pagina.getByLabel("Sumar al inventario actual").uncheck();
 await foto("07f-trabajo-importado");
 await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
@@ -347,7 +363,7 @@ ok(await pagina.getByRole("link", { name: /Escribir por WhatsApp/ }).first().get
 
 console.log("Venta + Deshacer");
 await pagina.goto(`${BASE}/panel/vender`);
-const fv = pagina.locator("button.ficha", { hasText: ARTICULO });
+const fv = pagina.locator(".selector").getByRole("button", { name: `Agregar una unidad de ${ARTICULO}, Rojo` });
 await fv.click();
 await fv.click();
 await foto("11-vender");
@@ -365,10 +381,13 @@ ok((await stockDe(ARTICULO)) === 3, "anular devuelve las piezas al inventario");
 
 console.log("Venta sin stock suficiente");
 await pagina.goto(`${BASE}/panel/vender`);
-const f2 = pagina.locator("button.ficha", { hasText: ARTICULO });
-for (let i = 0; i < 4; i++) await f2.click();
-await pagina.getByText(/solo quedan 3/).waitFor();
-ok(true, "no deja vender más de lo que hay y lo explica");
+const f2 = pagina.locator(".selector").getByRole("button", { name: `Agregar una unidad de ${ARTICULO}, Rojo` });
+for (let i = 0; i < 3; i++) await f2.click();
+ok(await f2.isDisabled(), "el «+» de un color se bloquea al llegar a lo que hay en inventario (3 de Rojo)");
+const campo = pagina.locator(".ticket").getByRole("spinbutton", { name: new RegExp(`Cantidad de ${ARTICULO}, Rojo`) });
+await campo.fill("50");
+await campo.blur();
+ok((await campo.inputValue()) === "3", "escribir una cantidad mayor que el stock la limita a lo que hay");
 
 console.log("Responsive del panel");
 for (const ruta of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos", "/administracion", "/administracion/impresora"]) {

@@ -11,6 +11,7 @@ import { TrabajosImpresora } from "@/components/panel/TrabajosImpresora";
 import { ParametrosHoja } from "@/components/panel/ParametrosHoja";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
+import { clave, hexColor, nombreColor, partirClave, stockDe } from "@/lib/lineas";
 import { dinero, fechaCorta, hoyISO, restarDias } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import { aExtra, gramos, kwhTexto, loteDesdeTrabajo, loteVacio, tiempoLargo } from "@/lib/produccion";
@@ -39,16 +40,20 @@ export default function Produccion() {
 
   const lista = articulos.datos ?? [];
   const porId = new Map(lista.map((a) => [a.id, a]));
-  const items = Object.entries(cantidades).filter(([id, n]) => n > 0 && porId.has(id));
+  // Cada línea es un (artículo, color): la clave las distingue (ver lib/lineas.ts).
+  const items = Object.entries(cantidades).filter(([k, n]) => n > 0 && porId.has(partirClave(k).articuloId));
   const unidades = items.reduce((s, [, n]) => s + n, 0);
 
-  const tocar = (a: Articulo) => setCantidades((m) => ({ ...m, [a.id]: Math.min(10000, (m[a.id] ?? 0) + 1) }));
-  const poner = (id: string, n: number) =>
+  const poner = (k: string, n: number) =>
     setCantidades((m) => {
-      const { [id]: _q, ...resto } = m;
+      const { [k]: _q, ...resto } = m;
       void _q;
-      return n <= 0 ? resto : { ...m, [id]: n };
+      return n <= 0 ? resto : { ...m, [k]: Math.min(10000, n) };
     });
+  const cambiar = (a: Articulo, colorId: string | null, delta: number) => {
+    const k = clave(a.id, colorId);
+    poner(k, (cantidades[k] ?? 0) + delta);
+  };
 
   function usarTrabajo(t: TrabajoImpresora) {
     setTrabajo(t);
@@ -73,7 +78,7 @@ export default function Produccion() {
     }
     setEnviando(true);
     try {
-      await api.produccion.registrar(items.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined, trabajo ? { ...conv.extra, trabajo_id: trabajo.id } : conv.extra);
+      await api.produccion.registrar(items.map(([k, cantidad]) => { const { articuloId, colorId } = partirClave(k); return { articulo_id: articuloId, ...(colorId ? { color_id: colorId } : {}), cantidad }; }), nota.trim() || undefined, trabajo ? { ...conv.extra, trabajo_id: trabajo.id } : conv.extra);
       setCantidades({});
       setNota("");
       setTrabajo(null);
@@ -113,7 +118,7 @@ export default function Produccion() {
         </div>
       ) : (
         <div className="venta-grid venta-grid--lote">
-          <Selector articulos={lista} cantidades={Object.fromEntries(items)} onTocar={tocar} />
+          <Selector articulos={lista} cantidades={Object.fromEntries(items)} onCambiar={cambiar} />
           <section className="ticket ticket--lote" id="ticket" aria-labelledby="t-lote">
             <h2 id="t-lote" className="ticket__titulo" style={{ fontSize: "var(--text-title)" }}>Este lote</h2>
             <div className="ticket__cuerpo">
@@ -121,13 +126,24 @@ export default function Produccion() {
                 <p className="ticket__vacio">Toca un artículo para sumarlo.</p>
               ) : (
                 <div className="ticket__lineas">
-                  {items.map(([id, n]) => {
-                    const a = porId.get(id)!;
+                  {items.map(([k, n]) => {
+                    const { articuloId, colorId } = partirClave(k);
+                    const a = porId.get(articuloId)!;
+                    const color = nombreColor(a, colorId);
+                    const hay = stockDe(a, colorId);
                     return (
-                      <div key={id} className="linea">
-                        <span className="linea__nombre">{a.nombre}</span>
-                        <Contador chico valor={n} min={0} max={10000} onCambio={(v) => poner(id, v)} etiqueta={a.nombre} />
-                        <span className="linea__precio num">Stock actual {a.stock} → {a.stock + n}</span>
+                      <div key={k} className="linea">
+                        <span className="linea__nombre">
+                          {a.nombre}
+                          {color && (
+                            <span className="linea__color">
+                              <span className="muestra-mini" style={hexColor(a, colorId) ? { background: hexColor(a, colorId)! } : undefined} aria-hidden="true" />
+                              {color}
+                            </span>
+                          )}
+                        </span>
+                        <Contador editable valor={n} min={0} max={10000} onCambio={(v) => poner(k, v)} etiqueta={`${a.nombre}${color ? `, ${color}` : ""}`} />
+                        <span className="linea__precio num">Stock actual {hay} → {hay + n}</span>
                       </div>
                     );
                   })}
@@ -190,7 +206,7 @@ export default function Produccion() {
             {(historial.datos ?? []).map((p) => (
               <div key={p.id} className="fila fila--sin-foto">
                 <span className="fila__titulo">
-                  <span className="fila__nombre">{p.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(", ")}</span>
+                  <span className="fila__nombre">{p.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}</span>
                   <span className="fila__meta num">
                     {fechaCorta(p.fecha)}
                     {p.gramos_total != null ? ` · ${gramos(p.gramos_total)}` : ""}

@@ -65,7 +65,10 @@ export function DetalleHoja({ articulo, sitekey, onCerrar }: Props) {
     }
   }
 
+  const colorElegidoPre = articulo?.colores.find((c) => c.nombre === color);
   const hayColores = (articulo?.colores.length ?? 0) > 0;
+  // «Disponible» del color elegido (si hay colores y se eligió uno); si no, el del artículo.
+  const hayEste = colorElegidoPre ? colorElegidoPre.disponible : (articulo?.disponible ?? false);
   // Misma foto y encuadre que en la tarjeta; si el color elegido tiene foto propia, se muestra esa.
   const colorElegido = articulo?.colores.find((c) => c.nombre === color);
   const fotoFicha = colorElegido?.imagen_url ? { url: colorElegido.imagen_url, enc: encuadreDe(colorElegido) } : { url: articulo?.imagen_url ?? null, enc: articulo ? encuadreDe(articulo) : undefined };
@@ -147,10 +150,10 @@ export function DetalleHoja({ articulo, sitekey, onCerrar }: Props) {
           <Foto url={fotoFicha.url} codigo={articulo.codigo} nombre={articulo.nombre} clase="detalle__foto" enc={fotoFicha.enc} />
           <div className="detalle__precio">
             <span className="articulo__precio">{dinero(articulo.precio)}</span>
-            <span className={`etiqueta ${articulo.disponible ? "etiqueta--ok" : "etiqueta--tenue"}`}>{articulo.disponible ? "Disponible" : "Sobre pedido"}</span>
+            <span className={`etiqueta ${hayEste ? "etiqueta--ok" : "etiqueta--tenue"}`}>{hayEste ? "Disponible" : "Sobre pedido"}</span>
           </div>
           {articulo.descripcion ? <p className="detalle__desc">{articulo.descripcion}</p> : <p className="muted">Este artículo aún no tiene descripción.</p>}
-          <p className="field__hint">{articulo.disponible ? "Disponible = listo para entregar." : "Sobre pedido = lo imprimimos cuando lo pides."}</p>
+          <p className="field__hint">{hayEste ? "Disponible = listo para entregar." : "Sobre pedido = lo imprimimos cuando lo pides."}</p>
           {hayColores && (
             <div className="field">
               <span className="field__label" id="etq-color">

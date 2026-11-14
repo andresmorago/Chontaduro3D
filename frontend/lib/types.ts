@@ -38,6 +38,14 @@ export interface ColorEntrada {
   foto_zoom: number;
 }
 
+/** Stock de un color de un artículo (`color_id` null = «sin color asignado», anterior a los colores). */
+export interface StockColor {
+  color_id: string | null;
+  nombre: string | null;
+  hex: string | null;
+  stock: number;
+}
+
 export interface Articulo {
   id: string;
   codigo: string;
@@ -53,6 +61,8 @@ export interface Articulo {
   publicado: boolean;
   activo: boolean;
   colores: Color[];
+  /** Solo en artículos con colores. */
+  stock_colores: StockColor[];
 }
 
 export interface ArticuloEntrada {
@@ -74,11 +84,16 @@ export interface PrecioHistorial {
 
 export interface ItemCantidad {
   articulo_id: string;
+  /** Obligatorio si el artículo tiene colores. */
+  color_id?: string;
   cantidad: number;
 }
 
 export interface ProduccionItem {
   articulo_id: string;
+  color_id: string | null;
+  color: string | null;
+  color_hex: string | null;
   codigo: string;
   nombre: string;
   cantidad: number;
@@ -136,6 +151,9 @@ export interface VentaEntrada {
 
 export interface VentaItem {
   articulo_id: string;
+  color_id: string | null;
+  color: string | null;
+  color_hex: string | null;
   codigo: string;
   nombre: string;
   cantidad: number;
@@ -161,6 +179,7 @@ export interface Movimiento {
   nombre: string;
   tipo: "produccion" | "venta" | "ajuste" | "anulacion";
   cantidad: number;
+  color: string | null;
   nota: string | null;
   creado_en: string;
 }
@@ -178,6 +197,18 @@ export interface Pedido {
   creado_en: string;
 }
 
+/** Un color en el catálogo público: solo «hay / no hay», nunca la cifra. */
+export interface ColorPublico {
+  id: string;
+  nombre: string;
+  hex: string;
+  imagen_url: string | null;
+  foto_x: number;
+  foto_y: number;
+  foto_zoom: number;
+  disponible: boolean;
+}
+
 export interface ArticuloPublico {
   id: string;
   codigo: string;
@@ -189,7 +220,7 @@ export interface ArticuloPublico {
   foto_zoom: number;
   precio: number;
   disponible: boolean;
-  colores: Color[];
+  colores: ColorPublico[];
 }
 
 export interface CatalogoPublico {

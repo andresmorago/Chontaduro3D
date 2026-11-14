@@ -8,6 +8,7 @@ import { Entrada } from "@/components/ui/Campo";
 import { Segmentado } from "@/components/ui/Segmentado";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
+import { clave, hexColor, nombreColor, partirClave, stockDe } from "@/lib/lineas";
 import { dinero, hora } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import type { Articulo, MetodoPago, Venta } from "@/lib/types";
@@ -35,26 +36,31 @@ export default function Vender() {
 
   const lista = articulos.datos ?? [];
   const porId = new Map(lista.map((a) => [a.id, a]));
-  const items = Object.entries(lineas).filter(([id, l]) => l.cantidad > 0 && porId.has(id));
+  // Cada línea es un (artículo, color): la clave las distingue (ver lib/lineas.ts).
+  const items = Object.entries(lineas).filter(([k, l]) => l.cantidad > 0 && porId.has(partirClave(k).articuloId));
   const precioDe = (a: Articulo, l: Linea) => l.precio ?? a.precio_venta;
-  const total = items.reduce((s, [id, l]) => s + precioDe(porId.get(id)!, l) * l.cantidad, 0);
+  const articuloDe = (k: string) => porId.get(partirClave(k).articuloId)!;
+  const total = items.reduce((s, [k, l]) => s + precioDe(articuloDe(k), l) * l.cantidad, 0);
   const piezas = items.reduce((s, [, l]) => s + l.cantidad, 0);
 
-  function tocar(a: Articulo) {
-    const actual = lineas[a.id]?.cantidad ?? 0;
-    if (actual + 1 > a.stock) {
-      mostrar(`De ${a.nombre} solo quedan ${a.stock}.`, { tipo: "error" });
-      return;
-    }
-    setLineas((m) => ({ ...m, [a.id]: { cantidad: actual + 1, precio: m[a.id]?.precio ?? null } }));
+  function poner(k: string, cantidad: number) {
+    setLineas((m) => {
+      const { [k]: _quitada, ...resto } = m;
+      void _quitada;
+      return cantidad <= 0 ? resto : { ...m, [k]: { cantidad, precio: m[k]?.precio ?? null } };
+    });
   }
 
-  function poner(id: string, cantidad: number) {
-    setLineas((m) => {
-      const { [id]: _quitada, ...resto } = m;
-      void _quitada;
-      return cantidad <= 0 ? resto : { ...m, [id]: { cantidad, precio: m[id]?.precio ?? null } };
-    });
+  function cambiar(a: Articulo, colorId: string | null, delta: number) {
+    const k = clave(a.id, colorId);
+    const nuevo = (lineas[k]?.cantidad ?? 0) + delta;
+    const hay = stockDe(a, colorId);
+    if (delta > 0 && nuevo > hay) {
+      const color = nombreColor(a, colorId);
+      mostrar(`De ${a.nombre}${color ? ` (${color})` : ""} solo quedan ${hay}.`, { tipo: "error" });
+      return;
+    }
+    poner(k, nuevo);
   }
 
   async function deshacer(id: string) {
@@ -74,7 +80,10 @@ export default function Vender() {
       const v = await api.ventas.registrar({
         metodo_pago: metodo,
         cliente: cliente.trim() || undefined,
-        items: items.map(([id, l]) => ({ articulo_id: id, cantidad: l.cantidad, ...(l.precio !== null ? { precio_unitario: l.precio } : {}) })),
+        items: items.map(([k, l]) => {
+          const { articuloId, colorId } = partirClave(k);
+          return { articulo_id: articuloId, ...(colorId ? { color_id: colorId } : {}), cantidad: l.cantidad, ...(l.precio !== null ? { precio_unitario: l.precio } : {}) };
+        }),
       });
       setLineas({});
       setCliente("");
@@ -120,7 +129,7 @@ export default function Vender() {
         </div>
       ) : (
         <div className="venta-grid">
-          <Selector articulos={lista} cantidades={Object.fromEntries(items.map(([id, l]) => [id, l.cantidad]))} onTocar={tocar} exigirStock mostrarPrecio />
+          <Selector articulos={lista} cantidades={Object.fromEntries(items.map(([k, l]) => [k, l.cantidad]))} onCambiar={cambiar} exigirStock mostrarPrecio incluirSinColor />
 
           <section className="ticket" id="ticket" aria-labelledby="t-ticket">
             <h2 id="t-ticket" style={{ fontSize: "var(--text-title)" }}>Esta venta</h2>
@@ -128,16 +137,26 @@ export default function Vender() {
               <p className="ticket__vacio">Toca un artículo para agregarlo.</p>
             ) : (
               <div className="ticket__lineas">
-                {items.map(([id, l]) => {
-                  const a = porId.get(id)!;
+                {items.map(([k, l]) => {
+                  const a = articuloDe(k);
+                  const { colorId } = partirClave(k);
+                  const color = nombreColor(a, colorId) ?? (a.colores.length > 0 ? "Sin color asignado" : null);
                   const precio = precioDe(a, l);
                   return (
-                    <div key={id} className="linea">
-                      <span className="linea__nombre">{a.nombre}</span>
-                      <Contador chico valor={l.cantidad} min={0} max={a.stock} onCambio={(n) => poner(id, n)} etiqueta={a.nombre} />
+                    <div key={k} className="linea">
+                      <span className="linea__nombre">
+                        {a.nombre}
+                        {color && (
+                          <span className="linea__color">
+                            <span className="muestra-mini" style={hexColor(a, colorId) ? { background: hexColor(a, colorId)! } : undefined} aria-hidden="true" />
+                            {color}
+                          </span>
+                        )}
+                      </span>
+                      <Contador editable valor={l.cantidad} min={0} max={stockDe(a, colorId)} onCambio={(n) => poner(k, n)} etiqueta={`${a.nombre}${color ? `, ${color}` : ""}`} />
                       <label className="linea__precio">
                         Precio c/u
-                        <input className="input num" type="number" inputMode="numeric" min={0} step={100} value={precio} onChange={(e) => setLineas((m) => ({ ...m, [id]: { cantidad: l.cantidad, precio: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) } }))} />
+                        <input className="input num" type="number" inputMode="numeric" min={0} step={100} value={precio} onChange={(e) => setLineas((m) => ({ ...m, [k]: { cantidad: l.cantidad, precio: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) } }))} />
                       </label>
                       <span className="linea__subtotal">{dinero(precio * l.cantidad)}</span>
                     </div>
@@ -178,7 +197,7 @@ export default function Vender() {
               <div key={v.id} className="fila fila--sin-foto" style={v.anulada ? { color: "var(--color-muted)" } : undefined}>
                 <span className="fila__titulo">
                   <span className="fila__nombre" style={v.anulada ? { textDecoration: "line-through" } : undefined}>
-                    {v.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(", ")}
+                    {v.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}
                   </span>
                   <span className="fila__meta">
                     {hora(v.creado_en)} · {v.metodo_pago}{v.cliente ? ` · ${v.cliente}` : ""}{v.anulada ? " · anulada" : ""}

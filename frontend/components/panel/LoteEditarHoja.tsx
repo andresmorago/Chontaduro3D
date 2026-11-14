@@ -8,6 +8,7 @@ import { Contador } from "@/components/ui/Contador";
 import { Hoja } from "@/components/ui/Hoja";
 import { FilamentoTiempo } from "@/components/panel/FilamentoTiempo";
 import { api } from "@/lib/api";
+import { clave, partirClave } from "@/lib/lineas";
 import { fechaCorta, hoyISO, restarDias } from "@/lib/format";
 import { mensajeDe } from "@/lib/hooks";
 import { aExtra, loteDesde, type EstadoLote } from "@/lib/produccion";
@@ -38,7 +39,7 @@ export function LoteEditarHoja({ lote, articulos, parametros, onCerrar, onGuarda
   useEffect(() => {
     if (!lote) return;
     setEstado(loteDesde(lote));
-    setCantidades(Object.fromEntries(lote.items.map((i) => [i.articulo_id, i.cantidad])));
+    setCantidades(Object.fromEntries(lote.items.map((i) => [clave(i.articulo_id, i.color_id), i.cantidad])));
     setNota(lote.nota ?? "");
     setAgregar("");
     setError(null);
@@ -46,11 +47,19 @@ export function LoteEditarHoja({ lote, articulos, parametros, onCerrar, onGuarda
 
   if (!lote || !estado) return <Hoja abierta={false} onCerrar={onCerrar} titulo="Editar lote">{null}</Hoja>;
 
-  // Un artículo archivado después de producirse puede seguir en su lote: su nombre viene del lote.
-  const nombres = new Map<string, string>([...lote.items.map((i): [string, string] => [i.articulo_id, i.nombre]), ...articulos.map((a): [string, string] => [a.id, a.nombre])]);
+  // Cada línea es un (artículo, color). Un artículo archivado después de producirse puede seguir en su
+  // lote: su nombre viene del propio lote.
+  const rotulo = (nombre: string, color: string | null) => (color ? `${nombre} · ${color}` : nombre);
+  const nombres = new Map<string, string>([
+    ...lote.items.map((i): [string, string] => [clave(i.articulo_id, i.color_id), rotulo(i.nombre, i.color)]),
+    ...articulos.flatMap((a): [string, string][] => (a.colores.length > 0 ? a.colores.map((c): [string, string] => [clave(a.id, c.id), rotulo(a.nombre, c.nombre)]) : [[clave(a.id, null), a.nombre]])),
+  ]);
   const lineas = Object.entries(cantidades).filter(([, n]) => n > 0);
   const unidades = lineas.reduce((s, [, n]) => s + n, 0);
-  const disponibles = articulos.filter((a) => !((cantidades[a.id] ?? 0) > 0));
+  // Lo que se puede agregar: cada artículo sin colores, y cada color de los que los tienen.
+  const disponibles = articulos
+    .flatMap((a) => (a.colores.length > 0 ? a.colores.map((c) => ({ k: clave(a.id, c.id), texto: `${a.codigo} · ${a.nombre} · ${c.nombre}` })) : [{ k: clave(a.id, null), texto: `${a.codigo} · ${a.nombre}` }]))
+    .filter((o) => !((cantidades[o.k] ?? 0) > 0));
   const antes = lote.items.reduce((s, i) => s + i.cantidad, 0);
 
   async function guardar() {
@@ -60,7 +69,7 @@ export function LoteEditarHoja({ lote, articulos, parametros, onCerrar, onGuarda
     setGuardando(true);
     setError(null);
     try {
-      await api.produccion.modificar(lote!.id, lineas.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined, conv.extra);
+      await api.produccion.modificar(lote!.id, lineas.map(([k, cantidad]) => { const { articuloId, colorId } = partirClave(k); return { articulo_id: articuloId, ...(colorId ? { color_id: colorId } : {}), cantidad }; }), nota.trim() || undefined, conv.extra);
       mostrar("Lote corregido. El inventario se ajustó por la diferencia.");
       onGuardado();
       onCerrar();
@@ -90,18 +99,18 @@ export function LoteEditarHoja({ lote, articulos, parametros, onCerrar, onGuarda
         <section aria-label="Piezas del lote" style={{ display: "grid", gap: "var(--space-sm)" }}>
           <h3 style={{ fontSize: "var(--text-md)" }}>Piezas del lote</h3>
           {lineas.length === 0 && <p className="muted">Sin piezas: agrega al menos un artículo.</p>}
-          {lineas.map(([id, n]) => (
-            <div key={id} className="linea">
-              <span className="linea__nombre">{nombres.get(id) ?? "Artículo"}</span>
-              <Contador chico valor={n} min={0} max={10000} etiqueta={nombres.get(id) ?? "artículo"} onCambio={(v) => setCantidades((m) => ({ ...m, [id]: v }))} />
+          {lineas.map(([k, n]) => (
+            <div key={k} className="linea">
+              <span className="linea__nombre">{nombres.get(k) ?? "Artículo"}</span>
+              <Contador editable valor={n} min={0} max={10000} etiqueta={nombres.get(k) ?? "artículo"} onCambio={(v) => setCantidades((m) => ({ ...m, [k]: v }))} />
             </div>
           ))}
           {disponibles.length > 0 && (
             <label className="field">
               <span className="field__label">Agregar otro artículo</span>
-              <select className="input" value={agregar} onChange={(e) => { const id = e.target.value; setAgregar(""); if (id) setCantidades((m) => ({ ...m, [id]: 1 })); }}>
+              <select className="input" value={agregar} onChange={(e) => { const k = e.target.value; setAgregar(""); if (k) setCantidades((m) => ({ ...m, [k]: 1 })); }}>
                 <option value="">Elegir…</option>
-                {disponibles.map((a) => <option key={a.id} value={a.id}>{a.codigo} · {a.nombre}</option>)}
+                {disponibles.map((o) => <option key={o.k} value={o.k}>{o.texto}</option>)}
               </select>
             </label>
           )}

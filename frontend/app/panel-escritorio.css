@@ -63,7 +63,7 @@
 /* Regla general: el texto nunca se sale de su caja. Una palabra más larga que el espacio se parte, y los
    elementos de rejillas y filas flexibles pueden encogerse por debajo del ancho de su contenido. */
 body { overflow-wrap: anywhere; }
-.bandeja, .dato, .pedido, .fila, .ficha, .articulo, .tarjeta, .ticket, .trabajo, .color-item, .field, .linea,
+.bandeja, .dato, .pedido, .fila, .ficha, .ficha-caja, .ficha__color, .articulo, .tarjeta, .ticket, .trabajo, .color-item, .field, .linea,
 .fila__titulo, .fila__fin, .barra-cobro, .impresora-datos > div, .control-fila > * { min-width: 0; }
 
 /* Correcciones del detector de desbordes (make desbordes). */

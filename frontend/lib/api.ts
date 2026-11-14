@@ -205,8 +205,8 @@ export const api = {
     existencias: () => pedir<Articulo[]>("/inventario"),
     movimientos: (articuloId?: string) =>
       pedir<Movimiento[]>(`/inventario/movimientos${q({ articulo_id: articuloId, limite: 30 })}`),
-    ajustar: (articulo_id: string, cantidad: number, nota: string) =>
-      pedir<Articulo>("/inventario/ajustes", { metodo: "POST", cuerpo: { articulo_id, cantidad, nota } }),
+    ajustar: (articulo_id: string, cantidad: number, nota: string, color_id?: string) =>
+      pedir<Articulo>("/inventario/ajustes", { metodo: "POST", cuerpo: { articulo_id, cantidad, nota, ...(color_id ? { color_id } : {}) } }),
   },
   pedidos: {
     listar: (estado?: EstadoPedido) => pedir<Pedido[]>(`/pedidos${q({ estado })}`),
