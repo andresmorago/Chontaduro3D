@@ -23,6 +23,7 @@ from app.schemas.impresora import (
     DatosImpresoraOut,
     FilamentoTrabajoOut,
     ImpresoraOut,
+    NubeOut,
     TrabajoOut,
 )
 
@@ -63,6 +64,11 @@ async def ver(db: DB) -> ImpresoraOut:
         actualizado_en=fila.actualizado_en if fila else None,
         datos=datos,
         trabajos_pendientes=await _pendientes(db),
+        nube=NubeOut(
+            estado=fila.nube_estado if fila else None,
+            sincronizada_en=fila.nube_sincronizada_en if fila else None,
+            detalle=fila.nube_detalle if fila else None,
+        ),
     )
 
 
@@ -145,8 +151,9 @@ async def ver_orden(orden_id: int, db: DB) -> ComandoOut:
 # -------------------------------------------------------------------------- trabajos
 def _salida(t: TrabajoImpresora) -> TrabajoOut:
     zona = ZoneInfo(settings.app_timezone)
-    medido = None
-    if t.inicio_observado and t.fin_en is not None:
+    # Tiempo MEDIDO: el que informa Bambu Cloud; si no, el visto en vivo (si se vio el inicio).
+    medido = t.minutos_medidos
+    if medido is None and t.inicio_observado and t.fin_en is not None:
         medido = max(1, round((t.fin_en - t.inicio_en).total_seconds() / 60))
     minutos = medido if medido is not None else t.minutos_estimados
     return TrabajoOut(
@@ -154,6 +161,7 @@ def _salida(t: TrabajoImpresora) -> TrabajoOut:
         inicio_en=t.inicio_en, fin_en=t.fin_en,
         fecha=(t.fin_en or t.inicio_en).astimezone(zona).date(),
         progreso=t.progreso, minutos=minutos,
+        origen=t.origen,
         minutos_origen="medido" if medido is not None else ("estimado" if minutos else None),
         minutos_estimados=t.minutos_estimados, gramos_total=t.gramos_total,
         filamentos=[FilamentoTrabajoOut(**f) for f in (t.filamentos or [])],

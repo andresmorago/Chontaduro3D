@@ -46,7 +46,11 @@ class TrabajoImpresora(MarcaDeTiempo, Base):
         CheckConstraint(_en("estado", ESTADOS_TRABAJO), name="estado_valido"),
         CheckConstraint(_en("gestion", GESTION_TRABAJO), name="gestion_valida"),
         Index("ix_trabajos_impresora_gestion_fin", "gestion", "fin_en"),
-    )
+        Index(
+            "uq_trabajos_impresora_nube_id", "nube_id", unique=True,
+            postgresql_where=text("nube_id IS NOT NULL"),
+        ),
+    )  # fmt: skip
 
     id: Mapped[uuid.UUID] = uuid_pk()
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -70,6 +74,13 @@ class TrabajoImpresora(MarcaDeTiempo, Base):
     produccion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("producciones.id", ondelete="SET NULL"), unique=True
     )
+    # De dónde salió: «impresora» (detectado en vivo) o «nube» (historial de Bambu Cloud).
+    origen: Mapped[str] = mapped_column(String(10), server_default="impresora", nullable=False)
+    # Identificador del trabajo en Bambu Cloud (une el historial con lo detectado en vivo).
+    nube_id: Mapped[str | None] = mapped_column(String(40))
+    # Tiempo de impresión que informa Bambu Cloud (segundos → minutos): es el MEDIDO por la
+    # impresora, mejor que la estimación del archivo.
+    minutos_medidos: Mapped[int | None] = mapped_column(Integer)
 
 
 class EstadoImpresora(Base):
@@ -86,6 +97,10 @@ class EstadoImpresora(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     datos: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Sincronización con el historial de Bambu Cloud: sin_configurar | ok | requiere_login | error.
+    nube_estado: Mapped[str | None] = mapped_column(String(20))
+    nube_sincronizada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    nube_detalle: Mapped[str | None] = mapped_column(String(200))
 
 
 class ComandoImpresora(Base):

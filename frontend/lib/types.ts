@@ -234,8 +234,15 @@ export interface DatosImpresora {
   externa: BandejaAms | null;
 }
 
+export interface NubeBambu {
+  estado: "sin_configurar" | "ok" | "requiere_login" | "error" | null;
+  sincronizada_en: string | null;
+  detalle: string | null;
+}
+
 export interface Impresora {
   servicio_activo: boolean;
+  nube: NubeBambu;
   conectada: boolean;
   actualizado_en: string | null;
   datos: DatosImpresora | null;
@@ -270,6 +277,7 @@ export interface TrabajoImpresora {
   minutos: number | null;
   minutos_origen: "medido" | "estimado" | null;
   minutos_estimados: number | null;
+  origen: "impresora" | "nube";
   gramos_total: number | null;
   filamentos: FilamentoTrabajo[];
   produccion_id: string | null;

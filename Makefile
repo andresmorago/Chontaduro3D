@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help up up-tunnel down logs ps build restart shell db-shell migrate makemigration downgrade seed admin demo bootstrap test lint typecheck nuke \
-	prod-build prod-up prod-up-tunnel prod-down prod-logs prod-ps prod-restart prod-shell prod-db-shell prod-admin worker-publicar e2e iphone impresora-up impresora-logs prod-impresora-logs
+	prod-build prod-up prod-up-tunnel prod-down prod-logs prod-ps prod-restart prod-shell prod-db-shell prod-admin worker-publicar e2e iphone impresora-up impresora-logs prod-impresora-logs bambu-login bambu-nube-prueba
 
 PROD := docker compose -p misimpresiones-prod -f docker-compose.prod.yml
 # Las pruebas llevan su propio proyecto: nunca tocan la base de desarrollo ni la de producción.
@@ -113,6 +113,13 @@ impresora-logs: ## Desarrollo: logs del servicio de la impresora
 
 prod-impresora-logs: ## Producción: logs del servicio de la impresora
 	$(PROD) logs -f --tail 50 impresora
+
+bambu-login: ## Inicia sesión en Bambu Cloud y guarda SOLO el token en data/nube (make bambu-login ARGS=--pegar si falla)
+	@mkdir -p data/nube && chmod 700 data/nube
+	python3 scripts/bambu_login.py $(ARGS)
+
+bambu-nube-prueba: ## Producción: diagnóstico del historial de Bambu Cloud (forma de los datos, sin secretos)
+	$(PROD) exec -T impresora python -m app.impresora.nube_prueba
 
 # --- Pruebas de punta a punta -------------------------------------------------
 # Solo contra el stack de DESARROLLO (make up). Los límites anti-abuso también aplican aquí

@@ -184,6 +184,15 @@ export default function Impresora() {
               : "No hay trabajos por revisar."}{" "}
             Elige cuáles son producciones para traer sus gramos y tiempos.
           </p>
+          {info && (
+            <p className={info.nube.estado === "requiere_login" || info.nube.estado === "error" ? "alerta" : "muted"} role={info.nube.estado === "requiere_login" || info.nube.estado === "error" ? "alert" : undefined}>
+              <strong>Historial de Bambu Cloud:</strong>{" "}
+              {info.nube.estado === "ok" && `sincronizado ${info.nube.sincronizada_en ? hace(info.nube.sincronizada_en) : ""}. Trae los trabajos de los últimos días.`}
+              {info.nube.estado === "requiere_login" && "el acceso venció o falta. Corre make bambu-login en la terminal para renovarlo."}
+              {info.nube.estado === "error" && `no se pudo consultar (${info.nube.detalle ?? "error"}). Se reintenta solo.`}
+              {(info.nube.estado === "sin_configurar" || info.nube.estado === null) && "sin conectar. Corre make bambu-login en la terminal para traer los trabajos previos de Studio y Handy."}
+            </p>
+          )}
           <div><Link className="btn btn--accent" href="/panel/produccion">Ir a Producción</Link></div>
         </div>
       </section>

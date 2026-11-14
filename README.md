@@ -95,3 +95,13 @@ Configuración (solo en `.env`, nunca versionada): `BAMBU_IP`, `BAMBU_SERIAL`, `
 En desarrollo: `make impresora-up` (perfil `impresora`) y `make impresora-logs`. En producción corre con el stack: `make prod-impresora-logs`.
 
 Limitaciones: la A1 no guarda historial de trabajos, así que solo se registran los que ocurren con el servicio encendido; los gramos son los **estimados del slicer** (en un trabajo cancelado sobrestiman); el tiempo es el *medido* (impresora ocupada) cuando se vio el inicio y, si no, el estimado del archivo. La conexión usa el certificado propio de la impresora, sin verificarlo: se asume una red local/VPN de confianza.
+
+### Historial de Bambu Cloud (trabajos previos)
+
+La A1 no guarda historial; el que ves en Bambu Studio y Bambu Handy está en la nube de Bambu. Para traerlo a *Producción → Trabajos de la impresora*:
+
+1. Corre `make bambu-login` en tu terminal (correo, contraseña y el código que Bambu envía a tu correo; si el inicio de sesión falla o se bloquea, `make bambu-login ARGS=--pegar` para pegar el token copiado del navegador). Guarda **solo el token** en `data/nube/bambu.json` (modo 600, fuera de git); la contraseña no se guarda. El servicio lo renueva solo; si vence del todo, la página *Administración → Impresora* lo avisa.
+2. El servicio `impresora` consulta la nube al arrancar y cada 10 minutos y trae los últimos `BAMBU_NUBE_DIAS` (7 por defecto). Cada trabajo se une con el detectado en vivo (mismo identificador, o mismo nombre y hora), así que no se duplica, y suma el **tiempo medido** que informa la nube. Lo que ya importaste o ignoraste no se revierte.
+3. `make bambu-nube-prueba` muestra la forma de los datos de la nube (sin secretos), útil si Bambu cambia su API.
+
+Es una API **no oficial**: puede cambiar o bloquearse sin aviso. Si falla, el resto de la app sigue igual y los trabajos en vivo siguen llegando.

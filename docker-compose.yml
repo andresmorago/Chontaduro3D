@@ -64,6 +64,7 @@ services:
       TZ: America/Bogota
     volumes:
       - ./backend:/app
+      - ./data/nube:/nube
     depends_on:
       backend:
         condition: service_healthy

@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     bambu_ip: str = ""
     bambu_serial: str = ""
     bambu_access_code: str = ""
+    # Historial de Bambu Cloud (opcional): el token lo deja `make bambu-login` en este archivo.
+    bambu_nube_url: str = "https://api.bambulab.com"
+    bambu_nube_archivo: str = "/nube/bambu.json"
+    bambu_nube_dias: int = 7
 
     @field_validator("cookie_secure", mode="before")
     @classmethod

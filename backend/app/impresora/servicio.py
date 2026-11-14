@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 
 from app.config import settings
 from app.db import SessionLocal, engine
-from app.impresora import bambu, lector3mf, maquina
+from app.impresora import bambu, lector3mf, maquina, nube, sincronizacion
 from app.models import ComandoImpresora, EstadoImpresora, TrabajoImpresora
 
 log = logging.getLogger("impresora")
@@ -27,6 +27,8 @@ ORDEN_VIGENTE_S = 30  # una orden más vieja que esto no se ejecuta (p. ej. tras
 MENSAJE_RECIENTE_S = 90
 REINTENTO_ARCHIVO_S = 60
 INTENTOS_ARCHIVO = 6
+NUBE_CADA_S = 600  # el historial de la nube cambia poco: cada 10 minutos basta
+NUBE_REINTENTO_S = 120  # tras un fallo, se reintenta antes
 
 
 def _ahora() -> datetime:
@@ -34,7 +36,7 @@ def _ahora() -> datetime:
 
 
 class Servicio:
-    def __init__(self, cliente=None) -> None:
+    def __init__(self, cliente=None, nube_cliente=None, almacen=None) -> None:
         # `cliente` se inyecta en las pruebas; en producción es la conexión MQTT real.
         self.cliente = cliente or bambu.ClienteBambu(
             settings.bambu_ip, settings.bambu_serial, settings.bambu_access_code
@@ -46,6 +48,10 @@ class Servicio:
         self._vio_inactiva = False
         self._intentos: dict[str, tuple[int, datetime]] = {}
         self._parar = asyncio.Event()
+        # Historial de Bambu Cloud (opcional: solo si `make bambu-login` dejó el token).
+        self._almacen = almacen or nube.AlmacenToken(settings.bambu_nube_archivo)
+        self._nube = nube_cliente or nube.ClienteNube(settings.bambu_nube_url, self._almacen)
+        self._nube_proxima = datetime.min.replace(tzinfo=UTC)
 
     # ------------------------------------------------------------------ estado
     async def _escribir_estado(self) -> None:
@@ -160,6 +166,45 @@ class Servicio:
                 await self._leer_archivo(abierto, crudo)
             await db.commit()
 
+    # ------------------------------------------------------------- historial (nube)
+    async def _guardar_nube(self, estado: str, detalle: str | None, ok: bool = False) -> None:
+        async with SessionLocal() as db:
+            fila = await db.get(EstadoImpresora, 1)
+            if fila is None:
+                fila = EstadoImpresora(id=1)
+                db.add(fila)
+            fila.nube_estado, fila.nube_detalle = estado, detalle
+            if ok:
+                fila.nube_sincronizada_en = _ahora()
+            await db.commit()
+
+    async def _sincronizar_nube(self) -> None:
+        """Trae los trabajos de los últimos días del historial de Bambu Cloud."""
+        if _ahora() < self._nube_proxima:
+            return
+        if not self._almacen.existe():
+            self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
+            await self._guardar_nube("sin_configurar", None)
+            return
+        desde = _ahora() - timedelta(days=settings.bambu_nube_dias)
+        try:
+            tareas = await asyncio.to_thread(
+                self._nube.tareas, desde, settings.bambu_serial or None
+            )
+            async with SessionLocal() as db:
+                r = await sincronizacion.aplicar(db, tareas)
+                await db.commit()
+            log.info("Historial de la nube: %d tareas, %s", len(tareas), r)
+            await self._guardar_nube("ok", None, ok=True)
+            self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
+        except nube.RequiereLogin as e:
+            await self._guardar_nube("requiere_login", str(e)[:200])
+            self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
+        except nube.ErrorNube as e:
+            log.warning("Historial de la nube: %s", e)
+            await self._guardar_nube("error", str(e)[:200])
+            self._nube_proxima = _ahora() + timedelta(seconds=NUBE_REINTENTO_S)
+
     # ----------------------------------------------------------------- órdenes
     async def _atender_ordenes(self) -> None:
         async with SessionLocal() as db:
@@ -196,7 +241,12 @@ class Servicio:
         self.cliente.iniciar()
         log.info("Servicio de impresora iniciado (%s).", settings.bambu_ip)
         while not self._parar.is_set():
-            for paso in (self._escribir_estado, self._seguir_trabajos, self._atender_ordenes):
+            for paso in (
+                self._escribir_estado,
+                self._seguir_trabajos,
+                self._sincronizar_nube,
+                self._atender_ordenes,
+            ):
                 try:
                     await paso()
                 except Exception:  # noqa: BLE001

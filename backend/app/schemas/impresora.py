@@ -40,6 +40,14 @@ class DatosImpresoraOut(Salida):
     externa: BandejaOut | None = None
 
 
+class NubeOut(Salida):
+    """Sincronización con el historial de Bambu Cloud."""
+
+    estado: Literal["sin_configurar", "ok", "requiere_login", "error"] | None = None
+    sincronizada_en: datetime | None = None
+    detalle: str | None = None
+
+
 class ImpresoraOut(Salida):
     # El servicio escribe un latido cada pocos segundos: si falta, el servicio no está corriendo.
     servicio_activo: bool
@@ -48,6 +56,7 @@ class ImpresoraOut(Salida):
     actualizado_en: datetime | None = None
     datos: DatosImpresoraOut | None = None
     trabajos_pendientes: int = 0
+    nube: NubeOut = NubeOut()
 
 
 class ComandoIn(Entrada):
@@ -84,6 +93,8 @@ class TrabajoOut(Salida):
     minutos: int | None
     minutos_origen: Literal["medido", "estimado"] | None
     minutos_estimados: int | None
+    # «impresora» = detectado en vivo; «nube» = del historial de Bambu Cloud.
+    origen: Literal["impresora", "nube"] = "impresora"
     gramos_total: Numero | None
     filamentos: list[FilamentoTrabajoOut]
     produccion_id: UUID | None
