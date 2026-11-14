@@ -67,10 +67,11 @@ button.fila:hover { background: var(--color-paper-2); }
 .buscador-panel { max-width: 28rem; }
 
 /* ---------- Selector de artículos (vender / producir) ---------- */
-.selector { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 136px), 1fr)); gap: var(--space-sm); }
-.ficha { position: relative; display: grid; gap: var(--space-2xs); align-content: start; padding: var(--space-sm) var(--space-md); text-align: left; background: var(--color-plate); border: var(--rule-bar) solid var(--color-ink); min-height: 96px; transition: box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+.selector { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr)); gap: var(--space-xs); }
+.ficha { position: relative; display: grid; gap: var(--space-3xs); align-content: start; padding: var(--space-xs) var(--space-sm); text-align: left; background: var(--color-plate); border: var(--rule-bar) solid var(--color-ink); min-height: 76px; transition: box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
 .ficha:hover:not(:disabled) { box-shadow: var(--shadow-lift); }
 .ficha:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
+.ficha:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .ficha:disabled { background: var(--color-paper-3); color: var(--color-muted); cursor: not-allowed; }
 .ficha[data-en-ticket="true"] { background: var(--color-accent-soft); }
 .ficha__codigo { font-size: var(--text-xs); color: var(--color-accent); }
@@ -79,23 +80,100 @@ button.fila:hover { background: var(--color-paper-2); }
 .ficha__meta { font-size: var(--text-xs); color: var(--color-muted); }
 .ficha__cant { position: absolute; top: -2px; right: -2px; min-width: 32px; padding: 2px var(--space-xs); text-align: center; background: var(--color-ink); color: var(--color-paper); font: 500 var(--text-sm)/1.4 var(--font-outlier); }
 
-.venta-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: var(--space-lg); align-items: start; }
-@media (max-width: 60rem) { .venta-grid { grid-template-columns: minmax(0, 1fr); } }
-.ticket { display: grid; gap: var(--space-md); padding: var(--space-md); background: var(--color-plate); border: var(--rule-bar) solid var(--color-ink); box-shadow: var(--shadow-card); position: sticky; top: var(--space-lg); }
-@media (max-width: 60rem) { .ticket { position: static; box-shadow: none; } }
+/* Selector + panel del ticket. Debajo de 75 rem se apilan (el ticket va después de las fichas, con la barra
+   «Revisar» para saltar a él); desde 75 rem el ticket es una columna lateral fija que no se sale de la pantalla. */
+.venta-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+@media (min-width: 75rem) { .venta-grid { grid-template-columns: minmax(0, 1fr) clamp(22rem, 28%, 28rem); } }
+.ticket { display: grid; gap: var(--space-md); padding: var(--space-md); background: var(--color-plate); border: var(--rule-bar) solid var(--color-ink); box-shadow: var(--shadow-card); overflow: hidden; container: ticket / inline-size; }
+@media (min-width: 75rem) { .ticket { position: sticky; top: var(--space-lg); max-height: calc(100dvh - 2 * var(--space-lg)); overflow-y: auto; overscroll-behavior: contain; } }
 .ticket__lineas { display: grid; gap: var(--space-sm); }
 .linea { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs) var(--space-sm); align-items: center; padding-bottom: var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }
 .linea__nombre { font-weight: 700; font-size: var(--text-sm); overflow-wrap: anywhere; }
-.linea__precio { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm); color: var(--color-muted); }
+.linea__precio { display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap; font-size: var(--text-sm); color: var(--color-muted); }
 .linea__precio .input { min-height: 40px; width: 120px; padding-inline: var(--space-xs); font-family: var(--font-outlier); font-size: var(--text-md); border-width: var(--rule-hair); } /* 16 px: Safari/iPhone hace zoom al enfocar campos menores */
 .linea__subtotal { font-family: var(--font-outlier); font-weight: 500; text-align: right; }
 .ticket__total { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-md); }
 .ticket__total strong { font: 700 var(--text-2xl)/1 var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ticket__vacio { color: var(--color-muted); font-size: var(--text-sm); }
+
+/* «Este lote» (Producción): cuerpo que se desplaza + pie fijo con el total y el botón de guardar. */
+.ticket--lote { gap: var(--space-sm); }
+.ticket__cuerpo { display: grid; gap: var(--space-sm); align-content: start; min-width: 0; }
+.ticket__pie { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: var(--rule-hair) solid var(--color-rule); }
+.ticket--lote .ticket__total strong { font-size: var(--text-xl); }
+.ticket--lote .linea { grid-template-areas: "nombre contador" "stock contador"; row-gap: 0; padding-bottom: var(--space-xs); }
+.ticket--lote .linea__nombre { grid-area: nombre; }
+.ticket--lote .linea > .contador { grid-area: contador; }
+.ticket--lote .linea__precio { grid-area: stock; }
+.ticket--lote .linea:last-child { padding-bottom: 0; border-bottom: 0; }
+.ticket--lote .cuando, .ticket--lote .filtiempo { padding-top: var(--space-sm); }
+.ticket--lote .filtiempo { gap: var(--space-xs); }
+.ticket--lote .filtiempo legend { margin-bottom: 0; }
+@media (pointer: fine) { .ticket--lote .segmentado__op { min-height: 40px; } }
+@media (min-width: 75rem) {
+  .ticket--lote { grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+  .ticket--lote .ticket__cuerpo { overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--space-2xs)); padding: var(--space-2xs); }
+}
+/* Con ancho de sobra (lote apilado en pantallas medianas, o columna lateral ancha) los campos se acomodan en columnas. */
+@container ticket (min-width: 20rem) {
+  .ticket--lote .cuando { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; column-gap: var(--space-sm); }
+  .ticket--lote .cuando .field__hint { grid-column: 1 / -1; }
+  .ticket--lote .cuando .input { padding-inline: var(--space-sm); }
+  .ticket--lote .check { gap: var(--space-xs); font-size: var(--text-sm); line-height: 1.25; }
+  .ticket--lote .filtiempo { grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: var(--space-sm); align-items: end; }
+  .ticket--lote .filtiempo > * { grid-column: span 4; }
+  .ticket--lote .filtiempo > .field { grid-column: span 2; }
+  .ticket--lote .filtiempo > .tiempo { display: contents; }
+  .ticket--lote .filtiempo > .tiempo > .field { grid-column: span 1; }
+  .ticket--lote .filtiempo:has(> .filamentos) > .tiempo > .field { grid-column: span 2; }
+  .ticket--lote .filtiempo .input { padding-inline: var(--space-sm); }
+}
+@container ticket (min-width: 40rem) {
+  .ticket--lote .ticket__cuerpo { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-lg); }
+  .ticket--lote .ticket__cuerpo > .ticket__lineas, .ticket--lote .ticket__cuerpo > .ticket__vacio, .ticket--lote .ticket__cuerpo > .vinculo-trabajo { grid-column: 1 / -1; }
+  .ticket--lote .ticket__cuerpo > * { align-self: start; }
+  .ticket--lote .ticket__cuerpo > .filtiempo { grid-row: span 2; }
+  .ticket--lote .ticket__lineas { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-lg); }
+  .ticket--lote .ticket__pie { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; column-gap: var(--space-lg); }
+}
 .barra-cobro { display: none; }
-@media (max-width: 60rem) {
-  .barra-cobro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); position: fixed; z-index: var(--z-sticky); left: 0; right: 0; bottom: calc(60px + env(safe-area-inset-bottom)); padding: var(--space-xs) var(--gutter); border-top: var(--rule-bar) solid var(--color-ink); background: var(--color-accent-soft); }
+@media (max-width: 74.99rem) {
+  .barra-cobro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); position: fixed; z-index: var(--z-sticky); left: 0; right: 0; bottom: 0; padding: var(--space-xs) var(--gutter); border-top: var(--rule-bar) solid var(--color-ink); background: var(--color-accent-soft); }
   .barra-cobro strong { font: 700 var(--text-xl)/1 var(--font-display); font-variant-numeric: tabular-nums; }
+}
+@media (min-width: 60.0625rem) and (max-width: 74.99rem) { .barra-cobro { left: var(--rail); } } /* con el rail visible la barra empieza a su derecha */
+@media (max-width: 60rem) { .barra-cobro { bottom: calc(60px + env(safe-area-inset-bottom)); } } /* sobre las pestañas inferiores */
+@media (pointer: coarse), (max-width: 40rem) {
+  .contador--chico { grid-template-columns: 44px minmax(44px, auto) 44px; }
+  .contador--chico .contador__btn { min-height: 44px; }
+}
+
+/* Página de Producción: ancha (más fichas por fila), cabecera en una sola fila y listas inferiores en dos columnas. */
+.panel__main:has(> .pagina--ancha) { max-width: calc(1600px + 2 * var(--gutter)); margin-inline: auto; }
+@media (min-width: 60rem) {
+  .pagina-cab--fila { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "titulo acciones" "texto acciones"; column-gap: var(--space-lg); align-items: end; }
+  .pagina-cab--fila > h1 { grid-area: titulo; }
+  .pagina-cab--fila > .lead { grid-area: texto; }
+  .pagina-cab--fila > .pagina-cab__acciones { grid-area: acciones; margin-top: 0; align-self: end; }
+}
+@media (min-width: 75rem) {
+  /* Producción: el ticket arranca arriba, al lado del título, y acompaña al desplazamiento (sticky). */
+  .pagina--ancha { display: grid; grid-template-columns: minmax(0, 1fr) clamp(22rem, 28%, 28rem); column-gap: var(--space-lg); grid-template-rows: auto auto 1fr; align-items: start; }
+  .pagina--ancha > * { grid-column: 1 / -1; }
+  .pagina--ancha > .pagina-cab { grid-column: 1; grid-row: 1; }
+  .pagina--ancha > .venta-grid--lote { display: contents; }
+  .pagina--ancha > .venta-grid--lote > :first-child { grid-column: 1; grid-row: 2; }
+  .pagina--ancha > .venta-grid--lote > .ticket { grid-column: 2; grid-row: 1 / span 3; }
+  .pagina--ancha > .seccion--trabajos { grid-column: 1; grid-row: 3; }
+  .pagina--ancha > .seccion--lotes { grid-column: 1 / -1; grid-row: 4; }
+}
+.seccion--trabajos .segmentado { max-width: 26rem; }
+.seccion--trabajos > .muted { max-width: 70ch; }
+/* Historial de lotes: dos columnas cuando hay ancho, para no alargar la página. */
+@media (min-width: 75rem) {
+  .lista--dos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lista--dos > .fila, .lista--dos > .trabajo { border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .lista--dos > :nth-child(odd) { border-right: var(--rule-hair) solid var(--color-rule); }
 }
 
 /* ---------- Formularios en hoja ---------- */

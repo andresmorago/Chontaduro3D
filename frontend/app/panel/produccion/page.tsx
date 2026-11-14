@@ -93,8 +93,8 @@ export default function Produccion() {
   }
 
   return (
-    <>
-      <div className="pagina-cab">
+    <div className="pagina--ancha">
+      <div className="pagina-cab pagina-cab--fila">
         <h1>Producción</h1>
         <p className="lead">Toca lo que acabas de imprimir. Al guardar, suma al inventario.</p>
         <div className="pagina-cab__acciones">
@@ -112,56 +112,60 @@ export default function Produccion() {
           <a className="btn btn--primary" href="/panel/articulos">Crear artículo</a>
         </div>
       ) : (
-        <div className="venta-grid">
+        <div className="venta-grid venta-grid--lote">
           <Selector articulos={lista} cantidades={Object.fromEntries(items)} onTocar={tocar} />
-          <section className="ticket" id="ticket" aria-labelledby="t-lote">
-            <h2 id="t-lote" style={{ fontSize: "var(--text-title)" }}>Este lote</h2>
-            {items.length === 0 ? (
-              <p className="ticket__vacio">Toca un artículo para sumarlo.</p>
-            ) : (
-              <div className="ticket__lineas">
-                {items.map(([id, n]) => {
-                  const a = porId.get(id)!;
-                  return (
-                    <div key={id} className="linea">
-                      <span className="linea__nombre">{a.nombre}</span>
-                      <Contador chico valor={n} min={0} max={10000} onCambio={(v) => poner(id, v)} etiqueta={a.nombre} />
-                      <span className="linea__precio num">Stock actual {a.stock} → {a.stock + n}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="ticket__total">
-              <span className="muted">Total del lote</span>
-              <strong>{unidades === 1 ? "1 pieza" : `${unidades} piezas`}</strong>
-            </div>
-            {trabajo && (
-              <div className="vinculo-trabajo">
-                <span>Datos del trabajo <strong>«{trabajo.nombre}»</strong> de la impresora.</span>
-                <Boton variante="ghost" pequeno onClick={soltarTrabajo}>Quitar</Boton>
-              </div>
-            )}
-            <div className="cuando">
-              <label className="field">
-                <span className="field__label">Fecha de producción</span>
-                <input className="input num" type="date" value={lote.fecha} max={hoy} min={restarDias(hoy, 5 * 366)} onChange={(e) => setLote({ ...lote, fecha: e.target.value })} />
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={lote.sumar} onChange={(e) => setLote({ ...lote, sumar: e.target.checked })} />
-                Sumar al inventario actual
-              </label>
-              {lote.fecha && lote.fecha < hoy && (
-                <p className="field__hint">
-                  Carga retrospectiva ({fechaCorta(lote.fecha)}). {lote.sumar ? "Estas piezas se SUMAN al stock de hoy; si ya se vendieron, desmarca la casilla y quedarán solo en el historial y las métricas." : "Solo quedará en el historial y las métricas: el stock de hoy no cambia."}
-                </p>
+          <section className="ticket ticket--lote" id="ticket" aria-labelledby="t-lote">
+            <h2 id="t-lote" className="ticket__titulo" style={{ fontSize: "var(--text-title)" }}>Este lote</h2>
+            <div className="ticket__cuerpo">
+              {items.length === 0 ? (
+                <p className="ticket__vacio">Toca un artículo para sumarlo.</p>
+              ) : (
+                <div className="ticket__lineas">
+                  {items.map(([id, n]) => {
+                    const a = porId.get(id)!;
+                    return (
+                      <div key={id} className="linea">
+                        <span className="linea__nombre">{a.nombre}</span>
+                        <Contador chico valor={n} min={0} max={10000} onCambio={(v) => poner(id, v)} etiqueta={a.nombre} />
+                        <span className="linea__precio num">Stock actual {a.stock} → {a.stock + n}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
+              {trabajo && (
+                <div className="vinculo-trabajo">
+                  <span>Datos del trabajo <strong>«{trabajo.nombre}»</strong> de la impresora.</span>
+                  <Boton variante="ghost" pequeno onClick={soltarTrabajo}>Quitar</Boton>
+                </div>
+              )}
+              <div className="cuando">
+                <label className="field">
+                  <span className="field__label">Fecha de producción</span>
+                  <input className="input num" type="date" value={lote.fecha} max={hoy} min={restarDias(hoy, 5 * 366)} onChange={(e) => setLote({ ...lote, fecha: e.target.value })} />
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={lote.sumar} onChange={(e) => setLote({ ...lote, sumar: e.target.checked })} />
+                  Sumar al inventario actual
+                </label>
+                {lote.fecha && lote.fecha < hoy && (
+                  <p className="field__hint">
+                    Carga retrospectiva ({fechaCorta(lote.fecha)}). {lote.sumar ? "Estas piezas se SUMAN al stock de hoy; si ya se vendieron, desmarca la casilla y quedarán solo en el historial y las métricas." : "Solo quedará en el historial y las métricas: el stock de hoy no cambia."}
+                  </p>
+                )}
+              </div>
+              <FilamentoTiempo valor={lote} onCambio={setLote} parametros={parametros.datos} onAbrirParametros={() => setVerParametros(true)} />
+              <Entrada etiqueta="Nota (opcional)" ayuda="Por ejemplo: PLA negro, tanda del sábado." value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} />
             </div>
-            <FilamentoTiempo valor={lote} onCambio={setLote} parametros={parametros.datos} onAbrirParametros={() => setVerParametros(true)} />
-            <Entrada etiqueta="Nota (opcional)" ayuda="Por ejemplo: PLA negro, tanda del sábado." value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} />
-            <Boton variante="accent" bloque cargando={enviando} disabled={items.length === 0} onClick={registrar}>
-              Sumar al inventario
-            </Boton>
+            <div className="ticket__pie">
+              <div className="ticket__total">
+                <span className="muted">Total del lote</span>
+                <strong>{unidades === 1 ? "1 pieza" : `${unidades} piezas`}</strong>
+              </div>
+              <Boton variante="accent" bloque cargando={enviando} disabled={items.length === 0} onClick={registrar}>
+                Sumar al inventario
+              </Boton>
+            </div>
           </section>
         </div>
       )}
@@ -177,12 +181,12 @@ export default function Produccion() {
 
       <TrabajosImpresora usandoId={trabajo?.id ?? null} onUsar={usarTrabajo} refrescar={version} />
 
-      <section className="seccion" aria-labelledby="t-hist">
+      <section className="seccion seccion--lotes" aria-labelledby="t-hist">
         <h2 id="t-hist">Últimos lotes</h2>
         {(historial.datos ?? []).length === 0 ? (
           <div className="vacio"><p>Aún no registraste producción.</p></div>
         ) : (
-          <div className="lista">
+          <div className="lista lista--dos">
             {(historial.datos ?? []).map((p) => (
               <div key={p.id} className="fila fila--sin-foto">
                 <span className="fila__titulo">
@@ -222,6 +226,6 @@ export default function Produccion() {
         onAbrirParametros={() => setVerParametros(true)}
       />
       <ParametrosHoja abierta={verParametros} actuales={parametros.datos} onCerrar={() => setVerParametros(false)} onGuardado={() => void parametros.recargar()} />
-    </>
+    </div>
   );
 }

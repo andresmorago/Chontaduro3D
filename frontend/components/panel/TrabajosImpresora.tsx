@@ -65,7 +65,7 @@ export function TrabajosImpresora({ usandoId, onUsar, refrescar }: Props) {
 
   const trabajos = lista.datos ?? [];
   return (
-    <section className="seccion" aria-labelledby="t-trabajos-imp">
+    <section className="seccion seccion--trabajos" aria-labelledby="t-trabajos-imp">
       <h2 id="t-trabajos-imp">Trabajos de la impresora</h2>
       <p className="muted">Lo que la impresora fue haciendo. Importa los que son producción para traer sus gramos y su tiempo; ignora el resto (pruebas, fallos).</p>
       <Segmentado etiqueta="Qué trabajos ver" valor={vista} opciones={[{ valor: "pendiente", etiqueta: "Por revisar" }, { valor: "ignorado", etiqueta: "Ignorados" }]} onCambio={setVista} />
@@ -88,7 +88,7 @@ export function TrabajosImpresora({ usandoId, onUsar, refrescar }: Props) {
                   {enCurso ? (
                     <span className="etiqueta etiqueta--aviso">Imprimiendo · {t.progreso} %</span>
                   ) : t.estado === "interrumpido" ? (
-                    <span className="etiqueta etiqueta--aviso">Interrumpido al {t.progreso} %</span>
+                    <span className="etiqueta etiqueta--aviso">{t.origen === "nube" || t.progreso === 0 ? "Interrumpido" : `Interrumpido al ${t.progreso} %`}</span>
                   ) : (
                     <span className="etiqueta etiqueta--ok">Terminado</span>
                   )}

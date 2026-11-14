@@ -21,7 +21,7 @@
 .tarjeta, .articulo, .dato, .lista, .ticket, .pedido, .entrar__tarjeta, .barras {
   background: var(--color-card); border: 0; border-radius: var(--radius-card);
 }
-.lista, .articulo, .ticket { overflow: hidden; }
+.lista, .articulo { overflow: hidden; }
 .vacio { border: var(--rule-bar) dashed var(--color-rule); background: transparent; border-radius: var(--radius-card); color: var(--color-ink-2); }
 .tarjeta, .articulo, .dato, .ticket, .pedido, .entrar__tarjeta, .barras { box-shadow: var(--shadow-card); }
 .pedido--nuevo { box-shadow: var(--shadow-card), 0 0 0 3px var(--color-focus); }
