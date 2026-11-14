@@ -60,21 +60,21 @@ async def test_pedido_exige_color_valido_si_el_articulo_tiene(admin, publico):
     ok = await publico.post("/api/publico/pedidos", json=pedido(a["id"], color="azul"))
     assert ok.status_code == 201
     p = (await admin.get("/api/pedidos")).json()
-    assert len(p) == 1 and p[0]["color"] == "Azul"  # queda con el nombre oficial
+    assert len(p) == 1 and p[0]["items"][0]["color"] == "Azul"  # queda con el nombre oficial
 
 
 async def test_pedido_de_articulo_sin_colores_ignora_color(admin, publico):
     a = await crear_articulo(admin)
     r = await publico.post("/api/publico/pedidos", json=pedido(a["id"], color="Rojo"))
     assert r.status_code == 201
-    assert (await admin.get("/api/pedidos")).json()[0]["color"] is None
+    assert (await admin.get("/api/pedidos")).json()[0]["items"][0]["color"] is None
 
 
 async def test_cambiar_colores_no_rompe_pedidos_ya_hechos(admin, publico):
     a = await crear_articulo(admin, colores=[ROJO])
     await publico.post("/api/publico/pedidos", json=pedido(a["id"], color="Rojo"))
     await admin.patch(f"/api/articulos/{a['id']}", json={"colores": [AZUL]})
-    assert (await admin.get("/api/pedidos")).json()[0]["color"] == "Rojo"
+    assert (await admin.get("/api/pedidos")).json()[0]["items"][0]["color"] == "Rojo"
 
 
 async def test_colores_requieren_sesion_para_editarse(admin, publico):

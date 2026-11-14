@@ -48,7 +48,7 @@ async def test_pedido_no_toca_inventario_ni_ventas(admin, publico, db):
     ).scalar_one() == movimientos_antes
     assert (await db.execute(select(func.count()).select_from(Venta))).scalar_one() == 0
     pedidos = (await admin.get("/api/pedidos")).json()
-    assert len(pedidos) == 1 and pedidos[0]["estado"] == "nuevo" and pedidos[0]["cantidad"] == 3
+    assert len(pedidos) == 1 and pedidos[0]["estado"] == "nuevo" and pedidos[0]["piezas"] == 3
 
     # Ni siquiera marcarlo como cerrado mueve el stock: la venta se registra aparte.
     await admin.patch(f"/api/pedidos/{pedidos[0]['id']}", json={"estado": "cerrado"})

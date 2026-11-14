@@ -26,7 +26,7 @@ TABLAS = {
     "usuarios", "sesiones_refresh", "articulos", "precio_historial", "producciones",
     "produccion_items", "ventas", "venta_items", "movimientos_inventario", "pedidos",
     "registro_auditoria", "parametros", "produccion_filamentos", "articulo_colores",
-    "trabajos_impresora", "impresora_estado", "impresora_comandos",
+    "trabajos_impresora", "impresora_estado", "impresora_comandos", "pedido_items",
 }  # fmt: skip
 
 
@@ -139,3 +139,29 @@ def test_rotacion_conserva_solo_los_ultimos(tmp_path: Path):
     borrados = migrar.rotar(tmp_path, 10)
     assert len(borrados) == 4 and len(list(tmp_path.glob(f"{migrar.PREFIJO}*"))) == 10
     assert (tmp_path / "otro-archivo.sql.gz").exists()
+
+
+async def test_los_pedidos_anteriores_pasan_a_tener_su_renglon(mig):
+    """Un pedido del formato anterior (un artículo) pasa a pedido_items; revertir lo devuelve."""
+    exito(alembic("upgrade", "k1a8b4c6d2e7"))
+    async with mig.begin() as c:
+        await c.execute(
+            text("INSERT INTO articulos (nombre, precio_venta) VALUES ('Llavero', 6000)")
+        )
+        await c.execute(
+            text(
+                "INSERT INTO pedidos (articulo_id, nombre, whatsapp, cantidad, color) "
+                "SELECT id, 'Ana', '3001234567', 3, 'Azul' FROM articulos"
+            )
+        )
+    exito(alembic("upgrade", "head"))
+    async with mig.connect() as c:
+        fila = (await c.execute(text("SELECT cantidad, color FROM pedido_items"))).one()
+        assert tuple(fila) == (3, "Azul")
+    exito(alembic("upgrade", "head"))  # repetirla no duplica el renglón
+    async with mig.connect() as c:
+        assert (await c.execute(text("SELECT count(*) FROM pedido_items"))).scalar_one() == 1
+    exito(alembic("downgrade", "k1a8b4c6d2e7"))
+    async with mig.connect() as c:
+        fila = (await c.execute(text("SELECT cantidad, color FROM pedidos"))).one()
+        assert tuple(fila) == (3, "Azul")

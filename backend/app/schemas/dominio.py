@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.comunes import Dinero, DineroSalida, Entrada, Numero, Salida
 
@@ -292,16 +292,37 @@ class MovimientoOut(Salida):
 
 
 # --- Pedidos -----------------------------------------------------------------
-class PedidoPublicoIn(Entrada):
+class PedidoItemIn(Entrada):
     articulo_id: UUID
-    nombre: str = Field(min_length=2, max_length=80)
-    whatsapp: str = Field(min_length=7, max_length=20)
     cantidad: int = Field(ge=1, le=99)
     # Obligatorio si el artículo tiene colores; debe ser uno de ellos.
+    color: str = Field(default="", max_length=30)
+
+
+class PedidoPublicoIn(Entrada):
+    nombre: str = Field(min_length=2, max_length=80)
+    whatsapp: str = Field(min_length=7, max_length=20)
+    # El pedido: uno o varios renglones (mini carrito), hasta 20.
+    items: list[PedidoItemIn] = Field(default_factory=list, max_length=20)
+    # Formato anterior (un solo artículo): se convierte en un renglón.
+    articulo_id: UUID | None = None
+    cantidad: int | None = Field(default=None, ge=1, le=99)
     color: str = Field(default="", max_length=30)
     # Trampa para robots: un humano nunca ve este campo, así que debe llegar vacío.
     sitio_web: str = Field(default="", max_length=200)
     turnstile: str = Field(default="", max_length=2048)
+
+    @model_validator(mode="after")
+    def _a_renglones(self) -> "PedidoPublicoIn":
+        if not self.items:
+            if self.articulo_id is None or self.cantidad is None:
+                raise ValueError("El pedido necesita al menos un artículo.")
+            self.items = [
+                PedidoItemIn(articulo_id=self.articulo_id, cantidad=self.cantidad, color=self.color)
+            ]
+        elif self.articulo_id is not None or self.cantidad is not None:
+            raise ValueError("Usa «items» o el formato de un solo artículo, no los dos.")
+        return self
 
     @field_validator("whatsapp")
     @classmethod
@@ -316,15 +337,24 @@ class PedidoEstadoIn(Entrada):
     estado: EstadoPedido
 
 
-class PedidoOut(Salida):
-    id: UUID
+class PedidoItemOut(Salida):
     articulo_id: UUID
     codigo: str
     articulo: str
+    color: str | None = None
+    cantidad: int
+    # Precio de hoy del artículo (el precio final se acuerda al vender; esto es una referencia).
+    precio: DineroSalida
+    subtotal: DineroSalida
+
+
+class PedidoOut(Salida):
+    id: UUID
     nombre: str
     whatsapp: str
-    cantidad: int
-    color: str | None = None
+    items: list[PedidoItemOut]
+    piezas: int
+    total_estimado: DineroSalida
     estado: str
     creado_en: datetime
 

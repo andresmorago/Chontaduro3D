@@ -10,7 +10,7 @@ from app.core.cliente import ip_cliente, origen_hash
 from app.core.deps import DB
 from app.core.inventario import stock_de, stock_por_clave
 from app.core.tokens import ahora
-from app.models import Articulo, Pedido
+from app.models import Articulo, Pedido, PedidoItem
 from app.schemas.dominio import (
     ArticuloPublico,
     CatalogoPublico,
@@ -99,31 +99,39 @@ async def crear_pedido(datos: PedidoPublicoIn, request: Request, db: DB) -> Pedi
             "Has enviado varios pedidos seguidos. Inténtalo de nuevo en un rato.",
         )
 
-    articulo = await db.get(Articulo, datos.articulo_id)
-    if articulo is None or not articulo.publicado or not articulo.activo:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese artículo ya no está disponible.")
+    # Cada renglón: el artículo debe estar publicado y, si se ofrece en colores, traer uno de ellos
+    # (y ninguno si no los tiene). El mismo artículo y color en dos renglones se suman.
+    ids = {i.articulo_id for i in datos.items}
+    articulos = {
+        a.id: a for a in (await db.execute(select(Articulo).where(Articulo.id.in_(ids)))).scalars()
+    }
+    ofrecidos = await colores_de(db, list(ids))
+    renglones: dict[tuple, int] = {}
+    for item in datos.items:
+        articulo = articulos.get(item.articulo_id)
+        if articulo is None or not articulo.publicado or not articulo.activo:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese artículo ya no está disponible.")
+        color: str | None = None
+        if ofrecidos[articulo.id]:
+            pedido_color = " ".join(item.color.split()).casefold()
+            elegido = next(
+                (c for c in ofrecidos[articulo.id] if c.nombre.casefold() == pedido_color), None
+            )
+            if elegido is None:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"Elige uno de los colores de «{articulo.nombre}».",
+                )
+            color = elegido.nombre
+        clave = (articulo.id, color)
+        renglones[clave] = min(renglones.get(clave, 0) + item.cantidad, 99)
 
-    # Si el artículo se ofrece en colores, el cliente debe elegir uno de ellos; si no, ninguno.
-    ofrecidos = (await colores_de(db, [articulo.id]))[articulo.id]
-    color: str | None = None
-    if ofrecidos:
-        elegido = next(
-            (
-                c
-                for c in ofrecidos
-                if c.nombre.casefold() == " ".join(datos.color.split()).casefold()
-            ),
-            None,
+    pedido = Pedido(nombre=datos.nombre, whatsapp=datos.whatsapp, origen_hash=origen)
+    db.add(pedido)
+    await db.flush()
+    for (articulo_id, color), cantidad in renglones.items():
+        db.add(
+            PedidoItem(pedido_id=pedido.id, articulo_id=articulo_id, color=color, cantidad=cantidad)
         )
-        if elegido is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Elige uno de los colores.")
-        color = elegido.nombre
-
-    db.add(
-        Pedido(
-            articulo_id=articulo.id, nombre=datos.nombre, whatsapp=datos.whatsapp,
-            cantidad=datos.cantidad, color=color, origen_hash=origen,
-        )
-    )  # fmt: skip
     await db.commit()
     return ok
