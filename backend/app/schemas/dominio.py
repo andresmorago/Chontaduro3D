@@ -13,9 +13,19 @@ Cantidad = Field(ge=1, le=10_000)
 
 
 # --- Artículos ---------------------------------------------------------------
+# Encuadre de una foto (no destructivo): centro horizontal y vertical en % de la foto y zoom.
+FotoX = Field(default=50, ge=0, le=100)
+FotoZoom = Field(default=1, ge=1, le=4)
+
+
 class ColorIn(Entrada):
+    # Con id = un color que ya existe (conserva su foto); sin id = uno nuevo.
+    id: UUID | None = None
     nombre: str = Field(min_length=1, max_length=30)
     hex: str = Field(default="#9ca3af", pattern=r"^#[0-9a-fA-F]{6}$")
+    foto_x: float = FotoX
+    foto_y: float = FotoX
+    foto_zoom: float = FotoZoom
 
     @field_validator("nombre")
     @classmethod
@@ -32,8 +42,13 @@ class ColorIn(Entrada):
 
 
 class ColorOut(Salida):
+    id: UUID
     nombre: str
     hex: str
+    imagen_url: str | None = None
+    foto_x: float = 50
+    foto_y: float = 50
+    foto_zoom: float = 1
 
 
 def _sin_repetidos(colores: list[ColorIn] | None) -> list[ColorIn] | None:
@@ -54,6 +69,9 @@ class ArticuloIn(Entrada):
     precio_venta: Dinero
     stock_minimo: int = Field(default=0, ge=0, le=10_000)
     publicado: bool = True
+    foto_x: float = FotoX
+    foto_y: float = FotoX
+    foto_zoom: float = FotoZoom
     colores: list[ColorIn] = Field(default_factory=list, max_length=20)
 
     @field_validator("colores")
@@ -69,6 +87,9 @@ class ArticuloUpdate(Entrada):
     stock_minimo: int | None = Field(default=None, ge=0, le=10_000)
     publicado: bool | None = None
     activo: bool | None = None
+    foto_x: float | None = Field(default=None, ge=0, le=100)
+    foto_y: float | None = Field(default=None, ge=0, le=100)
+    foto_zoom: float | None = Field(default=None, ge=1, le=4)
     # None = no tocar los colores; una lista (aunque sea vacía) reemplaza la anterior.
     colores: list[ColorIn] | None = Field(default=None, max_length=20)
 
@@ -84,6 +105,9 @@ class ArticuloOut(Salida):
     nombre: str
     descripcion: str
     imagen_url: str | None
+    foto_x: float = 50
+    foto_y: float = 50
+    foto_zoom: float = 1
     precio_venta: DineroSalida
     stock_minimo: int
     stock: int
@@ -294,6 +318,9 @@ class ArticuloPublico(Salida):
     nombre: str
     descripcion: str
     imagen_url: str | None
+    foto_x: float = 50
+    foto_y: float = 50
+    foto_zoom: float = 1
     precio: DineroSalida
     disponible: bool
     colores: list[ColorOut] = []

@@ -142,12 +142,26 @@ await pagina.getByLabel("Nombre").fill(ARTICULO);
 await pagina.getByLabel("Descripción").fill("Artículo creado por la prueba de punta a punta.");
 await pagina.getByLabel("Precio de venta (COP)").fill("10000");
 await pagina.getByLabel("Avisar si quedan").fill("3");
-await pagina.locator('input[type="file"]').setInputFiles("foto.png");
+await pagina.getByLabel("Elegir foto", { exact: true }).setInputFiles("foto.png");
+// Encuadre: zoom y arrastre sobre la foto principal
+await pagina.locator(".encuadre").first().waitFor();
+await pagina.getByLabel(`Zoom de ${ARTICULO}`).fill("2");
+const caja = await pagina.locator(".encuadre").first().boundingBox();
+await pagina.mouse.move(caja.x + caja.width / 2, caja.y + caja.height / 2);
+await pagina.mouse.down();
+await pagina.mouse.move(caja.x + caja.width / 2 + 40, caja.y + caja.height / 2 + 30, { steps: 6 });
+await pagina.mouse.up();
+await foto("05a-encuadre");
 // Colores: dos, para que el cliente elija
 await pagina.getByRole("button", { name: "+ Agregar color" }).click();
 await pagina.getByLabel("Nombre del color 1").fill("Rojo");
 await pagina.getByRole("button", { name: "+ Agregar color" }).click();
 await pagina.getByLabel("Nombre del color 2").fill("Azul");
+// Foto propia del color Rojo, en HEIC (el color Azul queda sin foto: es opcional)
+await pagina.getByRole("button", { name: "Foto del color Rojo" }).click();
+await pagina.getByLabel("Elegir foto del color").setInputFiles("foto.heic");
+await pagina.getByText(/Foto HEIC lista/).waitFor();
+ok(true, "un archivo HEIC se acepta y avisa que se convierte al guardar");
 await foto("05-articulo-hoja");
 await pagina.getByRole("button", { name: "Guardar" }).click();
 await pagina.locator("button.fila", { hasText: ARTICULO }).waitFor({ timeout: 8000 }).catch(async () => {
@@ -158,6 +172,15 @@ await pagina.locator("button.fila", { hasText: ARTICULO }).waitFor({ timeout: 80
 ok(true, "artículo creado y listado");
 await foto("06-articulos");
 ok(!!(await pagina.locator("button.fila", { hasText: ARTICULO }).locator("img").count()), "la foto subida se ve en la lista");
+await pagina.locator("button.fila", { hasText: ARTICULO }).click();
+await pagina.getByLabel(`Zoom de ${ARTICULO}`).waitFor();
+ok(Number(await pagina.getByLabel(`Zoom de ${ARTICULO}`).inputValue()) === 2, "el zoom elegido quedó guardado");
+await pagina.getByRole("button", { name: "Foto del color Rojo" }).click();
+await pagina.getByLabel("Zoom de el color Rojo").waitFor();
+ok(true, "el HEIC del color se convirtió en el servidor y ya se puede encuadrar");
+await foto("05b-foto-de-color");
+ok((await pagina.getByRole("button", { name: "Foto del color Azul" }).locator("svg").count()) === 1, "el color sin foto no la exige");
+await pagina.getByRole("button", { name: "Cancelar" }).click();
 
 console.log("Producción → inventario");
 await pagina.goto(`${BASE}/panel/produccion`);
@@ -275,7 +298,18 @@ ok(true, "al tocar la tarjeta se amplía la información (descripción)");
 await publica.screenshot({ path: "out/07d-ficha-movil.png" });
 ok((await publica.getByRole("radio").count()) === 2, "la ficha ofrece los 2 colores definidos");
 ok(await publica.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).isDisabled(), "no se puede pedir sin elegir color");
+const imgFicha = publica.locator("dialog[open] .detalle__foto img");
+await imgFicha.waitFor();
+await publica.waitForTimeout(800);
+const srcPrincipal = await imgFicha.getAttribute("src");
+ok((await imgFicha.evaluate((e) => parseFloat(e.style.width))) >= 150, "la ficha aplica el zoom elegido (la misma foto y encuadre que la tarjeta)");
+await publica.getByRole("radio", { name: "Rojo" }).click();
+await publica.waitForTimeout(600);
+ok((await publica.locator("dialog[open] .detalle__foto img").getAttribute("src")) !== srcPrincipal, "al elegir un color con foto propia la ficha muestra esa foto");
+await publica.screenshot({ path: "out/07e-ficha-color.png" });
 await publica.getByRole("radio", { name: "Azul" }).click();
+await publica.waitForTimeout(600);
+ok((await publica.locator("dialog[open] .detalle__foto img").getAttribute("src")) === srcPrincipal, "un color sin foto vuelve a la foto del artículo");
 await publica.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).click();
 await publica.getByLabel("Tu nombre").fill("Cliente de Prueba");
 await publica.getByLabel("Tu WhatsApp").fill("300 123 4567");

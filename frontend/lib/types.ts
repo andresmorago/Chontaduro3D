@@ -19,8 +19,23 @@ export interface UsuarioAdmin {
 }
 
 export interface Color {
+  id: string;
   nombre: string;
   hex: string;
+  imagen_url: string | null;
+  foto_x: number;
+  foto_y: number;
+  foto_zoom: number;
+}
+
+/** Un color tal como se envía al guardar un artículo (con `id` = uno que ya existe). */
+export interface ColorEntrada {
+  id?: string;
+  nombre: string;
+  hex: string;
+  foto_x: number;
+  foto_y: number;
+  foto_zoom: number;
 }
 
 export interface Articulo {
@@ -29,6 +44,9 @@ export interface Articulo {
   nombre: string;
   descripcion: string;
   imagen_url: string | null;
+  foto_x: number;
+  foto_y: number;
+  foto_zoom: number;
   precio_venta: number;
   stock_minimo: number;
   stock: number;
@@ -43,7 +61,10 @@ export interface ArticuloEntrada {
   precio_venta: number;
   stock_minimo: number;
   publicado: boolean;
-  colores: Color[];
+  foto_x: number;
+  foto_y: number;
+  foto_zoom: number;
+  colores: ColorEntrada[];
 }
 
 export interface PrecioHistorial {
@@ -163,6 +184,9 @@ export interface ArticuloPublico {
   nombre: string;
   descripcion: string;
   imagen_url: string | null;
+  foto_x: number;
+  foto_y: number;
+  foto_zoom: number;
   precio: number;
   disponible: boolean;
   colores: Color[];

@@ -7,6 +7,7 @@ import { Entrada } from "@/components/ui/Campo";
 import { Foto } from "@/components/ui/Foto";
 import { Hoja } from "@/components/ui/Hoja";
 import { api } from "@/lib/api";
+import { encuadreDe } from "@/lib/foto";
 import { fechaHora } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import type { Articulo, Movimiento } from "@/lib/types";
@@ -103,7 +104,7 @@ export default function Inventario() {
             const bajo = a.stock <= a.stock_minimo;
             return (
               <button key={a.id} type="button" className={`fila${bajo ? " fila--aviso" : ""}`} onClick={() => setAbierto(a.id)}>
-                <span className="fila__foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} /></span>
+                <span className="fila__foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} enc={encuadreDe(a)} /></span>
                 <span className="fila__titulo">
                   <span className="code muted">{a.codigo}</span>
                   <span className="fila__nombre">{a.nombre}</span>

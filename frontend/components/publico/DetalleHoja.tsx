@@ -8,6 +8,7 @@ import { Foto } from "@/components/ui/Foto";
 import { Hoja } from "@/components/ui/Hoja";
 import { Turnstile } from "@/components/ui/Turnstile";
 import { ErrorApi, api } from "@/lib/api";
+import { encuadreDe } from "@/lib/foto";
 import { dinero } from "@/lib/format";
 import type { ArticuloPublico } from "@/lib/types";
 
@@ -65,6 +66,9 @@ export function DetalleHoja({ articulo, sitekey, onCerrar }: Props) {
   }
 
   const hayColores = (articulo?.colores.length ?? 0) > 0;
+  // Misma foto y encuadre que en la tarjeta; si el color elegido tiene foto propia, se muestra esa.
+  const colorElegido = articulo?.colores.find((c) => c.nombre === color);
+  const fotoFicha = colorElegido?.imagen_url ? { url: colorElegido.imagen_url, enc: encuadreDe(colorElegido) } : { url: articulo?.imagen_url ?? null, enc: articulo ? encuadreDe(articulo) : undefined };
   const falta = hayColores && !color;
   const total = articulo ? articulo.precio * cantidad : 0;
   const enPedido = paso === "pedido" && !hecho;
@@ -140,7 +144,7 @@ export function DetalleHoja({ articulo, sitekey, onCerrar }: Props) {
         </form>
       ) : (
         <div className="detalle">
-          <Foto url={articulo.imagen_url} codigo={articulo.codigo} nombre={articulo.nombre} clase="detalle__foto" />
+          <Foto url={fotoFicha.url} codigo={articulo.codigo} nombre={articulo.nombre} clase="detalle__foto" enc={fotoFicha.enc} />
           <div className="detalle__precio">
             <span className="articulo__precio">{dinero(articulo.precio)}</span>
             <span className={`etiqueta ${articulo.disponible ? "etiqueta--ok" : "etiqueta--tenue"}`}>{articulo.disponible ? "Disponible" : "Sobre pedido"}</span>

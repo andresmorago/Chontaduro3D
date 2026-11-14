@@ -8,15 +8,19 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 from app.config import settings
 
-FORMATOS = {"JPEG", "PNG", "WEBP"}
-LADO_MAXIMO = 1200
+# HEIF = HEIC del iPhone: se lee aquí y se guarda como WebP (el navegador de escritorio no sabe
+# mostrarlo). 2000 px de lado dejan hacer zoom en la interfaz sin que se vea borroso.
+FORMATOS = {"JPEG", "PNG", "WEBP", "HEIF"}
+LADO_MAXIMO = 2000
 PIXELES_MAXIMOS = 40_000_000
 NOMBRE_VALIDO = re.compile(r"^[0-9a-f]{32}\.webp$")
 
 Image.MAX_IMAGE_PIXELS = PIXELES_MAXIMOS
+register_heif_opener()
 
 
 def carpeta() -> Path:
@@ -52,7 +56,7 @@ def _procesar(datos: bytes) -> str:
     try:
         with Image.open(io.BytesIO(datos)) as img:
             if img.format not in FORMATOS:
-                raise _invalida("Solo se aceptan imágenes JPG, PNG o WEBP.")
+                raise _invalida("Solo se aceptan imágenes JPG, PNG, WEBP o HEIC.")
             ancho, alto = img.size
             # Pillow solo avisa (no falla) entre 1× y 2× el tope: se corta ANTES de decodificar.
             if ancho * alto > PIXELES_MAXIMOS:
@@ -68,7 +72,7 @@ def _procesar(datos: bytes) -> str:
             img.save(carpeta() / nombre, "WEBP", quality=82, method=4)
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
         raise _invalida(
-            "No pude leer ese archivo como imagen. Prueba con otro JPG, PNG o WEBP."
+            "No pude leer ese archivo como imagen. Prueba con otro JPG, PNG, WEBP o HEIC."
         ) from None
     return nombre
 

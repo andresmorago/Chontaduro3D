@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, status
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from app.config import settings
 from app.core import auditoria, imagenes
@@ -35,13 +35,33 @@ async def colores_de(db, ids: list[UUID]) -> dict[UUID, list[ColorOut]]:
         .order_by(ArticuloColor.articulo_id, ArticuloColor.orden)
     )
     for c in filas.scalars():
-        resultado[c.articulo_id].append(ColorOut(nombre=c.nombre, hex=c.hex))
+        resultado[c.articulo_id].append(
+            ColorOut(
+                id=c.id,
+                nombre=c.nombre,
+                hex=c.hex,
+                imagen_url=url_imagen(c.imagen),
+                foto_x=c.foto_x,
+                foto_y=c.foto_y,
+                foto_zoom=c.foto_zoom,
+            )  # fmt: skip
+        )
     return resultado
 
 
 def _poner_colores(db, articulo_id: UUID, colores: list[ColorIn]) -> None:
     for n, c in enumerate(colores):
-        db.add(ArticuloColor(articulo_id=articulo_id, orden=n, nombre=c.nombre, hex=c.hex))
+        db.add(
+            ArticuloColor(
+                articulo_id=articulo_id,
+                orden=n,
+                nombre=c.nombre,
+                hex=c.hex,
+                foto_x=c.foto_x,
+                foto_y=c.foto_y,
+                foto_zoom=c.foto_zoom,
+            )  # fmt: skip
+        )
 
 
 async def _salida(db, a: Articulo) -> ArticuloOut:
@@ -52,7 +72,8 @@ async def _salida(db, a: Articulo) -> ArticuloOut:
 def a_salida(a: Articulo, stock: int, colores: list[ColorOut] | None = None) -> ArticuloOut:
     return ArticuloOut(
         id=a.id, codigo=a.codigo, nombre=a.nombre, descripcion=a.descripcion,
-        imagen_url=url_imagen(a.imagen), precio_venta=a.precio_venta,
+        imagen_url=url_imagen(a.imagen), foto_x=a.foto_x, foto_y=a.foto_y, foto_zoom=a.foto_zoom,
+        precio_venta=a.precio_venta,
         stock_minimo=a.stock_minimo, stock=stock, publicado=a.publicado, activo=a.activo,
         colores=colores or [],
     )  # fmt: skip
@@ -96,6 +117,52 @@ async def ver(articulo_id: UUID, db: DB) -> ArticuloOut:
     return await _salida(db, a)
 
 
+async def _reemplazar_colores(db, a: Articulo, colores: list[ColorIn]) -> list[str]:
+    """Deja los colores del artículo como pide la lista. Un color con `id` se conserva (con su
+    foto); sin `id` es nuevo; los que no aparecen se borran. Devuelve las fotos huérfanas."""
+    existentes = {
+        c.id: c
+        for c in (
+            await db.execute(select(ArticuloColor).where(ArticuloColor.articulo_id == a.id))
+        ).scalars()
+    }
+    ids = [c.id for c in colores if c.id is not None]
+    if len(set(ids)) != len(ids) or any(i not in existentes for i in ids):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Hay colores que ya no existen. Recarga e inténtalo.",
+        )
+    conservar = set(ids)
+    huerfanas = []
+    for i, c in existentes.items():
+        if i not in conservar:
+            if c.imagen:
+                huerfanas.append(c.imagen)
+            await db.delete(c)
+    # Dos pasos: los nombres son únicos por artículo y una lista puede intercambiarlos.
+    for i in conservar:
+        existentes[i].nombre = f"~{i.hex[:20]}"
+    await db.flush()
+    for n, c in enumerate(colores):
+        if c.id is None:
+            db.add(
+                ArticuloColor(
+                    articulo_id=a.id,
+                    orden=n,
+                    nombre=c.nombre,
+                    hex=c.hex,
+                    foto_x=c.foto_x,
+                    foto_y=c.foto_y,
+                    foto_zoom=c.foto_zoom,
+                )  # fmt: skip
+            )
+            continue
+        o = existentes[c.id]
+        o.orden, o.nombre, o.hex = n, c.nombre, c.hex
+        o.foto_x, o.foto_y, o.foto_zoom = c.foto_x, c.foto_y, c.foto_zoom
+    return huerfanas
+
+
 @router.patch("/{articulo_id}", response_model=ArticuloOut)
 async def actualizar(
     articulo_id: UUID, datos: ArticuloUpdate, db: DB, usuario: Admin
@@ -105,7 +172,10 @@ async def actualizar(
     cambios = datos.model_dump(exclude_unset=True)
     colores = datos.colores if "colores" in cambios else None
     cambios.pop("colores", None)
-    for campo in ("nombre", "precio_venta", "stock_minimo", "publicado", "activo"):
+    for campo in (
+        "nombre", "precio_venta", "stock_minimo", "publicado", "activo",
+        "foto_x", "foto_y", "foto_zoom",
+    ):  # fmt: skip
         if campo in cambios and cambios[campo] is None:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, f"{campo} no puede quedar vacío."
@@ -125,15 +195,16 @@ async def actualizar(
         )  # fmt: skip
     if cambios.get("activo") is False:
         a.publicado = False  # un artículo archivado no se muestra al público
+    fotos_a_borrar: list[str] = []
     if colores is not None:
-        # Los pedidos guardan el nombre del color como texto: reemplazar la lista no rompe nada.
-        await db.execute(delete(ArticuloColor).where(ArticuloColor.articulo_id == a.id))
-        _poner_colores(db, a.id, colores)
+        fotos_a_borrar = await _reemplazar_colores(db, a, colores)
         auditoria.registrar(
             db, "colores_cambiados", usuario_id=usuario.id,
             detalle={"codigo": a.codigo, "colores": [c.nombre for c in colores]},
         )  # fmt: skip
     await db.commit()
+    for nombre in fotos_a_borrar:  # solo después de confirmar: nunca dejar un color sin su foto
+        imagenes.borrar(nombre)
     return await _salida(db, a)
 
 
@@ -148,17 +219,21 @@ async def historial_de_precios(articulo_id: UUID, db: DB) -> list[PrecioHistoria
     return list(filas.scalars())
 
 
-@router.put("/{articulo_id}/imagen", response_model=ArticuloOut)
-async def subir_imagen(
-    articulo_id: UUID, archivo: UploadFile, request: Request, db: DB
-) -> ArticuloOut:
-    # Rechazo temprano por tamaño declarado (antes de leer el cuerpo entero).
+def _exigir_tamano(request: Request) -> None:
+    """Rechazo temprano por tamaño declarado (antes de leer el cuerpo entero)."""
     declarado = request.headers.get("content-length", "0")
     if declarado.isdigit() and int(declarado) > (settings.max_upload_mb + 1) * 1024 * 1024:
         raise HTTPException(
             status.HTTP_413_CONTENT_TOO_LARGE,
             f"La imagen pesa más de {settings.max_upload_mb} MB. Achícala e inténtalo de nuevo.",
         )
+
+
+@router.put("/{articulo_id}/imagen", response_model=ArticuloOut)
+async def subir_imagen(
+    articulo_id: UUID, archivo: UploadFile, request: Request, db: DB
+) -> ArticuloOut:
+    _exigir_tamano(request)
     await bloquear_articulos(db, [articulo_id])
     a = await _obtener(db, articulo_id)
     nueva = await imagenes.guardar(archivo)
@@ -177,6 +252,44 @@ async def quitar_imagen(articulo_id: UUID, db: DB) -> ArticuloOut:
     await bloquear_articulos(db, [articulo_id])
     a = await _obtener(db, articulo_id)
     anterior, a.imagen = a.imagen, None
+    await db.commit()
+    imagenes.borrar(anterior)
+    return await _salida(db, a)
+
+
+async def _color_de(db, articulo_id: UUID, color_id: UUID) -> ArticuloColor:
+    c = await db.get(ArticuloColor, color_id)
+    if c is None or c.articulo_id != articulo_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese color no existe.")
+    return c
+
+
+@router.put("/{articulo_id}/colores/{color_id}/imagen", response_model=ArticuloOut)
+async def subir_imagen_de_color(
+    articulo_id: UUID, color_id: UUID, archivo: UploadFile, request: Request, db: DB
+) -> ArticuloOut:
+    """Foto opcional de un color: si la tiene, el catálogo la muestra al elegir ese color."""
+    _exigir_tamano(request)
+    await bloquear_articulos(db, [articulo_id])
+    a = await _obtener(db, articulo_id)
+    c = await _color_de(db, articulo_id, color_id)
+    nueva = await imagenes.guardar(archivo)
+    anterior, c.imagen = c.imagen, nueva
+    try:
+        await db.commit()
+    except Exception:
+        imagenes.borrar(nueva)
+        raise
+    imagenes.borrar(anterior)
+    return await _salida(db, a)
+
+
+@router.delete("/{articulo_id}/colores/{color_id}/imagen", response_model=ArticuloOut)
+async def quitar_imagen_de_color(articulo_id: UUID, color_id: UUID, db: DB) -> ArticuloOut:
+    await bloquear_articulos(db, [articulo_id])
+    a = await _obtener(db, articulo_id)
+    c = await _color_de(db, articulo_id, color_id)
+    anterior, c.imagen = c.imagen, None
     await db.commit()
     imagenes.borrar(anterior)
     return await _salida(db, a)

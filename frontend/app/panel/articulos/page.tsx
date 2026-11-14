@@ -6,6 +6,7 @@ import { Foto } from "@/components/ui/Foto";
 import { Icono } from "@/components/ui/Icono";
 import { ArticuloHoja } from "@/components/panel/ArticuloHoja";
 import { api } from "@/lib/api";
+import { encuadreDe } from "@/lib/foto";
 import { dinero } from "@/lib/format";
 import { useCargar } from "@/lib/hooks";
 import type { Articulo } from "@/lib/types";
@@ -56,7 +57,7 @@ export default function Articulos() {
         <div className="lista lista--tarjetas">
           {lista.map((a) => (
             <button key={a.id} type="button" className="fila" onClick={() => setObjetivo(a)} style={!a.activo ? { opacity: 0.6 } : undefined}>
-              <span className="fila__foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} /></span>
+              <span className="fila__foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} enc={encuadreDe(a)} /></span>
               <span className="fila__titulo">
                 <span className="code muted">{a.codigo}</span>
                 <span className="fila__nombre">{a.nombre}</span>

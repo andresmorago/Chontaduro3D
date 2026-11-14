@@ -19,6 +19,7 @@ dependencies = [
     "tzdata>=2025.2",
     "httpx>=0.28",
     "paho-mqtt>=2.1",
+    "pillow-heif>=1.0",
 ]
 
 [project.optional-dependencies]

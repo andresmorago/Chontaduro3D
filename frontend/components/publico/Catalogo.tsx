@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { Foto } from "@/components/ui/Foto";
 import { Icono } from "@/components/ui/Icono";
+import { encuadreDe } from "@/lib/foto";
 import { enlaceWhatsapp } from "@/lib/format";
 import type { ArticuloPublico } from "@/lib/types";
 import { DetalleHoja } from "./DetalleHoja";
@@ -80,7 +81,7 @@ export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
               {visibles.map((a) => (
                 <li key={a.id} className="articulo">
                   <button type="button" className="articulo__boton" onClick={() => setElegido(a)} aria-label={`Ver ${a.nombre}`}>
-                    <Foto url={a.imagen_url} codigo={a.codigo} nombre="" clase="articulo__foto" />
+                    <Foto url={a.imagen_url} codigo={a.codigo} nombre="" clase="articulo__foto" enc={encuadreDe(a)} />
                     <span className="articulo__nombre">{a.nombre}</span>
                   </button>
                 </li>

@@ -136,3 +136,7 @@
 .energia-propia summary { cursor: pointer; font-weight: 700; font-size: var(--text-sm); min-height: 44px; display: flex; align-items: center; }
 .energia-propia summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .energia-propia[open] { display: grid; gap: var(--space-sm); }
+
+/* Foto con encuadre: la imagen se coloca y escala en % del cuadro (ver lib/foto.ts). */
+.foto img.foto__enc { inset: auto; max-width: none; object-fit: fill; }
+.foto img.foto__enc--medir { inset: 0; width: 100%; height: 100%; opacity: 0; }

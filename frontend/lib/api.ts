@@ -182,6 +182,12 @@ export const api = {
       return pedir<Articulo>(`/articulos/${id}/imagen`, { metodo: "PUT", formulario: f });
     },
     quitarImagen: (id: string) => pedir<Articulo>(`/articulos/${id}/imagen`, { metodo: "DELETE" }),
+    subirImagenColor: (id: string, colorId: string, archivo: File) => {
+      const f = new FormData();
+      f.append("archivo", archivo);
+      return pedir<Articulo>(`/articulos/${id}/colores/${colorId}/imagen`, { metodo: "PUT", formulario: f });
+    },
+    quitarImagenColor: (id: string, colorId: string) => pedir<Articulo>(`/articulos/${id}/colores/${colorId}/imagen`, { metodo: "DELETE" }),
   },
   produccion: {
     listar: (limite = 30) => pedir<Produccion[]>(`/produccion${q({ limite })}`),

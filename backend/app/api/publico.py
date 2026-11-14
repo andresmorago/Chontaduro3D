@@ -45,7 +45,8 @@ async def catalogo(db: DB) -> CatalogoPublico:
         articulos=[
             ArticuloPublico(
                 id=a.id, codigo=a.codigo, nombre=a.nombre, descripcion=a.descripcion,
-                imagen_url=url_imagen(a.imagen), precio=a.precio_venta, disponible=stock[a.id] > 0,
+                imagen_url=url_imagen(a.imagen), foto_x=a.foto_x, foto_y=a.foto_y,
+                foto_zoom=a.foto_zoom, precio=a.precio_venta, disponible=stock[a.id] > 0,
                 colores=colores[a.id],
             )
             for a in articulos

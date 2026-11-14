@@ -24,7 +24,7 @@ async def test_subir_y_servir_imagen(admin, publico):
     img = await publico.get(url)  # el catálogo público la ve sin sesión
     assert img.status_code == 200 and img.headers["content-type"] == "image/webp"
     with Image.open(io.BytesIO(img.content)) as im:
-        assert max(im.size) <= 1200 and im.format == "WEBP"
+        assert max(im.size) <= 2000 and im.format == "WEBP"
 
 
 async def test_reemplazar_borra_la_anterior(admin, publico):
