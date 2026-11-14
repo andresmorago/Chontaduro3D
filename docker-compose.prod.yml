@@ -67,6 +67,28 @@ services:
       start_period: 40s
     restart: always
 
+  # Impresora Bambu Lab A1 (por la VPN a la red local): detecta los trabajos, guarda el estado y
+  # atiende los controles del panel. Es el ÚNICO servicio con las credenciales de la impresora.
+  impresora:
+    build:
+      context: ./backend
+      target: runtime
+    # Sin arrancar.sh: la migración la hace el backend, que este servicio espera sano.
+    entrypoint: ["python", "-m", "app.impresora.servicio"]
+    environment:
+      TZ: America/Bogota
+      # No firma nada ni sirve a nadie: usa la configuración de desarrollo (sin SECRET_KEY).
+      APP_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      BAMBU_IP: ${BAMBU_IP:-}
+      BAMBU_SERIAL: ${BAMBU_SERIAL:-}
+      BAMBU_ACCESS_CODE: ${BAMBU_ACCESS_CODE:-}
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+
   frontend:
     build:
       context: ./frontend

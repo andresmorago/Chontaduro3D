@@ -216,6 +216,48 @@ const viejo = (await pagina.locator(".lista .fila__meta").filter({ hasText: "sol
 ok(viejo.includes("solo historial"), `el lote viejo queda en el historial como «solo historial» (${viejo.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "una carga histórica sin sumar NO cambia el inventario de hoy");
 
+console.log("Trabajos de la impresora → producción");
+await pagina.goto(`${BASE}/panel/produccion`);
+const trabA = pagina.locator(".trabajo", { hasText: "E2E trabajo A" });
+await trabA.waitFor();
+const metaA = (await trabA.locator(".trabajo__meta").innerText()).replace(/\u00a0/g, " ");
+ok(metaA.includes("2 h 5 min (estimado)") && metaA.includes("42,5 g (estimado)"), `el trabajo muestra tiempo y gramos del archivo (${metaA.replace(/\n/g, " ")})`);
+await foto("07e-trabajos-impresora");
+await trabA.getByRole("button", { name: /Importar el trabajo/ }).click();
+await pagina.getByText(/Datos del trabajo/).waitFor();
+ok((await pagina.getByLabel("Horas").inputValue()) === "2" && (await pagina.getByLabel("Minutos").inputValue()) === "5", "importar rellena horas y minutos (2 h 5 min)");
+ok((await pagina.locator(".filtiempo").innerText()).replace(/\u00a0/g, " ").includes("42,5 g"), "con dos colores rellena el desglose por filamento (total 42,5 g)");
+await pagina.locator("button.ficha", { hasText: ARTICULO }).click();
+await pagina.getByLabel("Sumar al inventario actual").uncheck();
+await foto("07f-trabajo-importado");
+await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
+await pagina.getByText(/sin sumar al stock/).waitFor();
+await pagina.locator(".trabajo", { hasText: "E2E trabajo A" }).waitFor({ state: "detached" });
+ok(true, "el trabajo importado sale de la bandeja");
+ok((await pagina.locator(".lista .fila__meta").filter({ hasText: "de la impresora" }).count()) >= 1, "el lote queda marcado «de la impresora»");
+ok((await stockDe(ARTICULO)) === 3, "importar sin sumar no cambia el inventario");
+await pagina.goto(`${BASE}/panel/produccion`);
+const trabB = pagina.locator(".trabajo", { hasText: "E2E trabajo B" });
+await trabB.getByRole("button", { name: /Ignorar el trabajo/ }).click();
+await pagina.getByText(/Trabajo ignorado/).waitFor();
+await pagina.getByRole("button", { name: "Ignorados" }).click();
+await pagina.locator(".trabajo", { hasText: "E2E trabajo B" }).getByRole("button", { name: /Restaurar/ }).click();
+await pagina.getByText(/devuelto a la lista/).waitFor();
+await pagina.getByRole("button", { name: "Por revisar" }).click();
+await pagina.locator(".trabajo", { hasText: "E2E trabajo B" }).waitFor();
+ok(true, "ignorar y restaurar un trabajo funciona");
+
+console.log("Administración → Impresora");
+await pagina.goto(`${BASE}/panel/administracion`);
+await pagina.getByRole("link", { name: "Impresora" }).click();
+await pagina.getByRole("heading", { name: "Controles" }).waitFor();
+await pagina.locator(".impresora-estado").waitFor();
+await foto("07g-impresora");
+const estadoImp = (await pagina.locator(".impresora-estado").innerText()).replace(/\u00a0/g, " ");
+ok(/Lista|Imprimiendo|En pausa|Terminada|Preparando|Fallida|Sin conexión/.test(estadoImp), `la página de la impresora muestra su estado (${estadoImp.split("\n")[0]})`);
+ok((await pagina.getByRole("button", { name: /luz/ }).count()) === 1, "hay control de luz");
+ok((await pagina.getByRole("link", { name: "Cuenta y usuarios" }).count()) === 1, "las pestañas de Administración están");
+
 console.log("Pedido público (no debe tocar el inventario)");
 const contextoPublico = await navegador.newContext({ viewport: { width: 375, height: 800 }, locale: "es-CO" });
 const publica = await contextoPublico.newPage();
@@ -275,7 +317,7 @@ await pagina.getByText(/solo quedan 3/).waitFor();
 ok(true, "no deja vender más de lo que hay y lo explica");
 
 console.log("Responsive del panel");
-for (const ruta of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos", "/administracion"]) {
+for (const ruta of ["", "/vender", "/produccion", "/inventario", "/articulos", "/pedidos", "/administracion", "/administracion/impresora"]) {
   await pagina.goto(`${BASE}/panel${ruta}`);
   await pagina.getByRole("heading", { level: 1 }).waitFor();
   for (const w of [320, 375, 414, 768]) {
@@ -283,7 +325,7 @@ for (const ruta of ["", "/vender", "/produccion", "/inventario", "/articulos", "
     ok(bien, `/panel${ruta} sin scroll horizontal a ${w}px`);
   }
   await pagina.setViewportSize({ width: 375, height: 800 });
-  await pagina.screenshot({ path: `out/m${ruta.replace("/", "-") || "-inicio"}.png` });
+  await pagina.screenshot({ path: `out/m${ruta.replaceAll("/", "-") || "-inicio"}.png` });
   await pagina.setViewportSize({ width: 1280, height: 900 });
 }
 

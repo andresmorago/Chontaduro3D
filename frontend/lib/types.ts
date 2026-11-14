@@ -82,9 +82,11 @@ export interface Produccion {
   precio_kwh: number | null;
   kwh: number | null;
   costo_energia: number | null;
+  desde_impresora: string | null;
 }
 
 export interface ExtraProduccion {
+  trabajo_id?: string;
   fecha?: string;
   afecta_inventario?: boolean;
   precio_kwh?: number;
@@ -197,4 +199,78 @@ export interface Panel {
   pedidos_nuevos: number;
   articulos_activos: number;
   unidades_en_stock: number;
+}
+
+// --- Impresora 3D (Bambu Lab A1) ---------------------------------------------
+export interface BandejaAms {
+  id: string;
+  vacia: boolean;
+  tipo: string | null;
+  color: string | null;
+  restante: number | null;
+  en_uso: boolean;
+}
+
+export type EstadoMaquina = "lista" | "preparando" | "imprimiendo" | "pausada" | "terminada" | "fallida" | "desconocido";
+
+export interface DatosImpresora {
+  estado: EstadoMaquina;
+  trabajo: string | null;
+  progreso: number | null;
+  capa: number | null;
+  capas: number | null;
+  restante_min: number | null;
+  boquilla: number | null;
+  boquilla_objetivo: number | null;
+  cama: number | null;
+  cama_objetivo: number | null;
+  boquilla_mm: string | null;
+  velocidad: number | null;
+  luz: "on" | "off" | null;
+  wifi: string | null;
+  error: number;
+  alertas: number;
+  ams: BandejaAms[];
+  externa: BandejaAms | null;
+}
+
+export interface Impresora {
+  servicio_activo: boolean;
+  conectada: boolean;
+  actualizado_en: string | null;
+  datos: DatosImpresora | null;
+  trabajos_pendientes: number;
+}
+
+export type ComandoImpresora = "pausar" | "reanudar" | "cancelar" | "luz" | "velocidad";
+
+export interface OrdenImpresora {
+  id: number;
+  comando: ComandoImpresora;
+  valor: string | null;
+  estado: "pendiente" | "enviado" | "fallido" | "vencido";
+  detalle: string | null;
+}
+
+export interface FilamentoTrabajo {
+  tipo: string;
+  color: string | null;
+  gramos: number;
+}
+
+export interface TrabajoImpresora {
+  id: string;
+  nombre: string;
+  estado: "en_curso" | "terminado" | "interrumpido";
+  gestion: "pendiente" | "importado" | "ignorado";
+  inicio_en: string;
+  fin_en: string | null;
+  fecha: string;
+  progreso: number;
+  minutos: number | null;
+  minutos_origen: "medido" | "estimado" | null;
+  minutos_estimados: number | null;
+  gramos_total: number | null;
+  filamentos: FilamentoTrabajo[];
+  produccion_id: string | null;
 }

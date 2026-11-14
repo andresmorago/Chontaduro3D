@@ -1,0 +1,233 @@
+"""El servicio de la impresora con una impresora de mentira: estado, trabajos y órdenes."""
+
+from datetime import UTC, datetime
+
+import pytest
+from sqlalchemy import select
+
+from app.impresora import lector3mf
+from app.impresora.servicio import Servicio
+from app.models import ComandoImpresora, EstadoImpresora, TrabajoImpresora
+
+
+class FalsoCliente:
+    def __init__(self):
+        self.estado: dict = {}
+        self.conectada = True
+        self.ultimo_mensaje = datetime.now(UTC)
+        self.enviadas: list = []
+        self.fallar = False
+
+    def crudo(self):
+        return dict(self.estado)
+
+    def enviar(self, comando, valor=None):
+        self.enviadas.append((comando, valor))
+        return not self.fallar
+
+    def pedir_todo(self):
+        pass
+
+
+@pytest.fixture
+def cliente():
+    return FalsoCliente()
+
+
+@pytest.fixture
+def servicio(cliente, monkeypatch):
+    llamadas = []
+
+    def falso(ip, codigo, archivo, nombre, plate=None):
+        llamadas.append((archivo, nombre))
+        return lector3mf.InfoArchivo(
+            plate=1, minutos=90, gramos=12.5,
+            filamentos=[{"tipo": "PLA", "color": "#ff0000", "gramos": 12.5}],
+        )  # fmt: skip
+
+    monkeypatch.setattr(lector3mf, "leer_de_la_impresora", falso)
+    s = Servicio(cliente)
+    s.llamadas = llamadas
+    return s
+
+
+def poner(cliente, estado, nombre="Soporte", tarea="77", progreso=0):
+    cliente.estado = {"gcode_state": estado, "subtask_name": nombre, "gcode_file": f"{nombre}.3mf",
+                      "task_id": tarea, "mc_percent": progreso}  # fmt: skip
+
+
+async def trabajos(db):
+    db.expire_all()
+    return (
+        (await db.execute(select(TrabajoImpresora).order_by(TrabajoImpresora.inicio_en)))
+        .scalars()
+        .all()
+    )
+
+
+async def test_ciclo_completo_de_un_trabajo(servicio, cliente, db):
+    poner(cliente, "IDLE")
+    await servicio._seguir_trabajos()
+    assert await trabajos(db) == []
+
+    poner(cliente, "RUNNING", progreso=10)
+    await servicio._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert t.estado == "en_curso" and t.inicio_observado is True and t.nombre == "Soporte"
+    assert t.gramos_total == 12.5 and t.minutos_estimados == 90  # leído del .3mf al empezar
+
+    poner(cliente, "RUNNING", progreso=60)
+    await servicio._seguir_trabajos()
+    assert (await trabajos(db))[0].progreso == 60 and len(await trabajos(db)) == 1
+
+    poner(cliente, "FINISH", progreso=100)
+    await servicio._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert t.estado == "terminado" and t.fin_en is not None and t.progreso == 100
+    assert t.gestion == "pendiente" and t.filamentos[0]["color"] == "#ff0000"
+
+    # El estado FINISH persiste en la impresora: no se crea ni se duplica nada.
+    await servicio._seguir_trabajos()
+    assert len(await trabajos(db)) == 1
+
+
+async def test_cancelado_queda_interrumpido_con_su_progreso(servicio, cliente, db):
+    poner(cliente, "IDLE")
+    await servicio._seguir_trabajos()
+    poner(cliente, "RUNNING", progreso=40)
+    await servicio._seguir_trabajos()
+    poner(cliente, "FAILED", progreso=40)
+    await servicio._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert t.estado == "interrumpido" and t.progreso == 40
+
+
+async def test_servicio_que_arranca_con_un_trabajo_ya_andando(servicio, cliente, db):
+    poner(cliente, "RUNNING", progreso=85)
+    await servicio._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert t.inicio_observado is False  # el inicio real no se vio: el tiempo medido no es confiable
+
+
+async def test_un_finish_viejo_al_arrancar_no_crea_trabajo(servicio, cliente, db):
+    poner(cliente, "FINISH", progreso=100)
+    await servicio._seguir_trabajos()
+    assert await trabajos(db) == []
+
+
+async def test_reinicio_del_servicio_continua_el_mismo_trabajo(cliente, monkeypatch, db):
+    monkeypatch.setattr(lector3mf, "leer_de_la_impresora", lambda *a, **k: None)
+    poner(cliente, "IDLE")
+    s1 = Servicio(cliente)
+    await s1._seguir_trabajos()
+    poner(cliente, "RUNNING", progreso=20)
+    await s1._seguir_trabajos()
+    s2 = Servicio(cliente)  # se reinicia a mitad del trabajo
+    poner(cliente, "RUNNING", progreso=50)
+    await s2._seguir_trabajos()
+    poner(cliente, "FINISH", progreso=100)
+    await s2._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert (
+        t.estado == "terminado" and t.inicio_observado is True
+    )  # sigue siendo el mismo, con su inicio real
+
+
+async def test_sin_3mf_el_trabajo_queda_sin_gramos_para_ponerlos_a_mano(cliente, monkeypatch, db):
+    intentos = []
+    monkeypatch.setattr(lector3mf, "leer_de_la_impresora", lambda *a, **k: intentos.append(1))
+    s = Servicio(cliente)
+    poner(cliente, "IDLE")
+    await s._seguir_trabajos()
+    poner(cliente, "RUNNING")
+    await s._seguir_trabajos()
+    poner(cliente, "FINISH", progreso=100)
+    await s._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert t.estado == "terminado" and t.gramos_total is None
+    assert len(intentos) == 2  # al empezar y una última vez al terminar
+
+
+async def test_error_leyendo_el_archivo_no_rompe_el_seguimiento(cliente, monkeypatch, db):
+    def falla(*a, **k):
+        raise OSError("sin red")
+
+    monkeypatch.setattr(lector3mf, "leer_de_la_impresora", falla)
+    s = Servicio(cliente)
+    poner(cliente, "IDLE")
+    await s._seguir_trabajos()
+    poner(cliente, "RUNNING")
+    await s._seguir_trabajos()
+    poner(cliente, "FINISH", progreso=100)
+    await s._seguir_trabajos()
+    assert (await trabajos(db))[0].estado == "terminado"
+
+
+async def test_trabajo_nuevo_cierra_el_anterior_que_no_se_vio_terminar(servicio, cliente, db):
+    poner(cliente, "RUNNING", nombre="Uno", tarea="1")
+    await servicio._seguir_trabajos()
+    poner(cliente, "RUNNING", nombre="Dos", tarea="2")
+    await servicio._seguir_trabajos()
+    uno, dos = await trabajos(db)
+    assert (uno.nombre, uno.estado, dos.nombre, dos.estado) == (
+        "Uno",
+        "interrumpido",
+        "Dos",
+        "en_curso",
+    )
+
+
+async def test_escribe_el_estado_normalizado(servicio, cliente, db):
+    poner(cliente, "RUNNING", progreso=33)
+    await servicio._escribir_estado()
+    fila = await db.get(EstadoImpresora, 1)
+    assert (
+        fila.conectada is True
+        and fila.datos["estado"] == "imprimiendo"
+        and fila.datos["progreso"] == 33
+    )
+    cliente.conectada = False
+    servicio._ultimo_estado = None
+    await servicio._escribir_estado()
+    await db.refresh(fila)
+    assert fila.conectada is False
+
+
+async def test_atiende_ordenes_y_deja_vencer_las_viejas(servicio, cliente, db):
+    from datetime import timedelta
+
+    from app.core.tokens import ahora
+
+    db.add_all([
+        ComandoImpresora(comando="pausar"),
+        ComandoImpresora(comando="luz", valor="off"),
+        ComandoImpresora(comando="cancelar", creado_en=ahora() - timedelta(minutes=5)),
+    ])  # fmt: skip
+    await db.commit()
+    await servicio._atender_ordenes()
+    db.expire_all()
+    estados = {o.comando: o.estado for o in (await db.execute(select(ComandoImpresora))).scalars()}
+    assert estados == {"pausar": "enviado", "luz": "enviado", "cancelar": "vencido"}
+    assert cliente.enviadas == [("pausar", None), ("luz", "off")]  # la vieja NO se ejecutó
+
+
+async def test_orden_sin_conexion_o_con_error_queda_fallida(servicio, cliente, db):
+    db.add_all([ComandoImpresora(comando="pausar")])
+    await db.commit()
+    cliente.conectada = False
+    await servicio._atender_ordenes()
+    db.expire_all()
+    o = (await db.execute(select(ComandoImpresora))).scalar_one()
+    assert o.estado == "fallido" and "no está conectada" in o.detalle
+    assert cliente.enviadas == []
+    db.add(ComandoImpresora(comando="reanudar"))
+    await db.commit()
+    cliente.conectada, cliente.fallar = True, True
+    await servicio._atender_ordenes()
+    db.expire_all()
+    ultimo = (
+        (await db.execute(select(ComandoImpresora).order_by(ComandoImpresora.id.desc())))
+        .scalars()
+        .first()
+    )
+    assert ultimo.estado == "fallido"

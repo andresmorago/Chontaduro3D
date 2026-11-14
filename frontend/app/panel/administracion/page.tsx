@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
+import { AdminPestanas } from "@/components/panel/AdminPestanas";
 import { CampoClave } from "@/components/panel/CampoClave";
 import { UsuarioGestionHoja } from "@/components/panel/UsuarioGestionHoja";
 import { UsuarioNuevoHoja } from "@/components/panel/UsuarioNuevoHoja";
@@ -52,6 +53,7 @@ export default function Administracion() {
       <div className="pagina-cab">
         <h1>Administración</h1>
         <p className="lead">Quién puede entrar al panel y cómo cuidar tu contraseña.</p>
+        <AdminPestanas />
       </div>
 
       <section className="seccion" aria-labelledby="t-cuenta">

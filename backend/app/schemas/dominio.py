@@ -129,6 +129,8 @@ class ProduccionIn(Entrada):
     potencia_w: Decimal | None = Field(
         default=None, gt=0, le=Decimal("20000"), max_digits=8, decimal_places=1
     )
+    # Importar un trabajo de la impresora como este lote (solo al crear; al editar se ignora).
+    trabajo_id: UUID | None = None
 
 
 class ProduccionItemOut(Salida):
@@ -158,6 +160,8 @@ class ProduccionOut(Salida):
     precio_kwh: Numero | None = None
     kwh: Numero | None = None
     costo_energia: Numero | None = None
+    # Nombre del trabajo de la impresora de donde salió este lote (si se importó).
+    desde_impresora: str | None = None
 
 
 class ParametrosIn(Entrada):

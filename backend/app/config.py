@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     turnstile_secretkey: str = ""
     turnstile_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
+    # Impresora Bambu Lab (solo las usa el servicio `impresora`; el backend web no las recibe).
+    bambu_ip: str = ""
+    bambu_serial: str = ""
+    bambu_access_code: str = ""
+
     @field_validator("cookie_secure", mode="before")
     @classmethod
     def _cookie_secure_vacio(cls, v):

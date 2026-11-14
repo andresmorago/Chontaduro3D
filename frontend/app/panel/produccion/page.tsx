@@ -7,13 +7,14 @@ import { Contador } from "@/components/ui/Contador";
 import { Entrada } from "@/components/ui/Campo";
 import { LoteEditarHoja } from "@/components/panel/LoteEditarHoja";
 import { FilamentoTiempo } from "@/components/panel/FilamentoTiempo";
+import { TrabajosImpresora } from "@/components/panel/TrabajosImpresora";
 import { ParametrosHoja } from "@/components/panel/ParametrosHoja";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
 import { dinero, fechaCorta, hoyISO, restarDias } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
-import { aExtra, gramos, kwhTexto, loteVacio, tiempoLargo } from "@/lib/produccion";
-import type { Articulo, Produccion as Lote } from "@/lib/types";
+import { aExtra, gramos, kwhTexto, loteDesdeTrabajo, loteVacio, tiempoLargo } from "@/lib/produccion";
+import type { Articulo, Produccion as Lote, TrabajoImpresora } from "@/lib/types";
 
 export default function Produccion() {
   const { mostrar } = useAvisos();
@@ -32,6 +33,9 @@ export default function Produccion() {
   const [nota, setNota] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState<Lote | null>(null);
+  // Trabajo de la impresora que se está importando como este lote (y contador para recargar la bandeja).
+  const [trabajo, setTrabajo] = useState<TrabajoImpresora | null>(null);
+  const [version, setVersion] = useState(0);
 
   const lista = articulos.datos ?? [];
   const porId = new Map(lista.map((a) => [a.id, a]));
@@ -46,6 +50,20 @@ export default function Produccion() {
       return n <= 0 ? resto : { ...m, [id]: n };
     });
 
+  function usarTrabajo(t: TrabajoImpresora) {
+    setTrabajo(t);
+    setLote(loteDesdeTrabajo(t));
+    setNota(t.nombre);
+    mostrar(`Cargué fecha, tiempo y filamento de «${t.nombre}». Elige qué piezas salieron y cuántas.`);
+    document.getElementById("ticket")?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
+  function soltarTrabajo() {
+    setTrabajo(null);
+    setLote(loteVacio(lote.fecha));
+    setNota("");
+  }
+
   async function registrar() {
     if (items.length === 0) return;
     const conv = aExtra(lote);
@@ -55,9 +73,11 @@ export default function Produccion() {
     }
     setEnviando(true);
     try {
-      await api.produccion.registrar(items.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined, conv.extra);
+      await api.produccion.registrar(items.map(([articulo_id, cantidad]) => ({ articulo_id, cantidad })), nota.trim() || undefined, trabajo ? { ...conv.extra, trabajo_id: trabajo.id } : conv.extra);
       setCantidades({});
       setNota("");
+      setTrabajo(null);
+      setVersion((n) => n + 1);
       // Se conserva la fecha elegida: al cargar varios lotes del mismo día no hay que volver a ponerla.
       const fechaUsada = lote.fecha;
       const sumo = lote.sumar;
@@ -116,6 +136,12 @@ export default function Produccion() {
               <span className="muted">Total del lote</span>
               <strong>{unidades === 1 ? "1 pieza" : `${unidades} piezas`}</strong>
             </div>
+            {trabajo && (
+              <div className="vinculo-trabajo">
+                <span>Datos del trabajo <strong>«{trabajo.nombre}»</strong> de la impresora.</span>
+                <Boton variante="ghost" pequeno onClick={soltarTrabajo}>Quitar</Boton>
+              </div>
+            )}
             <div className="cuando">
               <label className="field">
                 <span className="field__label">Fecha de producción</span>
@@ -149,6 +175,8 @@ export default function Produccion() {
         </div>
       )}
 
+      <TrabajosImpresora usandoId={trabajo?.id ?? null} onUsar={usarTrabajo} refrescar={version} />
+
       <section className="seccion" aria-labelledby="t-hist">
         <h2 id="t-hist">Últimos lotes</h2>
         {(historial.datos ?? []).length === 0 ? (
@@ -167,6 +195,7 @@ export default function Produccion() {
                     {p.costo_energia != null ? ` · ${dinero(p.costo_energia)}` : ""}
                     {p.nota ? ` · ${p.nota}` : ""}
                     {!p.afecta_inventario ? " · solo historial" : ""}
+                    {p.desde_impresora ? " · de la impresora" : ""}
                   </span>
                   {p.filamentos.length > 1 && (
                     <span className="fila__meta">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>

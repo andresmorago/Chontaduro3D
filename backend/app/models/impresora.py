@@ -1,0 +1,112 @@
+import uuid
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db import Base
+from app.models.base import MarcaDeTiempo, uuid_pk
+
+ESTADOS_TRABAJO = ("en_curso", "terminado", "interrumpido")
+GESTION_TRABAJO = ("pendiente", "importado", "ignorado")
+COMANDOS = ("pausar", "reanudar", "cancelar", "luz", "velocidad")
+ESTADOS_COMANDO = ("pendiente", "enviado", "fallido", "vencido")
+
+
+def _en(columna: str, valores: tuple[str, ...]) -> str:
+    return f"{columna} IN ({', '.join(repr(v) for v in valores)})"
+
+
+class TrabajoImpresora(MarcaDeTiempo, Base):
+    """Un trabajo de la impresora 3D, detectado por el servicio `impresora`.
+
+    Los gramos y el tiempo estimado salen del archivo .3mf (lo que calculó el slicer); el tiempo
+    medido es lo que la impresora estuvo ocupada, si se vio el inicio. No todo trabajo es una
+    producción: la persona elige cuáles importar (`gestion`)."""
+
+    __tablename__ = "trabajos_impresora"
+    __table_args__ = (
+        CheckConstraint(_en("estado", ESTADOS_TRABAJO), name="estado_valido"),
+        CheckConstraint(_en("gestion", GESTION_TRABAJO), name="gestion_valida"),
+        Index("ix_trabajos_impresora_gestion_fin", "gestion", "fin_en"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    nombre: Mapped[str] = mapped_column(String(200), nullable=False)
+    archivo: Mapped[str | None] = mapped_column(String(300))
+    # Identificador que la impresora da al trabajo (task_id); "" / "0" si no lo trae.
+    tarea_id: Mapped[str] = mapped_column(String(40), server_default="", nullable=False)
+    estado: Mapped[str] = mapped_column(String(12), server_default="en_curso", nullable=False)
+    gestion: Mapped[str] = mapped_column(String(10), server_default="pendiente", nullable=False)
+    inicio_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # False = el servicio arrancó con el trabajo a medias: «inicio_en» es cuando se vio, no el real.
+    inicio_observado: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+    fin_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    progreso: Mapped[int] = mapped_column(SmallInteger, server_default="0", nullable=False)
+    plate: Mapped[int | None] = mapped_column(SmallInteger)
+    minutos_estimados: Mapped[int | None] = mapped_column(Integer)
+    gramos_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    # [{"tipo": "PLA", "color": "#ffb673", "gramos": 0.88}, …]
+    filamentos: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    produccion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("producciones.id", ondelete="SET NULL"), unique=True
+    )
+
+
+class EstadoImpresora(Base):
+    """Última foto del estado de la impresora (una fila). La escribe el servicio `impresora`."""
+
+    __tablename__ = "impresora_estado"
+    __table_args__ = (CheckConstraint("id = 1", name="fila_unica"),)
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1, server_default="1")
+    conectada: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
+    ultimo_mensaje_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Latido del servicio: si se queda viejo, el servicio no está corriendo.
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    datos: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class ComandoImpresora(Base):
+    """Orden para la impresora. El backend la deja aquí y el servicio la envía (así el backend
+    no necesita las credenciales de la impresora). Una orden vieja no se ejecuta."""
+
+    __tablename__ = "impresora_comandos"
+    __table_args__ = (
+        CheckConstraint(_en("comando", COMANDOS), name="comando_valido"),
+        CheckConstraint(_en("estado", ESTADOS_COMANDO), name="estado_valido"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    comando: Mapped[str] = mapped_column(String(12), nullable=False)
+    valor: Mapped[str | None] = mapped_column(String(12))
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL")
+    )
+    estado: Mapped[str] = mapped_column(String(10), server_default="pendiente", nullable=False)
+    detalle: Mapped[str | None] = mapped_column(String(200))
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    atendido_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help up up-tunnel down logs ps build restart shell db-shell migrate makemigration downgrade seed admin demo bootstrap test lint typecheck nuke \
-	prod-build prod-up prod-up-tunnel prod-down prod-logs prod-ps prod-restart prod-shell prod-db-shell prod-admin worker-publicar e2e iphone
+	prod-build prod-up prod-up-tunnel prod-down prod-logs prod-ps prod-restart prod-shell prod-db-shell prod-admin worker-publicar e2e iphone impresora-up impresora-logs prod-impresora-logs
 
 PROD := docker compose -p misimpresiones-prod -f docker-compose.prod.yml
 # Las pruebas llevan su propio proyecto: nunca tocan la base de desarrollo ni la de producción.
@@ -104,11 +104,22 @@ prod-admin: ## Crea o actualiza el admin en producción
 worker-publicar: ## Sube una vez el Worker de workers.dev apuntando al túnel actual (producción)
 	$(PROD) --profile tunnel run --rm urlsync python /cloudflare/urlsync/urlsync.py --una-vez
 
+# --- Impresora 3D (Bambu Lab A1) ----------------------------------------------
+impresora-up: ## Desarrollo: levanta el servicio de la impresora (necesita BAMBU_* en .env)
+	docker compose --profile impresora up -d impresora
+
+impresora-logs: ## Desarrollo: logs del servicio de la impresora
+	docker compose --profile impresora logs -f --tail 50 impresora
+
+prod-impresora-logs: ## Producción: logs del servicio de la impresora
+	$(PROD) logs -f --tail 50 impresora
+
 # --- Pruebas de punta a punta -------------------------------------------------
 # Solo contra el stack de DESARROLLO (make up). Los límites anti-abuso también aplican aquí
 # (5 pedidos por hora y 10 ingresos fallidos por 15 min desde un mismo origen): conviene no
 # correrlo más de unas 5 veces por hora.
 e2e: ## Recorrido completo con navegador real (Playwright); capturas en e2e/out
+	@docker compose exec -T backend python -m app.seeds.trabajos_ejemplo
 	@set -a && . ./.env && set +a && docker run --rm --network misimpresiones_default -v "$$PWD/e2e:/work" -w /work -e ADMIN_EMAIL -e ADMIN_PASSWORD mcr.microsoft.com/playwright:v1.56.1-noble bash -c "npm i --no-audit --no-fund playwright@1.56.1 >/dev/null 2>&1 && node recorrido.mjs"
 
 iphone: ## Prueba en WebKit (motor de Safari) con perfiles de iPhone SE, 13 y 15 Pro Max

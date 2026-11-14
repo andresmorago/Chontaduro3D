@@ -3,7 +3,7 @@
    Solo usa tokens de tokens.css. Va al final de globals.css para ganar por orden. */
 
 /* ---------- Superficies de tarjeta: crema con tinta verde oscura ---------- */
-.tarjeta, .articulo, .dato, .lista, .ticket, .pedido, .entrar__tarjeta, .hoja, .aviso, .barras, .ficha, .alerta, .contador, .segmentado {
+.tarjeta, .articulo, .dato, .lista, .ticket, .pedido, .entrar__tarjeta, .hoja, .aviso, .barras, .ficha, .alerta, .contador, .segmentado, .bandeja {
   --color-paper: var(--color-card);
   --color-paper-2: var(--color-card-2);
   --color-paper-3: var(--color-card-3);

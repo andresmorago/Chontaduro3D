@@ -35,7 +35,8 @@ async def limpiar(esquema):
     async with engine.begin() as c:
         await c.execute(
             text(
-                "TRUNCATE usuarios, articulos, producciones, ventas, pedidos, registro_auditoria "
+                "TRUNCATE usuarios, articulos, producciones, ventas, pedidos, registro_auditoria, "
+                "impresora_estado "
                 "RESTART IDENTITY CASCADE"
             )
         )

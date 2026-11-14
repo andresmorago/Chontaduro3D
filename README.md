@@ -81,3 +81,17 @@ Cookies `HttpOnly` + `SameSite=Lax` (+ `Secure` tras HTTPS), refresh con rotaci�
 cabecera anti-CSRF en toda mutación, CSP con nonce, límites de intentos (ingreso y pedidos) guardados en la base,
 imágenes validadas por contenido y re-codificadas, el catálogo público nunca expone el stock exacto,
 `/api/docs` apagado en producción y la URL directa del túnel bloqueada por un secreto compartido con el Worker.
+
+
+## Impresora 3D (Bambu Lab A1)
+
+Un servicio aparte (`impresora`) se conecta a la A1 por la red local (MQTT en el puerto 8883 y FTPS en el 990) y hace tres cosas:
+
+1. **Estado**: lo guarda en la base para la página *Administración → Impresora* (progreso, temperaturas, AMS, luz, velocidad).
+2. **Trabajos**: detecta cada trabajo (empieza, termina, se cancela) y lee del `.3mf` los gramos por filamento y el tiempo estimado. Aparecen en *Producción → Trabajos de la impresora*: se **importan** como producción (traen fecha, tiempo y gramos; las piezas las pones tú) o se **ignoran**. Un trabajo no se puede importar dos veces.
+3. **Controles**: pausar, reanudar, cancelar, luz y velocidad. El backend deja la orden en una tabla y el servicio la envía; una orden de más de 30 s no se ejecuta.
+
+Configuración (solo en `.env`, nunca versionada): `BAMBU_IP`, `BAMBU_SERIAL`, `BAMBU_ACCESS_CODE` (ver `.env.example`). Solo el servicio `impresora` las recibe; el backend web no.
+En desarrollo: `make impresora-up` (perfil `impresora`) y `make impresora-logs`. En producción corre con el stack: `make prod-impresora-logs`.
+
+Limitaciones: la A1 no guarda historial de trabajos, así que solo se registran los que ocurren con el servicio encendido; los gramos son los **estimados del slicer** (en un trabajo cancelado sobrestiman); el tiempo es el *medido* (impresora ocupada) cuando se vio el inicio y, si no, el estimado del archivo. La conexión usa el certificado propio de la impresora, sin verificarlo: se asume una red local/VPN de confianza.

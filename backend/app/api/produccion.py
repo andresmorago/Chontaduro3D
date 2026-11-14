@@ -17,6 +17,7 @@ from app.models import (
     Produccion,
     ProduccionFilamento,
     ProduccionItem,
+    TrabajoImpresora,
 )
 from app.schemas.dominio import FilamentoOut, ProduccionIn, ProduccionItemOut, ProduccionOut
 
@@ -69,7 +70,13 @@ async def _salida(db, produccion: Produccion) -> ProduccionOut:
             )
         ).scalars()
     ]
+    desde = (
+        await db.execute(
+            select(TrabajoImpresora.nombre).where(TrabajoImpresora.produccion_id == produccion.id)
+        )
+    ).scalar_one_or_none()
     return ProduccionOut(
+        desde_impresora=desde,
         id=produccion.id, fecha=produccion.fecha, nota=produccion.nota,
         afecta_inventario=produccion.afecta_inventario,
         creado_en=produccion.creado_en, items=items, gramos_total=produccion.gramos_total,
@@ -128,6 +135,30 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
 
     gramos_total = _gramos_del_lote(datos)
 
+    # Si viene de un trabajo de la impresora: debe existir, haber terminado de imprimirse y no
+    # haberse importado ya. Se bloquea la fila para que dos importaciones a la vez no lo dupliquen.
+    trabajo = None
+    if datos.trabajo_id is not None:
+        trabajo = (
+            await db.execute(
+                select(TrabajoImpresora)
+                .where(TrabajoImpresora.id == datos.trabajo_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if trabajo is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Ese trabajo no existe.")
+        if trabajo.estado == "en_curso":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Ese trabajo sigue imprimiéndose: espera a que termine."
+            )
+        if trabajo.gestion != "pendiente":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Ese trabajo ya se importó." if trabajo.gestion == "importado"
+                else "Ese trabajo está ignorado: restáuralo para importarlo.",
+            )  # fmt: skip
+
     # Energía con los parámetros de HOY (o los propios del lote), congelados en él: cambiarlos
     # después no reescribe el pasado.
     param = await energia.parametros(db)
@@ -145,6 +176,8 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
     )  # fmt: skip
     db.add(p)
     await db.flush()
+    if trabajo is not None:
+        trabajo.gestion, trabajo.produccion_id = "importado", p.id
     _poner_detalle(db, p, datos, cantidades)
     if datos.afecta_inventario:  # carga histórica: solo historial y métricas, sin tocar el stock
         for articulo_id, cantidad in cantidades.items():
@@ -162,6 +195,7 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
             "unidades": sum(cantidades.values()),
             "fecha": datos.fecha.isoformat() if datos.fecha else None,
             "afecta_inventario": datos.afecta_inventario,
+            "trabajo_impresora": trabajo.nombre if trabajo else None,
         },
     )  # fmt: skip
     await db.commit()

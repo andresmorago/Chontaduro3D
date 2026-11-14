@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.api import (
     articulos,
     auth,
+    impresora,
     inventario,
     media,
     panel,
@@ -71,6 +72,7 @@ for r in (
     inventario,
     pedidos,
     panel,
+    impresora,
     publico,
     media,
 ):

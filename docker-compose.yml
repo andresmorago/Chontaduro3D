@@ -52,6 +52,24 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # Impresora Bambu Lab A1: detecta los trabajos y atiende los controles del panel.
+  # Solo con `--profile impresora` (en desarrollo no corre por defecto: producción ya la atiende).
+  impresora:
+    build:
+      context: ./backend
+      target: dev
+    command: python -m app.impresora.servicio
+    env_file: .env
+    environment:
+      TZ: America/Bogota
+    volumes:
+      - ./backend:/app
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: [impresora]
+
   frontend:
     build:
       context: ./frontend
