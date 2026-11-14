@@ -16,7 +16,7 @@ up-tunnel: ## Levanta todo más el túnel público
 	docker compose --profile tunnel up -d
 
 down: ## Detiene los servicios (conserva los datos)
-	docker compose --profile tunnel down
+	docker compose --profile tunnel --profile impresora down
 
 logs: ## Sigue los logs (make logs s=backend)
 	docker compose logs -f $(s)
