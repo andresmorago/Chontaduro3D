@@ -26,16 +26,19 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | --- | --- |
 | Dar de alta un producto | **Artículos → Nuevo artículo** (nombre, foto, descripción, precio). El precio se puede cambiar cuando quieras; queda historial y las ventas pasadas no cambian. |
 | Cargar producción de meses atrás (carga retrospectiva) | **Producción**: elige la *Fecha de producción* (hasta 5 años atrás). Desmarca *Sumar al inventario actual* si esas piezas ya se vendieron: quedan en el historial y las métricas sin inflar el stock de hoy. Cada lote puede llevar sus propios valores de energía (kWh y potencia de esa época). |
-| Registrar lo que imprimí | **Producción**: tocar los artículos, guardar → suma al inventario. Opcional: gramos de filamento (total o **por filamento**) y **tiempo de impresión**; con los *Parámetros de energía* (precio del kWh y potencia de la impresora) cada lote guarda sus kWh y su costo de energía. |
-| Registrar una venta | **Vender**: tocar los artículos, forma de pago, *Registrar venta* → resta del inventario. Hay *Deshacer* y *Anular*. |
+| Registrar lo que imprimí | **Producción**: cada ficha trae un **+** (un toque suma una pieza) y, al elegir, un contador −/n/+ cuyo número también se puede **escribir**. Un artículo con colores ocupa dos columnas con una fila por color (cada una con su contador). Guardar → suma al inventario **de ese color**. Opcional: gramos de filamento (total o **por filamento**) y **tiempo de impresión**; con los *Parámetros de energía* (precio del kWh y potencia de la impresora) cada lote guarda sus kWh y su costo de energía. |
+| Registrar una venta | **Vender**: igual que Producción (+, contador y filas por color); el **+** se bloquea al llegar a lo que hay de ese color. Forma de pago, *Registrar venta* → resta del inventario del color vendido. Hay *Deshacer* y *Anular* (la pieza vuelve a su color). |
+| Ver o corregir el stock por color | **Inventario**: cada artículo con colores muestra su desglose («● Rojo 3 · ● Azul 0»). *Corregir el conteo* pide elegir el color. Ver [docs/inventario-por-color.md](docs/inventario-por-color.md). |
 | Corregir un conteo | **Inventario → artículo → Corregir el conteo** (queda en el historial de movimientos). |
 | Dar acceso a otra persona o cambiar contraseñas | **Administración**: crear usuarios, restablecer la contraseña de otro (cierra sus sesiones), desactivar/activar, y *Mi cuenta* para cambiar la tuya. Sin roles por ahora. |
-| Ver lo que pidieron los clientes | **Pedidos**: botón directo a WhatsApp y estados. No descuenta inventario. |
+| Ver lo que pidieron los clientes | **Pedidos**: un pedido puede traer **varios artículos y colores** (el cliente usa el mini carrito del catálogo); se ven todos los renglones, las piezas y un total estimado a precios de hoy. Botón directo a WhatsApp y estados. No descuenta inventario. Ver [docs/carrito-de-pedidos.md](docs/carrito-de-pedidos.md). |
 
 ## Modelo en una línea
 
 El stock **no es un contador**: es la suma de los movimientos (`movimientos_inventario`: producción +, venta −, anulación +, ajuste ±).
 Vender y ajustar bloquean la fila del artículo, así dos ventas simultáneas no pueden dejar el stock en negativo.
+Cada movimiento lleva además su **color** (`color_id`): el stock de un artículo con colores se lleva **por color** y el total es la suma
+(ver [docs/inventario-por-color.md](docs/inventario-por-color.md)).
 
 ## Migraciones (Alembic, idempotentes)
 
@@ -48,9 +51,10 @@ Vender y ajustar bloquean la fila del artículo, así dos ventas simultáneas no
 ## Pruebas
 
 ```bash
-make test    # 75 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
+make test    # unas 270 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
 make e2e     # recorrido completo con navegador real (Playwright) contra el stack de desarrollo; capturas en e2e/out
 make typecheck
+make desbordes  # detector: recorre sitio público y panel a 9 anchos (1800–320 px) y falla si algún texto se sale de su tarjeta
 make iphone  # WebKit (el motor de Safari) con perfiles de iPhone SE, 13 y 15 Pro Max: desbordes, hoja de pedido, login con toque real y panel
 ```
 
@@ -88,7 +92,7 @@ imágenes validadas por contenido y re-codificadas, el catálogo público nunca 
 Un servicio aparte (`impresora`) se conecta a la A1 por la red local (MQTT en el puerto 8883 y FTPS en el 990) y hace tres cosas:
 
 1. **Estado**: lo guarda en la base para la página *Administración → Impresora* (progreso, temperaturas, AMS, luz, velocidad).
-2. **Trabajos**: detecta cada trabajo (empieza, termina, se cancela) y lee del `.3mf` los gramos por filamento y el tiempo estimado. Aparecen en *Producción → Trabajos de la impresora*: se **importan** como producción (traen fecha, tiempo y gramos; las piezas las pones tú) o se **ignoran**. Un trabajo no se puede importar dos veces.
+2. **Trabajos**: detecta cada trabajo (empieza, termina, se cancela) y lee del `.3mf` los gramos por filamento y el tiempo estimado. Aparecen en *Producción → Trabajos de la impresora*: se **importan** como producción (traen fecha, tiempo y gramos; si el trabajo trae los gramos de cada filamento, el lote se abre en **«Por filamento»** con cada uno rotulado por su color, p. ej. «PLA Rojo 24,5 g»; las piezas y su color los eliges tú) o se **ignoran**. Un trabajo no se puede importar dos veces.
 3. **Controles**: pausar, reanudar, cancelar, luz y velocidad. El backend deja la orden en una tabla y el servicio la envía; una orden de más de 30 s no se ejecuta.
 
 Configuración (solo en `.env`, nunca versionada): `BAMBU_IP`, `BAMBU_SERIAL`, `BAMBU_ACCESS_CODE` (ver `.env.example`). Solo el servicio `impresora` las recibe; el backend web no.
