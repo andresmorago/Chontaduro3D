@@ -329,7 +329,7 @@ await publica.getByText("Artículo creado por la prueba de punta a punta.").wait
 ok(true, "al tocar la tarjeta se amplía la información (descripción)");
 await publica.screenshot({ path: "out/07d-ficha-movil.png" });
 ok((await publica.getByRole("radio").count()) === 2, "la ficha ofrece los 2 colores definidos");
-ok(await publica.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).isDisabled(), "no se puede pedir sin elegir color");
+ok(await publica.locator("dialog[open]").getByRole("button", { name: "Agregar al pedido" }).isDisabled(), "no se puede agregar al pedido sin elegir color");
 const imgFicha = publica.locator("dialog[open] .detalle__foto img");
 await imgFicha.waitFor();
 await publica.waitForTimeout(800);
@@ -343,11 +343,41 @@ await publica.screenshot({ path: "out/07e-ficha-color.png" });
 await publica.getByRole("radio", { name: "Azul" }).click();
 await publica.waitForTimeout(600);
 ok((await publica.locator("dialog[open] .detalle__foto img").getAttribute("src")) === srcPrincipal, "un color sin foto vuelve a la foto del artículo");
-await publica.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).click();
+// Mini carrito: dos renglones del MISMO artículo (Azul ×2 y Rojo ×1) más otro artículo, en un solo pedido.
+const cantidadFicha = publica.locator("dialog[open]").getByRole("spinbutton", { name: /^Cantidad de/ });
+await cantidadFicha.fill("2");
+await publica.locator("dialog[open]").getByRole("button", { name: "Agregar al pedido" }).click();
+await publica.getByText(/Agregado: 2 ×/).waitFor();
+ok((await publica.getByRole("button", { name: /^Mi pedido:/ }).count()) === 1, "al agregar aparece «Mi pedido» con el conteo de piezas");
+await tarjeta.locator("button.articulo__boton").click();
+await publica.getByRole("radio", { name: "Rojo" }).click();
+await publica.locator("dialog[open]").getByRole("button", { name: "Agregar al pedido" }).click();
+// otro artículo distinto (el primero de la lista que no sea el nuestro)
+const otra = publica.locator("li.articulo").filter({ hasNotText: ARTICULO }).first();
+await otra.locator("button.articulo__boton").click();
+const radioOtra = publica.locator("dialog[open]").getByRole("radio").first();
+if (await radioOtra.count()) await radioOtra.click();
+await publica.locator("dialog[open]").getByRole("button", { name: "Agregar al pedido" }).click();
+await publica.waitForTimeout(500);
+await publica.locator(".carrito-barra").getByRole("button", { name: "Ver mi pedido" }).click();
+await publica.locator("dialog[open] .carrito__linea").first().waitFor();
+const lineas = await publica.locator("dialog[open] .carrito__linea").count();
+ok(lineas === 3, `el carrito junta los renglones en un solo pedido (${lineas} renglones)`);
+const textoCarrito = (await publica.locator("dialog[open] .carrito").innerText()).replace(/\s+/g, " ");
+ok(/Azul/.test(textoCarrito) && /Rojo/.test(textoCarrito), "cada renglón conserva su color");
+await publica.screenshot({ path: "out/08-pedido-movil.png" });
+// el carrito se guarda en el navegador: al recargar sigue ahí
+await publica.reload();
+await publica.getByRole("button", { name: /^Mi pedido:/ }).waitFor();
+ok(true, "el carrito sobrevive a recargar la página");
+await publica.getByRole("button", { name: /^Mi pedido:/ }).click();
+await publica.locator("dialog[open] .carrito__linea").first().waitFor();
+// editar cantidad y quitar un renglón
+const quitar = publica.locator("dialog[open]").getByRole("button", { name: /^Quitar .* del pedido$/ }).last();
+await quitar.click();
+ok((await publica.locator("dialog[open] .carrito__linea").count()) === 2, "se puede quitar un renglón del pedido");
 await publica.getByLabel("Tu nombre").fill("Cliente de Prueba");
 await publica.getByLabel("Tu WhatsApp").fill("300 123 4567");
-await publica.getByRole("button", { name: /Agregar una unidad/ }).click();
-await publica.screenshot({ path: "out/08-pedido-movil.png" });
 await publica.getByRole("button", { name: "Enviar pedido" }).click();
 await publica.getByText("Pedido enviado").waitFor();
 await publica.screenshot({ path: "out/09-pedido-enviado.png" });
@@ -357,7 +387,9 @@ ok((await stockDe(ARTICULO)) === 3, "el pedido NO cambió el inventario");
 console.log("Pedidos en el panel");
 await pagina.goto(`${BASE}/panel/pedidos`);
 await pagina.getByText("Cliente de Prueba").first().waitFor();
-ok((await pagina.locator(".pedido").first().innerText()).includes("Azul"), "el pedido en el panel muestra el color elegido");
+const pedidoPanel = (await pagina.locator(".pedido").first().innerText()).replace(/\s+/g, " ");
+ok(/Azul/.test(pedidoPanel) && /Rojo/.test(pedidoPanel), "el pedido en el panel muestra cada renglón con su color");
+ok((await pagina.locator(".pedido").first().locator(".pedido__items li").count()) === 2, "el pedido del panel es UNO con sus renglones, no varios pedidos");
 await foto("10-pedidos");
 ok(await pagina.getByRole("link", { name: /Escribir por WhatsApp/ }).first().getAttribute("href").then((h) => h?.startsWith("https://wa.me/573001234567")), "el enlace de WhatsApp lleva el indicativo 57");
 

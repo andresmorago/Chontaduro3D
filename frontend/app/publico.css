@@ -69,3 +69,18 @@
 .resumen-color { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
 .color-chip { display: inline-flex; align-items: center; gap: var(--space-xs); }
 .color-chip__muestra { width: 22px; height: 22px; }
+
+/* Mini carrito del catálogo. */
+.barra__pedido { gap: var(--space-xs); white-space: nowrap; }
+.barra__cuenta { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--color-card-ink, var(--color-ink)); color: var(--color-card, var(--color-paper)); font: 800 var(--text-sm)/1 var(--font-display); }
+.carrito-barra { position: fixed; z-index: var(--z-sticky); left: 0; right: 0; bottom: 0; padding: var(--space-sm) 0 max(var(--space-sm), env(safe-area-inset-bottom)); background: var(--color-card); color: var(--color-card-ink); box-shadow: 0 -6px 20px color-mix(in oklab, #000 25%, transparent); }
+.carrito-barra__dentro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.detalle__cantidad { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
+.carrito { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-sm); }
+.carrito__linea { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-sm) var(--space-md); padding-bottom: var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }
+.carrito__foto { width: 64px; border-radius: var(--radius-control); }
+.carrito__datos { display: grid; gap: 2px; min-width: 0; align-content: start; }
+.carrito__color { display: flex; align-items: center; gap: var(--space-2xs); font-size: var(--text-sm); }
+.carrito__cantidad { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
+.carrito__total { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-md); font-size: var(--text-lg); }
+.carrito__foto .foto__marca, .color-foto-btn__mini .foto__marca { font-size: 0.7rem; letter-spacing: 0; padding: 2px; text-align: center; overflow-wrap: anywhere; }

@@ -5,7 +5,7 @@ import { useAvisos } from "@/components/ui/Avisos";
 import { Icono } from "@/components/ui/Icono";
 import { usePanel } from "@/components/panel/PanelShell";
 import { api } from "@/lib/api";
-import { enlaceWhatsapp, hace } from "@/lib/format";
+import { dinero, enlaceWhatsapp, hace } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import type { EstadoPedido, Pedido } from "@/lib/types";
 
@@ -59,12 +59,20 @@ export default function Pedidos() {
               <div className="pedido__cab">
                 <div>
                   <h3 style={{ fontSize: "var(--text-lg)" }}>{p.nombre}</h3>
-                  <p className="muted">{p.cantidad} × {p.articulo}{p.color ? ` · ${p.color}` : ""} <span className="code">({p.codigo})</span></p>
+                  <p className="muted num">{p.piezas === 1 ? "1 pieza" : `${p.piezas} piezas`} · {dinero(p.total_estimado)} <span className="muted">(a precios de hoy)</span></p>
                 </div>
                 <p className="muted num">{hace(p.creado_en)}</p>
               </div>
+              <ul className="pedido__items">
+                {p.items.map((i) => (
+                  <li key={`${i.articulo_id}|${i.color ?? ""}`}>
+                    <span><strong className="num">{i.cantidad} ×</strong> {i.articulo}{i.color ? ` · ${i.color}` : ""} <span className="code muted">({i.codigo})</span></span>
+                    <span className="num muted">{dinero(i.subtotal)}</span>
+                  </li>
+                ))}
+              </ul>
               <div className="pedido__acciones">
-                <a className="btn btn--accent btn--small" target="_blank" rel="noopener noreferrer" href={enlaceWhatsapp(p.whatsapp, `Hola ${p.nombre}, te escribimos por tu pedido de ${p.cantidad} × ${p.articulo}${p.color ? ` (${p.color})` : ""}.`)} onClick={() => p.estado === "nuevo" && void cambiar(p, "contactado")}>
+                <a className="btn btn--accent btn--small" target="_blank" rel="noopener noreferrer" href={enlaceWhatsapp(p.whatsapp, `Hola ${p.nombre}, te escribimos por tu pedido: ${p.items.map((i) => `${i.cantidad} × ${i.articulo}${i.color ? ` (${i.color})` : ""}`).join(", ")}.`)} onClick={() => p.estado === "nuevo" && void cambiar(p, "contactado")}>
                   <Icono nombre="whatsapp" tamano={18} /> Escribir por WhatsApp
                 </a>
                 <span className="muted num">{p.whatsapp}</span>

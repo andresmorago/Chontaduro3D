@@ -8,6 +8,10 @@ import { Icono } from "@/components/ui/Icono";
 import { encuadreDe } from "@/lib/foto";
 import { enlaceWhatsapp } from "@/lib/format";
 import type { ArticuloPublico } from "@/lib/types";
+import { useAvisos } from "@/components/ui/Avisos";
+import { useCarrito } from "@/lib/carrito";
+import { dinero } from "@/lib/format";
+import { CarritoHoja } from "./CarritoHoja";
 import { DetalleHoja } from "./DetalleHoja";
 
 interface Props {
@@ -22,6 +26,15 @@ const sinTildes = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [elegido, setElegido] = useState<ArticuloPublico | null>(null);
+  const [verPedido, setVerPedido] = useState(false);
+  const { mostrar } = useAvisos();
+  const carrito = useCarrito(articulos);
+
+  function agregar(a: ArticuloPublico, color: string, cantidad: number) {
+    carrito.agregar(a.id, color, cantidad);
+    setElegido(null);
+    mostrar(`Agregado: ${cantidad} × ${a.nombre}${color ? ` (${color})` : ""}`, { accion: { etiqueta: "Ver pedido", alPulsar: () => setVerPedido(true) } });
+  }
 
   const visibles = useMemo(() => {
     const t = sinTildes(busqueda.trim());
@@ -45,6 +58,11 @@ export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
               <Icono nombre="buscar" />
             </Boton>
           </form>
+          {carrito.piezas > 0 && (
+            <Boton variante="accent" className="barra__pedido" onClick={() => setVerPedido(true)} aria-label={`Mi pedido: ${carrito.piezas} ${carrito.piezas === 1 ? "pieza" : "piezas"}`}>
+              Mi pedido <span className="barra__cuenta">{carrito.piezas}</span>
+            </Boton>
+          )}
           {whatsapp && (
             <a className="btn btn--secondary barra__wa" href={enlaceWhatsapp(whatsapp, `Hola ${negocio}, quisiera hacer una consulta.`)} target="_blank" rel="noopener noreferrer">
               WhatsApp
@@ -106,7 +124,20 @@ export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
         </div>
       </footer>
 
-      <DetalleHoja articulo={elegido} sitekey={sitekey} onCerrar={() => setElegido(null)} />
+      <DetalleHoja articulo={elegido} onCerrar={() => setElegido(null)} onAgregar={agregar} carritoLleno={carrito.lleno && !carrito.lineas.some((l) => l.articuloId === elegido?.id)} />
+      <CarritoHoja abierta={verPedido} lineas={carrito.lineas} total={carrito.total} piezas={carrito.piezas} sitekey={sitekey} onCerrar={() => setVerPedido(false)} onCambiar={carrito.poner} onEnviado={carrito.vaciar} />
+      {carrito.piezas > 0 && !verPedido && (
+        <div className="carrito-barra">
+          <div className="container carrito-barra__dentro">
+            <span>
+              <strong className="num">{carrito.piezas === 1 ? "1 pieza" : `${carrito.piezas} piezas`}</strong> · {dinero(carrito.total)}
+            </span>
+            <Boton variante="accent" onClick={() => setVerPedido(true)}>
+              Ver mi pedido
+            </Boton>
+          </div>
+        </div>
+      )}
     </>
   );
 }

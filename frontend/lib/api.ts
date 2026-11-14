@@ -141,7 +141,7 @@ export const api = {
   publico: {
     catalogo: () => pedir<CatalogoPublico>("/publico/articulos"),
     config: () => pedir<ConfigPublica>("/publico/config"),
-    pedir: (d: { articulo_id: string; nombre: string; whatsapp: string; cantidad: number; color: string; sitio_web: string; turnstile: string }) =>
+    pedir: (d: { nombre: string; whatsapp: string; items: { articulo_id: string; cantidad: number; color: string }[]; sitio_web: string; turnstile: string }) =>
       pedir<{ ok: boolean; mensaje: string }>("/publico/pedidos", { metodo: "POST", cuerpo: d }),
   },
   impresora: {

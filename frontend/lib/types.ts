@@ -184,15 +184,24 @@ export interface Movimiento {
   creado_en: string;
 }
 
-export interface Pedido {
-  id: string;
+export interface PedidoItem {
   articulo_id: string;
   codigo: string;
   articulo: string;
+  color: string | null;
+  cantidad: number;
+  /** Precio de hoy del artículo (referencia: el precio final se acuerda al vender). */
+  precio: number;
+  subtotal: number;
+}
+
+export interface Pedido {
+  id: string;
   nombre: string;
   whatsapp: string;
-  cantidad: number;
-  color: string | null;
+  items: PedidoItem[];
+  piezas: number;
+  total_estimado: number;
   estado: EstadoPedido;
   creado_en: string;
 }

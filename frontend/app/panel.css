@@ -302,3 +302,8 @@ button.fila:hover { background: var(--color-paper-2); }
 .stock-color { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 .stock-color--cero { color: var(--color-muted); }
 .stock-color--sin { font-style: italic; }
+
+/* Renglones de un pedido (panel). */
+.pedido__items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2xs); }
+.pedido__items li { display: flex; justify-content: space-between; gap: var(--space-sm); align-items: baseline; padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+.pedido__items li:last-child { border-bottom: 0; }
