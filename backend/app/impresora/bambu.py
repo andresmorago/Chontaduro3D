@@ -84,12 +84,17 @@ def _color(v: Any) -> str | None:
 def _bandeja(t: dict[str, Any], en_uso: bool) -> dict[str, Any]:
     tipo = str(t.get("tray_type") or "").strip()
     restante = _entero(t.get("remain"))
+    # El «restante» solo es una medición real en bobinas Bambu con chip RFID (tag_uid ≠ 0). Sin chip
+    # la impresora no sabe cuánto queda: informa 100 por defecto (ranuras) o 0 (bobina externa).
+    medido = bool(str(t.get("tag_uid") or "").strip("0"))
     return {
         "id": str(t.get("id", "")),
         "vacia": not tipo,
         "tipo": tipo or None,
+        "marca": str(t.get("tray_sub_brands") or "").strip() or None,
         "color": _color(t.get("tray_color")) if tipo else None,
-        "restante": restante if restante is not None and restante >= 0 else None,
+        "medido": medido,
+        "restante": restante if medido and restante is not None and restante >= 0 else None,
         "en_uso": en_uso,
     }
 

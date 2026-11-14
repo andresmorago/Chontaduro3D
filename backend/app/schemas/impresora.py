@@ -14,7 +14,10 @@ class BandejaOut(Salida):
     id: str
     vacia: bool
     tipo: str | None = None
+    marca: str | None = None
     color: str | None = None
+    # True = bobina con chip RFID: el «restante» es una medición real; si no, no se sabe.
+    medido: bool = False
     restante: int | None = None
     en_uso: bool = False
 

@@ -230,7 +230,9 @@ export interface BandejaAms {
   id: string;
   vacia: boolean;
   tipo: string | null;
+  marca: string | null;
   color: string | null;
+  medido: boolean;
   restante: number | null;
   en_uso: boolean;
 }

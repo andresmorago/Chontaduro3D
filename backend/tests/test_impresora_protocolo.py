@@ -19,12 +19,15 @@ CRUDO = {
     "ams": {
         "tray_now": "1",
         "ams": [{"id": "0", "tray": [
-            {"id": "0", "tray_type": "PLA", "tray_color": "000000FF", "remain": 100},
-            {"id": "1", "tray_type": "PLA", "tray_color": "FFFFFFFF", "remain": 40},
+            {"id": "0", "tray_type": "PLA", "tray_color": "000000FF", "remain": 100,
+             "tag_uid": "B9656CFE00000100", "tray_sub_brands": "PLA Basic"},
+            {"id": "1", "tray_type": "PLA", "tray_color": "FFFFFFFF", "remain": 100,
+             "tag_uid": "0000000000000000"},
             {"id": "2", "tray_type": "", "tray_color": "00000000", "remain": -1},
         ]}],
     },
-    "vt_tray": {"id": "254", "tray_type": "PETG", "tray_color": "443089FF", "remain": 0},
+    "vt_tray": {"id": "254", "tray_type": "PETG", "tray_color": "443089FF", "remain": 0,
+                "tag_uid": "0000000000000000"},
     "sn": "NO-DEBE-SALIR", "net": {"conf": 1}, "ipcam": {"x": 1},
 }  # fmt: skip
 
@@ -35,9 +38,12 @@ def test_normalizar_estado():
     assert (n["progreso"], n["capa"], n["capas"], n["restante_min"]) == (85, 91, 100, 9)
     assert (n["boquilla"], n["cama"], n["velocidad"], n["luz"]) == (230.1, 64.9, 2, "on")
     assert n["ams"][0] == {
-        "id": "0", "vacia": False, "tipo": "PLA", "color": "#000000", "restante": 100,
-        "en_uso": False,
+        "id": "0", "vacia": False, "tipo": "PLA", "marca": "PLA Basic", "color": "#000000",
+        "medido": True, "restante": 100, "en_uso": False,
     }  # fmt: skip
+    # Sin chip RFID la impresora no mide: el 100 de una ranura y el 0 de la externa no son datos.
+    assert n["ams"][1]["medido"] is False and n["ams"][1]["restante"] is None
+    assert n["externa"]["medido"] is False and n["externa"]["restante"] is None
     assert n["ams"][1]["en_uso"] is True and n["ams"][1]["color"] == "#ffffff"
     assert n["ams"][2]["vacia"] is True and n["ams"][2]["color"] is None
     assert n["ams"][2]["restante"] is None  # -1 = desconocido
