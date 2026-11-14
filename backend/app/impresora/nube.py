@@ -84,11 +84,18 @@ class Tarea:
     estado: str  # terminado | interrumpido
     inicio: datetime
     fin: datetime
+    # `costTime` de Bambu: es el tiempo ESTIMADO por el slicer, no el real (dos trabajos iguales
+    # traen el mismo valor aunque duren distinto).
     minutos: int | None
     gramos: float | None
     plate: int | None
     dispositivo: str | None
     filamentos: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def minutos_reales(self) -> int:
+        """Lo que la impresora estuvo ocupada: de la hora de inicio a la de fin (según la nube)."""
+        return max(1, round((self.fin - self.inicio).total_seconds() / 60))
 
 
 def _fecha(v: Any) -> datetime | None:

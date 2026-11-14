@@ -36,6 +36,8 @@ def test_tarea_terminada():
     assert (t.id, t.titulo, t.estado, t.minutos, t.gramos, t.plate) == (
         "1440858776", "tfic-angled", "terminado", 65, 22.57, 1,
     )  # fmt: skip
+    # costTime (65) es la estimación; el tiempo real sale de inicio→fin (1 h 6 min).
+    assert t.minutos_reales == 66
     assert t.filamentos == [{"tipo": "PLA", "color": "#443089", "gramos": 22.57}]
     assert t.dispositivo == "SERIE1"
 
@@ -193,8 +195,9 @@ async def test_tarea_nueva_se_crea_por_revisar(db):
         "pendiente",
         "terminado",
         "1440858776",
-        65,
+        66,  # tiempo real (inicio→fin); el costTime (65) queda como estimado
     )
+    assert j.minutos_estimados == 65
     assert float(j.gramos_total) == 22.57 and j.filamentos[0]["color"] == "#443089"
 
 
@@ -219,7 +222,7 @@ async def test_une_con_el_trabajo_detectado_en_vivo_por_task_id(db):
     await db.commit()
     assert r == {"creadas": 0, "completadas": 1}
     await db.refresh(en_vivo)
-    assert en_vivo.nube_id == "1440858776" and en_vivo.minutos_medidos == 65
+    assert en_vivo.nube_id == "1440858776" and en_vivo.minutos_medidos == 66
     assert (
         float(en_vivo.gramos_total) == 22.6 and en_vivo.origen == "impresora"
     )  # no pisa lo ya leído
@@ -240,6 +243,19 @@ async def test_une_por_nombre_y_hora_si_no_hay_id_comun(db):
     await db.refresh(otro)
     assert en_vivo.nube_id == "999" and otro.nube_id is None
     assert len((await db.execute(select(TrabajoImpresora))).scalars().all()) == 2
+
+
+async def test_corrige_el_tiempo_si_antes_se_guardo_el_estimado(db):
+    t = tarea_de(tarea_cruda())
+    viejo = TrabajoImpresora(nombre="x", tarea_id=t.id, nube_id=t.id, origen="nube",
+                             estado="terminado", inicio_en=t.inicio, fin_en=t.fin,
+                             minutos_medidos=65)  # fmt: skip
+    db.add(viejo)
+    await db.commit()
+    await sincronizacion.aplicar(db, [t])
+    await db.commit()
+    await db.refresh(viejo)
+    assert viejo.minutos_medidos == 66 and viejo.minutos_estimados == 65
 
 
 async def test_no_revierte_lo_ya_importado_ni_ignorado(db):
@@ -268,7 +284,7 @@ async def test_el_tiempo_medido_de_la_nube_manda_sobre_el_visto_en_vivo(admin, d
     await sincronizacion.aplicar(db, [t])
     await db.commit()
     j = (await admin.get("/api/impresora/trabajos")).json()[0]
-    assert j["minutos"] == 65 and j["minutos_origen"] == "medido"
+    assert j["minutos"] == 66 and j["minutos_origen"] == "medido"
 
 
 async def test_api_muestra_origen_y_estado_de_la_nube(admin, db):

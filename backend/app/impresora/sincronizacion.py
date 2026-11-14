@@ -69,8 +69,8 @@ async def aplicar(db: AsyncSession, tareas: list[Tarea]) -> dict[str, int]:
                     fin_en=t.fin,
                     progreso=100 if t.estado == "terminado" else 0,
                     plate=t.plate,
-                    minutos_medidos=t.minutos,
-                    minutos_estimados=None,
+                    minutos_medidos=t.minutos_reales,
+                    minutos_estimados=t.minutos,
                     gramos_total=t.gramos,
                     filamentos=t.filamentos or None,
                 )  # fmt: skip
@@ -82,8 +82,11 @@ async def aplicar(db: AsyncSession, tareas: list[Tarea]) -> dict[str, int]:
             existente.nube_id, cambio = t.id, True
         if existente.gestion != "importado":
             # Lo que da la nube completa lo que falta; no pisa lo ya leído del .3mf.
-            if t.minutos and existente.minutos_medidos != t.minutos:
-                existente.minutos_medidos, cambio = t.minutos, True
+            # Tiempo MEDIDO = inicio→fin de la nube. El `costTime` es solo la estimación.
+            if existente.minutos_medidos != t.minutos_reales:
+                existente.minutos_medidos, cambio = t.minutos_reales, True
+            if existente.minutos_estimados is None and t.minutos:
+                existente.minutos_estimados, cambio = t.minutos, True
             if existente.gramos_total is None and t.gramos:
                 existente.gramos_total, cambio = t.gramos, True
             if not existente.filamentos and t.filamentos:

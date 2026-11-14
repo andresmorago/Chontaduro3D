@@ -38,7 +38,8 @@ def main() -> int:
     print(f"\nÚltimos {settings.bambu_nube_dias} días (esta impresora): {len(tareas)} trabajos")
     for t in tareas[:15]:
         print(
-            f"  {t.inicio:%Y-%m-%d %H:%M} · {t.estado:11} · {t.minutos or '—'} min · "
+            f"  {t.inicio:%Y-%m-%d %H:%M} · {t.estado:11} · real {t.minutos_reales} min "
+            f"(est. {t.minutos or '—'}) · "
             f"{t.gramos or '—'} g · {t.titulo[:40]}"
         )
     return 0
