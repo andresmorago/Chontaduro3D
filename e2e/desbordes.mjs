@@ -53,10 +53,18 @@ const medir = async (nombre, ancho) => { await p.waitForTimeout(700); anotar(nom
 // --- Público
 for (const w of ANCHOS) {
   await p.setViewportSize({ width: w, height: 900 });
-  await p.goto(BASE); await p.locator("li.articulo").first().waitFor(); await medir("público /", w);
+  await p.goto(BASE); await p.evaluate(() => localStorage.clear()); await p.reload(); await p.locator("li.articulo").first().waitFor(); await medir("público /", w);
   await p.locator("button.articulo__boton").first().click(); await p.locator("dialog[open]").waitFor(); await medir("público ficha", w);
   const radio = p.getByRole("radio").first(); if (await radio.count()) { await radio.click(); await medir("público ficha (color elegido)", w); }
-  const pedir = p.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }); if (await pedir.isEnabled()) { await pedir.click(); await p.getByLabel("Tu nombre").waitFor(); await medir("público pedido", w); }
+  const agregar = p.locator("dialog[open]").getByRole("button", { name: "Agregar al pedido" });
+  if (await agregar.isEnabled()) {
+    await agregar.click(); await p.waitForTimeout(400);
+    await p.locator("button.articulo__boton").nth(1).click(); await p.locator("dialog[open]").waitFor();
+    const r2 = p.getByRole("radio").first(); if (await r2.count()) await r2.click();
+    const ag2 = p.locator("dialog[open]").getByRole("button", { name: "Agregar al pedido" }); if (await ag2.isEnabled()) await ag2.click();
+    await p.waitForTimeout(400); await medir("público con carrito (barra)", w);
+    await p.locator(".carrito-barra").getByRole("button", { name: "Ver mi pedido" }).click(); await p.locator("dialog[open] .carrito__linea").first().waitFor(); await medir("público mi pedido (carrito)", w);
+  }
   await p.keyboard.press("Escape");
 }
 
@@ -84,7 +92,9 @@ for (const w of ANCHOS) {
   await p.goto(`${BASE}/panel/articulos`); await p.getByRole("button", { name: /Nuevo artículo/ }).first().click(); await medir("panel nuevo artículo (hoja)", w); await p.keyboard.press("Escape");
   await p.locator("button.fila", { hasText: "Prendedor navideño" }).first().click(); await medir("panel editar artículo largo (hoja)", w); await p.keyboard.press("Escape");
   await p.goto(`${BASE}/panel/produccion`); await p.getByRole("button", { name: "Parámetros de energía" }).first().click(); await medir("panel parámetros (hoja)", w); await p.keyboard.press("Escape");
-  const tocar = p.locator("button.ficha", { hasText: "Prendedor navideño" }); if (await tocar.count()) { await tocar.first().click(); await medir("panel producción con artículo largo", w); }
+  const masLargo = p.locator(".selector").getByRole("button", { name: /Agregar una unidad de Prendedor navideño.*Verde esmeralda/ }); if (await masLargo.count()) { await masLargo.first().click(); await masLargo.first().click(); await medir("panel producción con artículo largo (color)", w); }
+  await p.goto(`${BASE}/panel/vender`); await p.getByRole("heading", { level: 1 }).waitFor(); await medir("panel vender con colores", w);
+  await p.goto(`${BASE}/panel/inventario`); await p.locator("button.fila", { hasText: "Prendedor navideño" }).first().click(); await p.locator("dialog[open]").waitFor(); await medir("panel inventario ajuste con colores (hoja)", w); await p.keyboard.press("Escape");
 }
 await b.close();
 

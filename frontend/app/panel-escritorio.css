@@ -73,3 +73,6 @@ input[type="range"] { margin: 0; }  /* el navegador le pone 2 px de margen y se 
 .cuando, .ticket--lote .cuando { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
 .linea__precio { white-space: normal; flex-wrap: wrap; }
 @media (max-width: 22.5rem) { .segmentado__op { padding-inline: 2px; font-size: var(--text-xs); } }
+/* Pie de las hojas: si los botones no caben en una fila (pantallas angostas), pasan a otra línea. */
+.hoja__pie { flex-wrap: wrap; }
+.hoja__pie > * { flex: 1 1 9rem; }
