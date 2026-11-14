@@ -3,7 +3,17 @@
 
 /* Dos paneles lado a lado (Inicio, Administración, Impresora): una columna en pantallas chicas. */
 .dos-paneles { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: var(--space-xl); align-items: start; }
-.pedidos-grid { display: grid; gap: var(--space-md); grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); align-items: start; }
+.pedidos-grid { display: grid; gap: var(--space-md); grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); }
+
+/* Tarjetas en rejilla: todas del mismo tamaño. Cada una se estira al alto de su fila y, en las
+   rejillas de piezas parecidas (bandejas de filamento), todas las filas miden lo mismo. El texto de
+   una tarjeta no debe partirse en más líneas que el de las demás. */
+.bandejas, .pedidos-grid, .lista--tarjetas, .lista--multi, .estadisticas, .accesos { align-items: stretch; }
+.bandejas { grid-auto-rows: 1fr; }
+.pedidos-grid > .pedido { align-content: start; }
+.bandeja { min-height: 72px; }
+.bandeja__texto > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 
 @media (min-width: 75rem) {
   .dos-paneles { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }

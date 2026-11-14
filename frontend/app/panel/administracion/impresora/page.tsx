@@ -169,7 +169,7 @@ export default function Impresora() {
         {d && conectada && (d.ams.length > 0 || d.externa) ? (
           <ul className="bandejas">
             {d.ams.map((b, i) => <Bandeja key={b.id} b={b} titulo={`Ranura ${i + 1}`} />)}
-            {d.externa && <Bandeja b={d.externa} titulo="Bobina externa" />}
+            {d.externa && <Bandeja b={d.externa} titulo="Externa" />}
           </ul>
         ) : (
           <p className="muted">Sin datos de filamento por ahora.</p>
