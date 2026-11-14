@@ -8,6 +8,8 @@ Uso:   make bambu-login                  (correo + contraseña + código que Bam
 Solo usa la biblioteca estándar. Escribe en la terminal, no en el chat: la contraseña no se guarda
 ni se muestra. La API de Bambu no es oficial y puede cambiar."""
 
+from __future__ import annotations
+
 import argparse
 import getpass
 import json
