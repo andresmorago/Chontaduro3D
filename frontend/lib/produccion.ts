@@ -1,3 +1,4 @@
+import { nombreDeColor } from "./colores";
 import { hoyISO } from "./format";
 import type { ExtraProduccion, Parametros, Produccion, TrabajoImpresora } from "./types";
 
@@ -48,9 +49,10 @@ export const loteDesde = (p: Produccion): EstadoLote => {
   };
 };
 
-/** Un trabajo de la impresora como borrador de lote: fecha, tiempo y filamento ya puestos. Las
- *  piezas y la nota las completa la persona. Con un solo filamento se usa el total; con varios, el
- *  desglose por color. */
+/** Un trabajo de la impresora como borrador de lote: fecha, tiempo y filamento ya puestos. Las piezas y
+ *  la nota las completa la persona. Si el trabajo trae los gramos de cada filamento (uno o varios), se
+ *  elige «Por filamento» y se rellena cada uno con su peso («PLA Rojo» 24,5 g); si solo trae el total,
+ *  se usa «Gramos totales». */
 export const loteDesdeTrabajo = (t: TrabajoImpresora): EstadoLote => {
   const base = loteVacio(t.fecha);
   const min = t.minutos;
@@ -58,12 +60,12 @@ export const loteDesdeTrabajo = (t: TrabajoImpresora): EstadoLote => {
     horas: min != null && Math.floor(min / 60) > 0 ? String(Math.floor(min / 60)) : "",
     minutos: min != null && min % 60 > 0 ? String(min % 60) : "",
   };
-  if (t.filamentos.length > 1) {
+  if (t.filamentos.length > 0) {
     return {
       ...base,
       ...tiempo,
       modo: "por_filamento",
-      filamentos: t.filamentos.map((f) => ({ descripcion: [f.tipo, f.color].filter(Boolean).join(" "), gramos: String(f.gramos) })),
+      filamentos: t.filamentos.map((f) => ({ descripcion: [f.tipo, nombreDeColor(f.color)].filter(Boolean).join(" "), gramos: String(f.gramos) })),
     };
   }
   return { ...base, ...tiempo, total: t.gramos_total != null ? String(t.gramos_total) : "" };
