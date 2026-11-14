@@ -116,3 +116,10 @@ button.fila:hover { background: var(--color-paper-2); }
 .pedido__cab { display: flex; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
 .pedido__acciones { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
 .filtros { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+
+/* Editor de colores del artículo. */
+.colores-editor { display: grid; gap: var(--space-sm); margin: 0; padding: var(--space-md) 0 0; border: 0; border-top: var(--rule-hair) solid var(--color-rule); min-width: 0; }
+.colores-editor legend { padding: 0; float: left; width: 100%; margin-bottom: var(--space-xs); }
+.colores-editor > * { clear: both; }
+.color-fila { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: var(--space-sm); }
+.color-fila__muestra { width: 48px; height: 44px; padding: 2px; border: var(--rule-bar) solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-plate); cursor: pointer; }

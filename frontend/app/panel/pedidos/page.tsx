@@ -59,12 +59,12 @@ export default function Pedidos() {
               <div className="pedido__cab">
                 <div>
                   <h3 style={{ fontSize: "var(--text-lg)" }}>{p.nombre}</h3>
-                  <p className="muted">{p.cantidad} × {p.articulo} <span className="code">({p.codigo})</span></p>
+                  <p className="muted">{p.cantidad} × {p.articulo}{p.color ? ` · ${p.color}` : ""} <span className="code">({p.codigo})</span></p>
                 </div>
                 <p className="muted num">{hace(p.creado_en)}</p>
               </div>
               <div className="pedido__acciones">
-                <a className="btn btn--accent btn--small" target="_blank" rel="noopener noreferrer" href={enlaceWhatsapp(p.whatsapp, `Hola ${p.nombre}, te escribimos por tu pedido de ${p.cantidad} × ${p.articulo}.`)} onClick={() => p.estado === "nuevo" && void cambiar(p, "contactado")}>
+                <a className="btn btn--accent btn--small" target="_blank" rel="noopener noreferrer" href={enlaceWhatsapp(p.whatsapp, `Hola ${p.nombre}, te escribimos por tu pedido de ${p.cantidad} × ${p.articulo}${p.color ? ` (${p.color})` : ""}.`)} onClick={() => p.estado === "nuevo" && void cambiar(p, "contactado")}>
                   <Icono nombre="whatsapp" tamano={18} /> Escribir por WhatsApp
                 </a>
                 <span className="muted num">{p.whatsapp}</span>

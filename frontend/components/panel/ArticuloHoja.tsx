@@ -8,7 +8,7 @@ import { Hoja } from "@/components/ui/Hoja";
 import { api } from "@/lib/api";
 import { dinero, fechaHora } from "@/lib/format";
 import { mensajeDe } from "@/lib/hooks";
-import type { Articulo, PrecioHistorial } from "@/lib/types";
+import type { Articulo, Color, PrecioHistorial } from "@/lib/types";
 
 interface Props {
   /** `null` = cerrada; `"nuevo"` = crear; un artículo = editar. */
@@ -26,6 +26,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
   const [precio, setPrecio] = useState("");
   const [minimo, setMinimo] = useState("0");
   const [publicado, setPublicado] = useState(true);
+  const [colores, setColores] = useState<Color[]>([]);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vista, setVista] = useState<string | null>(null);
   const [historial, setHistorial] = useState<PrecioHistorial[]>([]);
@@ -43,6 +44,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
       setPrecio("");
       setMinimo("0");
       setPublicado(true);
+      setColores([]);
       setVista(null);
       setHistorial([]);
     } else {
@@ -51,6 +53,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
       setPrecio(String(objetivo.precio_venta));
       setMinimo(String(objetivo.stock_minimo));
       setPublicado(objetivo.publicado);
+      setColores(objetivo.colores.map((c) => ({ ...c })));
       setVista(objetivo.imagen_url);
       api.articulos.precios(objetivo.id).then(setHistorial).catch(() => setHistorial([]));
     }
@@ -71,10 +74,19 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
     if (precio === "" || !Number.isFinite(p) || p < 0) return setError("Escribe un precio válido (0 o más).");
     if (!Number.isInteger(m) || m < 0) return setError("El stock mínimo debe ser un número entero, 0 o más.");
 
+    const limpios = colores.map((c) => ({ nombre: c.nombre.trim().replace(/\s+/g, " "), hex: c.hex }));
+    if (limpios.some((c) => !c.nombre)) return setError("Cada color necesita un nombre (o quítalo).");
+    const vistos = new Set<string>();
+    for (const c of limpios) {
+      const k = c.nombre.toLocaleLowerCase("es");
+      if (vistos.has(k)) return setError(`El color «${c.nombre}» está repetido.`);
+      vistos.add(k);
+    }
+
     setGuardando(true);
     setError(null);
     try {
-      const datos = { nombre: nombre.trim(), descripcion: descripcion.trim(), precio_venta: p, stock_minimo: m, publicado };
+      const datos = { nombre: nombre.trim(), descripcion: descripcion.trim(), precio_venta: p, stock_minimo: m, publicado, colores: limpios };
       const guardado = editando ? await api.articulos.actualizar(editando.id, datos) : await api.articulos.crear(datos);
       let avisoFoto: string | null = null;
       if (archivo) {
@@ -164,6 +176,22 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
           <Entrada etiqueta="Precio de venta (COP)" type="number" inputMode="numeric" min={0} step={100} required value={precio} onChange={(e) => setPrecio(e.target.value)} ayuda={cambioPrecio ? "El cambio no afecta ventas ya registradas." : undefined} />
           <Entrada etiqueta="Avisar si quedan" type="number" inputMode="numeric" min={0} step={1} value={minimo} onChange={(e) => setMinimo(e.target.value)} ayuda="Piezas o menos. 0 = sin aviso." />
         </div>
+        <fieldset className="colores-editor">
+          <legend className="field__label">Colores disponibles (opcional)</legend>
+          <p className="field__hint">Si agregas colores, el cliente elige uno al pedir. Déjalo vacío si el artículo no se ofrece en colores.</p>
+          {colores.map((c, i) => (
+            <div key={i} className="color-fila">
+              <input className="color-fila__muestra" type="color" value={c.hex} aria-label={`Muestra del color ${i + 1}`} onChange={(e) => setColores(colores.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))} />
+              <input className="input" maxLength={30} placeholder="Ej. Rojo" aria-label={`Nombre del color ${i + 1}`} value={c.nombre} onChange={(e) => setColores(colores.map((x, j) => (j === i ? { ...x, nombre: e.target.value } : x)))} />
+              <Boton variante="ghost" pequeno aria-label={`Quitar el color ${c.nombre || i + 1}`} onClick={() => setColores(colores.filter((_, j) => j !== i))}>Quitar</Boton>
+            </div>
+          ))}
+          {colores.length < 20 && (
+            <div>
+              <Boton variante="secondary" pequeno onClick={() => setColores([...colores, { nombre: "", hex: "#9ca3af" }])}>+ Agregar color</Boton>
+            </div>
+          )}
+        </fieldset>
         <label className="check">
           <input type="checkbox" checked={publicado} onChange={(e) => setPublicado(e.target.checked)} />
           Mostrar en el catálogo público

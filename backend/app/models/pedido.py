@@ -29,5 +29,7 @@ class Pedido(MarcaDeTiempo, Base):
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
     estado: Mapped[str] = mapped_column(String(12), server_default=text("'nuevo'"), nullable=False)
     nota: Mapped[str | None] = mapped_column(String(300))
+    # Color elegido (el nombre tal como estaba al pedir); None si el artículo no tiene colores.
+    color: Mapped[str | None] = mapped_column(String(30))
     # Hash del origen, para limitar abuso sin guardar la IP en claro.
     origen_hash: Mapped[str | None] = mapped_column(String(64), index=True)

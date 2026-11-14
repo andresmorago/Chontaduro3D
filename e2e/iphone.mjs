@@ -17,8 +17,14 @@ for (const nombre of ["iPhone SE", "iPhone 13", "iPhone 15 Pro Max"]) {
   await p.goto(BASE); await p.getByRole("heading", { level: 1 }).waitFor();
   ok(await sinDesborde(), "catálogo sin scroll horizontal");
   await p.screenshot({ path: `out/i-${tag}-catalogo.png` });
-  await p.getByRole("button", { name: /^Pedir/ }).first().click();
-  ok(await p.locator("dialog[open]").count() === 1, "la hoja de pedido (dialog) abre");
+  await p.locator("button.articulo__boton").first().click();
+  ok(await p.locator("dialog[open]").count() === 1, "tocar un artículo abre su ficha (dialog)");
+  ok(await sinDesborde(), "ficha del artículo sin desborde");
+  await p.locator("dialog[open]").evaluate((d) => Promise.all(d.getAnimations().map((a) => a.finished)));
+  await p.screenshot({ path: `out/i-${tag}-ficha.png` });
+  if (await p.getByRole("radio").count()) await p.getByRole("radio").first().tap();
+  await p.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).tap();
+  await p.getByLabel("Tu nombre").waitFor();
   ok(await sinDesborde(), "hoja de pedido sin desborde");
   const botones = await p.locator("dialog[open] button:visible").evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect().height));
   ok(botones.every((h) => h >= 40), `botones de la hoja con área táctil ≥ 40 px (${Math.min(...botones)|0} px mínimo)`);

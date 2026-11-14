@@ -1,5 +1,5 @@
 import { hoyISO } from "./format";
-import type { ExtraProduccion, Parametros } from "./types";
+import type { ExtraProduccion, Parametros, Produccion } from "./types";
 
 export type ModoFilamento = "total" | "por_filamento";
 
@@ -30,6 +30,23 @@ export const loteVacio = (fecha: string = hoyISO()): EstadoLote => ({
   precioPropio: "",
   potenciaPropia: "",
 });
+
+/** El formulario de un lote ya guardado, para corregirlo. La energía congelada se muestra como
+ *  valores propios del lote: así quedan visibles y no se recalculan con los parámetros de hoy. */
+export const loteDesde = (p: Produccion): EstadoLote => {
+  const min = p.minutos_impresion;
+  return {
+    modo: p.filamentos.length > 0 ? "por_filamento" : "total",
+    total: p.filamentos.length === 0 && p.gramos_total != null ? String(p.gramos_total) : "",
+    filamentos: p.filamentos.length > 0 ? p.filamentos.map((f) => ({ descripcion: f.descripcion, gramos: String(f.gramos) })) : [{ descripcion: "", gramos: "" }],
+    horas: min != null && Math.floor(min / 60) > 0 ? String(Math.floor(min / 60)) : "",
+    minutos: min != null && min % 60 > 0 ? String(min % 60) : "",
+    fecha: p.fecha,
+    sumar: p.afecta_inventario,
+    precioPropio: min != null && p.precio_kwh != null ? String(p.precio_kwh) : "",
+    potenciaPropia: min != null && p.potencia_w != null ? String(p.potencia_w) : "",
+  };
+};
 
 const num = (s: string): number => (s.trim() === "" ? NaN : Number(s.replace(",", ".")));
 

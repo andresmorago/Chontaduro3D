@@ -1,17 +1,19 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.config import settings
 from app.core import auditoria, imagenes
 from app.core.deps import DB, PROTEGIDO, Admin
 from app.core.inventario import bloquear_articulos, stock_de
-from app.models import Articulo, PrecioHistorial
+from app.models import Articulo, ArticuloColor, PrecioHistorial
 from app.schemas.dominio import (
     ArticuloIn,
     ArticuloOut,
     ArticuloUpdate,
+    ColorIn,
+    ColorOut,
     PrecioHistorialOut,
 )
 
@@ -22,11 +24,37 @@ def url_imagen(nombre: str | None) -> str | None:
     return f"/api/media/{nombre}" if nombre else None
 
 
-def a_salida(a: Articulo, stock: int) -> ArticuloOut:
+async def colores_de(db, ids: list[UUID]) -> dict[UUID, list[ColorOut]]:
+    """Colores de varios artículos de una vez, en el orden en que se definieron."""
+    resultado: dict[UUID, list[ColorOut]] = {i: [] for i in ids}
+    if not ids:
+        return resultado
+    filas = await db.execute(
+        select(ArticuloColor)
+        .where(ArticuloColor.articulo_id.in_(ids))
+        .order_by(ArticuloColor.articulo_id, ArticuloColor.orden)
+    )
+    for c in filas.scalars():
+        resultado[c.articulo_id].append(ColorOut(nombre=c.nombre, hex=c.hex))
+    return resultado
+
+
+def _poner_colores(db, articulo_id: UUID, colores: list[ColorIn]) -> None:
+    for n, c in enumerate(colores):
+        db.add(ArticuloColor(articulo_id=articulo_id, orden=n, nombre=c.nombre, hex=c.hex))
+
+
+async def _salida(db, a: Articulo) -> ArticuloOut:
+    stock = (await stock_de(db, [a.id]))[a.id]
+    return a_salida(a, stock, (await colores_de(db, [a.id]))[a.id])
+
+
+def a_salida(a: Articulo, stock: int, colores: list[ColorOut] | None = None) -> ArticuloOut:
     return ArticuloOut(
         id=a.id, codigo=a.codigo, nombre=a.nombre, descripcion=a.descripcion,
         imagen_url=url_imagen(a.imagen), precio_venta=a.precio_venta,
         stock_minimo=a.stock_minimo, stock=stock, publicado=a.publicado, activo=a.activo,
+        colores=colores or [],
     )  # fmt: skip
 
 
@@ -43,26 +71,29 @@ async def listar(db: DB, incluir_inactivos: bool = False) -> list[ArticuloOut]:
     if not incluir_inactivos:
         consulta = consulta.where(Articulo.activo.is_(True))
     articulos = (await db.execute(consulta)).scalars().all()
-    stock = await stock_de(db, [a.id for a in articulos])
-    return [a_salida(a, stock[a.id]) for a in articulos]
+    ids = [a.id for a in articulos]
+    stock = await stock_de(db, ids)
+    colores = await colores_de(db, ids)
+    return [a_salida(a, stock[a.id], colores[a.id]) for a in articulos]
 
 
 @router.post("", response_model=ArticuloOut, status_code=status.HTTP_201_CREATED)
 async def crear(datos: ArticuloIn, db: DB, usuario: Admin) -> ArticuloOut:
-    a = Articulo(**datos.model_dump())
+    a = Articulo(**datos.model_dump(exclude={"colores"}))
     db.add(a)
     await db.flush()
     await db.refresh(a)  # trae el código generado por la base
+    _poner_colores(db, a.id, datos.colores)
     db.add(PrecioHistorial(articulo_id=a.id, precio=a.precio_venta))
     auditoria.registrar(db, "articulo_creado", usuario_id=usuario.id, detalle={"codigo": a.codigo})
     await db.commit()
-    return a_salida(a, 0)
+    return await _salida(db, a)
 
 
 @router.get("/{articulo_id}", response_model=ArticuloOut)
 async def ver(articulo_id: UUID, db: DB) -> ArticuloOut:
     a = await _obtener(db, articulo_id)
-    return a_salida(a, (await stock_de(db, [a.id]))[a.id])
+    return await _salida(db, a)
 
 
 @router.patch("/{articulo_id}", response_model=ArticuloOut)
@@ -72,6 +103,8 @@ async def actualizar(
     await bloquear_articulos(db, [articulo_id])
     a = await _obtener(db, articulo_id)
     cambios = datos.model_dump(exclude_unset=True)
+    colores = datos.colores if "colores" in cambios else None
+    cambios.pop("colores", None)
     for campo in ("nombre", "precio_venta", "stock_minimo", "publicado", "activo"):
         if campo in cambios and cambios[campo] is None:
             raise HTTPException(
@@ -92,8 +125,16 @@ async def actualizar(
         )  # fmt: skip
     if cambios.get("activo") is False:
         a.publicado = False  # un artículo archivado no se muestra al público
+    if colores is not None:
+        # Los pedidos guardan el nombre del color como texto: reemplazar la lista no rompe nada.
+        await db.execute(delete(ArticuloColor).where(ArticuloColor.articulo_id == a.id))
+        _poner_colores(db, a.id, colores)
+        auditoria.registrar(
+            db, "colores_cambiados", usuario_id=usuario.id,
+            detalle={"codigo": a.codigo, "colores": [c.nombre for c in colores]},
+        )  # fmt: skip
     await db.commit()
-    return a_salida(a, (await stock_de(db, [a.id]))[a.id])
+    return await _salida(db, a)
 
 
 @router.get("/{articulo_id}/precios", response_model=list[PrecioHistorialOut])
@@ -128,7 +169,7 @@ async def subir_imagen(
         imagenes.borrar(nueva)  # no dejar un archivo huérfano si la base no lo registró
         raise
     imagenes.borrar(anterior)
-    return a_salida(a, (await stock_de(db, [a.id]))[a.id])
+    return await _salida(db, a)
 
 
 @router.delete("/{articulo_id}/imagen", response_model=ArticuloOut)
@@ -138,4 +179,4 @@ async def quitar_imagen(articulo_id: UUID, db: DB) -> ArticuloOut:
     anterior, a.imagen = a.imagen, None
     await db.commit()
     imagenes.borrar(anterior)
-    return a_salida(a, (await stock_de(db, [a.id]))[a.id])
+    return await _salida(db, a)

@@ -18,6 +18,11 @@ export interface UsuarioAdmin {
   es_yo: boolean;
 }
 
+export interface Color {
+  nombre: string;
+  hex: string;
+}
+
 export interface Articulo {
   id: string;
   codigo: string;
@@ -29,6 +34,7 @@ export interface Articulo {
   stock: number;
   publicado: boolean;
   activo: boolean;
+  colores: Color[];
 }
 
 export interface ArticuloEntrada {
@@ -37,6 +43,7 @@ export interface ArticuloEntrada {
   precio_venta: number;
   stock_minimo: number;
   publicado: boolean;
+  colores: Color[];
 }
 
 export interface PrecioHistorial {
@@ -143,6 +150,7 @@ export interface Pedido {
   nombre: string;
   whatsapp: string;
   cantidad: number;
+  color: string | null;
   estado: EstadoPedido;
   creado_en: string;
 }
@@ -155,6 +163,7 @@ export interface ArticuloPublico {
   imagen_url: string | null;
   precio: number;
   disponible: boolean;
+  colores: Color[];
 }
 
 export interface CatalogoPublico {

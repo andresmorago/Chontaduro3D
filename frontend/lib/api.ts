@@ -137,7 +137,7 @@ export const api = {
   publico: {
     catalogo: () => pedir<CatalogoPublico>("/publico/articulos"),
     config: () => pedir<ConfigPublica>("/publico/config"),
-    pedir: (d: { articulo_id: string; nombre: string; whatsapp: string; cantidad: number; sitio_web: string; turnstile: string }) =>
+    pedir: (d: { articulo_id: string; nombre: string; whatsapp: string; cantidad: number; color: string; sitio_web: string; turnstile: string }) =>
       pedir<{ ok: boolean; mensaje: string }>("/publico/pedidos", { metodo: "POST", cuerpo: d }),
   },
   panel: () => pedir<Panel>("/panel"),
@@ -174,6 +174,8 @@ export const api = {
     listar: (limite = 30) => pedir<Produccion[]>(`/produccion${q({ limite })}`),
     registrar: (items: ItemCantidad[], nota?: string, extra: ExtraProduccion = {}) =>
       pedir<Produccion>("/produccion", { metodo: "POST", cuerpo: { items, nota: nota || null, ...extra } }),
+    modificar: (id: string, items: ItemCantidad[], nota?: string, extra: ExtraProduccion = {}) =>
+      pedir<Produccion>(`/produccion/${id}`, { metodo: "PUT", cuerpo: { items, nota: nota || null, ...extra } }),
   },
   ventas: {
     deHoy: () => pedir<Venta[]>("/ventas"),

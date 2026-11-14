@@ -10,8 +10,10 @@ from sqlalchemy import (
     Integer,
     Numeric,
     Sequence,
+    SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -66,3 +68,18 @@ class PrecioHistorial(Base):
     cambiado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class ArticuloColor(Base):
+    """Un color en el que se ofrece el artículo; el cliente elige uno al pedir."""
+
+    __tablename__ = "articulo_colores"
+    __table_args__ = (UniqueConstraint("articulo_id", "nombre", name="uq_articulo_colores_nombre"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    articulo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("articulos.id", ondelete="CASCADE"), index=True
+    )
+    orden: Mapped[int] = mapped_column(SmallInteger, server_default="0", nullable=False)
+    nombre: Mapped[str] = mapped_column(String(30), nullable=False)
+    hex: Mapped[str] = mapped_column(String(7), nullable=False)  # #RRGGBB, solo para la muestra

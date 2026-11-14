@@ -5,9 +5,9 @@ import { useMemo, useState } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { Foto } from "@/components/ui/Foto";
 import { Icono } from "@/components/ui/Icono";
-import { dinero, enlaceWhatsapp } from "@/lib/format";
+import { enlaceWhatsapp } from "@/lib/format";
 import type { ArticuloPublico } from "@/lib/types";
-import { PedidoHoja } from "./PedidoHoja";
+import { DetalleHoja } from "./DetalleHoja";
 
 interface Props {
   articulos: ArticuloPublico[];
@@ -57,7 +57,7 @@ export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
           <h1 id="titulo-catalogo">Piezas impresas en 3D</h1>
           <p className="lead">Mira lo que hay, elige y déjanos tu pedido. Te escribimos por WhatsApp para confirmarlo.</p>
           <p className="catalogo-cab__cuenta">
-            {articulos.length === 1 ? "1 artículo" : `${articulos.length} artículos`} · Disponible = listo para entregar · Sobre pedido = lo imprimimos cuando lo pides
+            {articulos.length === 1 ? "1 artículo" : `${articulos.length} artículos`} · Toca uno para ver el detalle, el precio y los colores
           </p>
         </section>
 
@@ -79,19 +79,10 @@ export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
             <ul className="catalogo" style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {visibles.map((a) => (
                 <li key={a.id} className="articulo">
-                  <Foto url={a.imagen_url} codigo={a.codigo} nombre={a.nombre} clase="articulo__foto" />
-                  <div className="articulo__cuerpo">
-                    <p className="code articulo__codigo">{a.codigo}</p>
-                    <h2 className="articulo__nombre">{a.nombre}</h2>
-                    {a.descripcion && <p className="articulo__desc">{a.descripcion}</p>}
-                    <div className="articulo__pie">
-                      <span className="articulo__precio">{dinero(a.precio)}</span>
-                      <span className={`etiqueta ${a.disponible ? "etiqueta--ok" : "etiqueta--tenue"}`}>{a.disponible ? "Disponible" : "Sobre pedido"}</span>
-                    </div>
-                    <Boton variante="primary" bloque pequeno onClick={() => setElegido(a)} aria-label={`Pedir ${a.nombre}`}>
-                      Pedir
-                    </Boton>
-                  </div>
+                  <button type="button" className="articulo__boton" onClick={() => setElegido(a)} aria-label={`Ver ${a.nombre}`}>
+                    <Foto url={a.imagen_url} codigo={a.codigo} nombre="" clase="articulo__foto" />
+                    <span className="articulo__nombre">{a.nombre}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -114,7 +105,7 @@ export function Catalogo({ articulos, whatsapp, sitekey, negocio }: Props) {
         </div>
       </footer>
 
-      <PedidoHoja articulo={elegido} sitekey={sitekey} onCerrar={() => setElegido(null)} />
+      <DetalleHoja articulo={elegido} sitekey={sitekey} onCerrar={() => setElegido(null)} />
     </>
   );
 }

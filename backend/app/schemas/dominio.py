@@ -13,12 +13,53 @@ Cantidad = Field(ge=1, le=10_000)
 
 
 # --- Artículos ---------------------------------------------------------------
+class ColorIn(Entrada):
+    nombre: str = Field(min_length=1, max_length=30)
+    hex: str = Field(default="#9ca3af", pattern=r"^#[0-9a-fA-F]{6}$")
+
+    @field_validator("nombre")
+    @classmethod
+    def _limpio(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("El color necesita un nombre.")
+        return v
+
+    @field_validator("hex")
+    @classmethod
+    def _minuscula(cls, v: str) -> str:
+        return v.lower()
+
+
+class ColorOut(Salida):
+    nombre: str
+    hex: str
+
+
+def _sin_repetidos(colores: list[ColorIn] | None) -> list[ColorIn] | None:
+    if colores is None:
+        return None
+    vistos: set[str] = set()
+    for c in colores:
+        clave = c.nombre.casefold()
+        if clave in vistos:
+            raise ValueError(f"El color «{c.nombre}» está repetido.")
+        vistos.add(clave)
+    return colores
+
+
 class ArticuloIn(Entrada):
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str = Field(default="", max_length=2000)
     precio_venta: Dinero
     stock_minimo: int = Field(default=0, ge=0, le=10_000)
     publicado: bool = True
+    colores: list[ColorIn] = Field(default_factory=list, max_length=20)
+
+    @field_validator("colores")
+    @classmethod
+    def _colores_unicos(cls, v: list[ColorIn]) -> list[ColorIn]:
+        return _sin_repetidos(v) or []
 
 
 class ArticuloUpdate(Entrada):
@@ -28,6 +69,13 @@ class ArticuloUpdate(Entrada):
     stock_minimo: int | None = Field(default=None, ge=0, le=10_000)
     publicado: bool | None = None
     activo: bool | None = None
+    # None = no tocar los colores; una lista (aunque sea vacía) reemplaza la anterior.
+    colores: list[ColorIn] | None = Field(default=None, max_length=20)
+
+    @field_validator("colores")
+    @classmethod
+    def _colores_unicos(cls, v: list[ColorIn] | None) -> list[ColorIn] | None:
+        return _sin_repetidos(v)
 
 
 class ArticuloOut(Salida):
@@ -41,6 +89,7 @@ class ArticuloOut(Salida):
     stock: int
     publicado: bool
     activo: bool
+    colores: list[ColorOut] = []
 
 
 class PrecioHistorialOut(Salida):
@@ -197,6 +246,8 @@ class PedidoPublicoIn(Entrada):
     nombre: str = Field(min_length=2, max_length=80)
     whatsapp: str = Field(min_length=7, max_length=20)
     cantidad: int = Field(ge=1, le=99)
+    # Obligatorio si el artículo tiene colores; debe ser uno de ellos.
+    color: str = Field(default="", max_length=30)
     # Trampa para robots: un humano nunca ve este campo, así que debe llegar vacío.
     sitio_web: str = Field(default="", max_length=200)
     turnstile: str = Field(default="", max_length=2048)
@@ -222,6 +273,7 @@ class PedidoOut(Salida):
     nombre: str
     whatsapp: str
     cantidad: int
+    color: str | None = None
     estado: str
     creado_en: datetime
 
@@ -240,6 +292,7 @@ class ArticuloPublico(Salida):
     imagen_url: str | None
     precio: DineroSalida
     disponible: bool
+    colores: list[ColorOut] = []
 
 
 class CatalogoPublico(Salida):

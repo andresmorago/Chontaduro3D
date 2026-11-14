@@ -5,6 +5,7 @@ import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { Contador } from "@/components/ui/Contador";
 import { Entrada } from "@/components/ui/Campo";
+import { LoteEditarHoja } from "@/components/panel/LoteEditarHoja";
 import { FilamentoTiempo } from "@/components/panel/FilamentoTiempo";
 import { ParametrosHoja } from "@/components/panel/ParametrosHoja";
 import { Selector } from "@/components/panel/Selector";
@@ -12,7 +13,7 @@ import { api } from "@/lib/api";
 import { dinero, fechaCorta, hoyISO, restarDias } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import { aExtra, gramos, kwhTexto, loteVacio, tiempoLargo } from "@/lib/produccion";
-import type { Articulo } from "@/lib/types";
+import type { Articulo, Produccion as Lote } from "@/lib/types";
 
 export default function Produccion() {
   const { mostrar } = useAvisos();
@@ -30,6 +31,7 @@ export default function Produccion() {
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [nota, setNota] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [editando, setEditando] = useState<Lote | null>(null);
 
   const lista = articulos.datos ?? [];
   const porId = new Map(lista.map((a) => [a.id, a]));
@@ -60,7 +62,7 @@ export default function Produccion() {
       const fechaUsada = lote.fecha;
       const sumo = lote.sumar;
       setLote({ ...loteVacio(fechaUsada), sumar: sumo });
-      const donde = sumo ? "entró al inventario" : "quedó en el historial (sin sumar al stock)";
+      const donde = sumo ? (unidades === 1 ? "entró" : "entraron") + " al inventario" : (unidades === 1 ? "quedó" : "quedaron") + " en el historial (sin sumar al stock)";
       mostrar(`Listo: ${unidades === 1 ? "1 pieza" : `${unidades} piezas`} ${donde}${fechaUsada !== hoy ? `, con fecha ${fechaCorta(fechaUsada)}` : ""}.`);
       await Promise.all([articulos.recargar(), historial.recargar()]);
     } catch (e) {
@@ -170,7 +172,10 @@ export default function Produccion() {
                     <span className="fila__meta">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>
                   )}
                 </span>
-                <span className="fila__fin num">+{p.items.reduce((s, i) => s + i.cantidad, 0)}</span>
+                <span className="fila__fin num">
+                  +{p.items.reduce((s, i) => s + i.cantidad, 0)}
+                  <Boton variante="secondary" pequeno onClick={() => setEditando(p)} aria-label={`Editar el lote del ${fechaCorta(p.fecha)}`}>Editar</Boton>
+                </span>
               </div>
             ))}
           </div>
@@ -179,6 +184,14 @@ export default function Produccion() {
           <div><Boton variante="secondary" pequeno onClick={() => setLimite((n) => Math.min(100, n + 30))}>Ver más lotes</Boton></div>
         )}
       </section>
+      <LoteEditarHoja
+        lote={editando}
+        articulos={lista}
+        parametros={parametros.datos}
+        onCerrar={() => setEditando(null)}
+        onGuardado={() => void Promise.all([articulos.recargar(), historial.recargar()])}
+        onAbrirParametros={() => setVerParametros(true)}
+      />
       <ParametrosHoja abierta={verParametros} actuales={parametros.datos} onCerrar={() => setVerParametros(false)} onGuardado={() => void parametros.recargar()} />
     </>
   );

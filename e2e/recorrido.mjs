@@ -143,6 +143,11 @@ await pagina.getByLabel("Descripción").fill("Artículo creado por la prueba de 
 await pagina.getByLabel("Precio de venta (COP)").fill("10000");
 await pagina.getByLabel("Avisar si quedan").fill("3");
 await pagina.locator('input[type="file"]').setInputFiles("foto.png");
+// Colores: dos, para que el cliente elija
+await pagina.getByRole("button", { name: "+ Agregar color" }).click();
+await pagina.getByLabel("Nombre del color 1").fill("Rojo");
+await pagina.getByRole("button", { name: "+ Agregar color" }).click();
+await pagina.getByLabel("Nombre del color 2").fill("Azul");
 await foto("05-articulo-hoja");
 await pagina.getByRole("button", { name: "Guardar" }).click();
 await pagina.locator("button.fila", { hasText: ARTICULO }).waitFor({ timeout: 8000 }).catch(async () => {
@@ -178,6 +183,25 @@ const meta = (await pagina.locator(".lista .fila__meta").first().innerText()).re
 ok(meta.includes("187,5 g") && meta.includes("2 h 30 min") && meta.includes("0,5 kWh") && meta.includes("$ 400"), `el lote guarda gramos, tiempo y energía (${meta.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "producir 3 deja 3 en inventario");
 
+console.log("Editar un lote ya guardado");
+await pagina.goto(`${BASE}/panel/produccion`);
+await pagina.getByRole("button", { name: /Editar el lote/ }).first().click();
+await pagina.getByRole("heading", { name: "Editar lote" }).waitFor();
+await foto("07c-lote-editar");
+await pagina.locator("dialog[open]").getByRole("button", { name: new RegExp(`Agregar una unidad de ${ARTICULO}`) }).click();
+await pagina.getByRole("button", { name: "Guardar cambios" }).click();
+await pagina.getByText(/Lote corregido/).waitFor();
+ok((await stockDe(ARTICULO)) === 4, "editar el lote de 3 a 4 sube el inventario a 4 (solo la diferencia)");
+await pagina.goto(`${BASE}/panel/produccion`);
+await pagina.getByRole("button", { name: /Editar el lote/ }).first().click();
+await pagina.locator("dialog[open]").getByRole("button", { name: new RegExp(`Quitar una unidad de ${ARTICULO}`) }).click();
+await pagina.getByRole("button", { name: "Guardar cambios" }).click();
+await pagina.getByText(/Lote corregido/).waitFor();
+await pagina.goto(`${BASE}/panel/produccion`);
+const metaEditada = (await pagina.locator(".lista .fila__meta").first().innerText()).replace(/\u00a0/g, " ");
+ok(metaEditada.includes("187,5 g") && metaEditada.includes("2 h 30 min"), "el lote editado conserva filamento y tiempo");
+ok((await stockDe(ARTICULO)) === 3, "volver el lote a 3 deja el inventario en 3");
+
 console.log("Carga retrospectiva");
 const FECHA_VIEJA = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
 await pagina.goto(`${BASE}/panel/produccion`);
@@ -198,7 +222,16 @@ const publica = await contextoPublico.newPage();
 await publica.goto(BASE);
 const tarjeta = publica.locator("li.articulo", { hasText: ARTICULO });
 await tarjeta.waitFor();
-await tarjeta.getByRole("button", { name: /Pedir/ }).click();
+const textoTarjeta = (await tarjeta.innerText()).replace(/\u00a0/g, " ");
+ok(textoTarjeta.trim() === ARTICULO && !textoTarjeta.includes("$"), `la tarjeta del catálogo muestra solo el nombre (sin precio ni descripción): «${textoTarjeta.trim()}»`);
+await tarjeta.locator("button.articulo__boton").click();
+await publica.getByText("Artículo creado por la prueba de punta a punta.").waitFor();
+ok(true, "al tocar la tarjeta se amplía la información (descripción)");
+await publica.screenshot({ path: "out/07d-ficha-movil.png" });
+ok((await publica.getByRole("radio").count()) === 2, "la ficha ofrece los 2 colores definidos");
+ok(await publica.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).isDisabled(), "no se puede pedir sin elegir color");
+await publica.getByRole("radio", { name: "Azul" }).click();
+await publica.locator("dialog[open]").getByRole("button", { name: /^Pedir/ }).click();
 await publica.getByLabel("Tu nombre").fill("Cliente de Prueba");
 await publica.getByLabel("Tu WhatsApp").fill("300 123 4567");
 await publica.getByRole("button", { name: /Agregar una unidad/ }).click();
@@ -212,6 +245,7 @@ ok((await stockDe(ARTICULO)) === 3, "el pedido NO cambió el inventario");
 console.log("Pedidos en el panel");
 await pagina.goto(`${BASE}/panel/pedidos`);
 await pagina.getByText("Cliente de Prueba").first().waitFor();
+ok((await pagina.locator(".pedido").first().innerText()).includes("Azul"), "el pedido en el panel muestra el color elegido");
 await foto("10-pedidos");
 ok(await pagina.getByRole("link", { name: /Escribir por WhatsApp/ }).first().getAttribute("href").then((h) => h?.startsWith("https://wa.me/573001234567")), "el enlace de WhatsApp lleva el indicativo 57");
 

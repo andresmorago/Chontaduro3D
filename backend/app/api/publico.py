@@ -3,7 +3,7 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import func, select, text
 
-from app.api.articulos import url_imagen
+from app.api.articulos import colores_de, url_imagen
 from app.config import settings
 from app.core import turnstile
 from app.core.cliente import ip_cliente, origen_hash
@@ -40,11 +40,13 @@ async def catalogo(db: DB) -> CatalogoPublico:
         .all()
     )
     stock = await stock_de(db, [a.id for a in articulos])
+    colores = await colores_de(db, [a.id for a in articulos])
     return CatalogoPublico(
         articulos=[
             ArticuloPublico(
                 id=a.id, codigo=a.codigo, nombre=a.nombre, descripcion=a.descripcion,
                 imagen_url=url_imagen(a.imagen), precio=a.precio_venta, disponible=stock[a.id] > 0,
+                colores=colores[a.id],
             )
             for a in articulos
         ],
@@ -93,10 +95,26 @@ async def crear_pedido(datos: PedidoPublicoIn, request: Request, db: DB) -> Pedi
     if articulo is None or not articulo.publicado or not articulo.activo:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese artículo ya no está disponible.")
 
+    # Si el artículo se ofrece en colores, el cliente debe elegir uno de ellos; si no, ninguno.
+    ofrecidos = (await colores_de(db, [articulo.id]))[articulo.id]
+    color: str | None = None
+    if ofrecidos:
+        elegido = next(
+            (
+                c
+                for c in ofrecidos
+                if c.nombre.casefold() == " ".join(datos.color.split()).casefold()
+            ),
+            None,
+        )
+        if elegido is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Elige uno de los colores.")
+        color = elegido.nombre
+
     db.add(
         Pedido(
             articulo_id=articulo.id, nombre=datos.nombre, whatsapp=datos.whatsapp,
-            cantidad=datos.cantidad, origen_hash=origen,
+            cantidad=datos.cantidad, color=color, origen_hash=origen,
         )
     )  # fmt: skip
     await db.commit()

@@ -1,6 +1,6 @@
 """Importar todos los modelos aquí es lo que llena Base.metadata para Alembic."""
 
-from app.models.articulo import Articulo, PrecioHistorial
+from app.models.articulo import Articulo, ArticuloColor, PrecioHistorial
 from app.models.auditoria import RegistroAuditoria
 from app.models.inventario import MovimientoInventario
 from app.models.parametros import Parametros
@@ -11,6 +11,7 @@ from app.models.venta import Venta, VentaItem
 
 __all__ = [
     "Articulo",
+    "ArticuloColor",
     "MovimientoInventario",
     "Parametros",
     "Pedido",

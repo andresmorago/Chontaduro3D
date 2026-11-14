@@ -14,7 +14,8 @@ router = APIRouter(prefix="/pedidos", tags=["pedidos"], dependencies=PROTEGIDO)
 def _salida(p: Pedido, a: Articulo) -> PedidoOut:
     return PedidoOut(
         id=p.id, articulo_id=a.id, codigo=a.codigo, articulo=a.nombre, nombre=p.nombre,
-        whatsapp=p.whatsapp, cantidad=p.cantidad, estado=p.estado, creado_en=p.creado_en,
+        whatsapp=p.whatsapp, cantidad=p.cantidad, color=p.color, estado=p.estado,
+        creado_en=p.creado_en,
     )  # fmt: skip
 
 
