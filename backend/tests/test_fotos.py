@@ -113,6 +113,23 @@ async def test_foto_de_color_acepta_heic_y_reemplazar_borra_la_anterior(admin):
     assert u1 != u2 and Path(settings.media_dir, u1.rsplit("/", 1)[1]).exists() is False
 
 
+async def test_foto_de_color_pesada_no_choca_con_el_tope_de_json(admin, publico):
+    """Regresión: la ruta de la foto de un color usaba el tope de 256 KB de las peticiones JSON."""
+    import os
+
+    a = await crear_articulo(admin, colores=[ROJO])
+    ruta = f"/api/articulos/{a['id']}/colores/{a['colores'][0]['id']}/imagen"
+    b = io.BytesIO()
+    Image.frombytes("RGB", (700, 700), os.urandom(700 * 700 * 3)).save(b, "PNG")
+    assert len(b.getvalue()) > 1024 * 1024  # más de 1 MB: pasa de largo el tope de JSON
+    r = await subir(admin, ruta, b.getvalue())
+    assert r.status_code == 200, r.text
+    assert (await publico.get(r.json()["colores"][0]["imagen_url"])).status_code == 200
+    # El tope sigue existiendo: algo más grande que el máximo de subida se rechaza.
+    enorme = b"0" * ((settings.max_upload_mb + 2) * 1024 * 1024)
+    assert (await subir(admin, ruta, enorme)).status_code == 413
+
+
 async def test_quitar_foto_de_color(admin):
     a = await crear_articulo(admin, colores=[ROJO])
     ruta = f"/api/articulos/{a['id']}/colores/{a['colores'][0]['id']}/imagen"

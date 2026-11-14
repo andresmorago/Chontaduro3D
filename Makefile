@@ -127,6 +127,7 @@ bambu-nube-prueba: ## Producción: diagnóstico del historial de Bambu Cloud (fo
 # correrlo más de unas 5 veces por hora.
 e2e: ## Recorrido completo con navegador real (Playwright); capturas en e2e/out
 	@docker compose exec -T backend python -m app.seeds.trabajos_ejemplo
+	@test -f e2e/grande.png || docker compose exec -T backend python -c "import os, sys; from PIL import Image; w, h = 3000, 2200; Image.frombytes('RGB', (w, h), os.urandom(w * h * 3)).save(sys.stdout.buffer, 'PNG')" > e2e/grande.png
 	@set -a && . ./.env && set +a && docker run --rm --network misimpresiones_default -v "$$PWD/e2e:/work" -w /work -e ADMIN_EMAIL -e ADMIN_PASSWORD mcr.microsoft.com/playwright:v1.56.1-noble bash -c "npm i --no-audit --no-fund playwright@1.56.1 >/dev/null 2>&1 && node recorrido.mjs"
 
 iphone: ## Prueba en WebKit (motor de Safari) con perfiles de iPhone SE, 13 y 15 Pro Max

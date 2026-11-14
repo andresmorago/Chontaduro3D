@@ -180,7 +180,15 @@ await pagina.getByLabel("Zoom de el color Rojo").waitFor();
 ok(true, "el HEIC del color se convirtió en el servidor y ya se puede encuadrar");
 await foto("05b-foto-de-color");
 ok((await pagina.getByRole("button", { name: "Foto del color Azul" }).locator("svg").count()) === 1, "el color sin foto no la exige");
-await pagina.getByRole("button", { name: "Cancelar" }).click();
+// Una foto enorme (≈20 MB, más que el límite) se achica sola en el navegador antes de subirla
+const [selector] = await Promise.all([pagina.waitForEvent("filechooser"), pagina.locator(".color-foto").getByRole("button", { name: "Cambiar foto" }).click()]);
+await selector.setFiles("grande.png");
+await pagina.getByRole("button", { name: "Guardar", exact: true }).waitFor({ timeout: 90000 });
+ok(true, "una foto de ≈20 MB se achica sola y queda lista para subir");
+await pagina.getByRole("button", { name: "Guardar", exact: true }).click();
+await pagina.getByText(/Cambios guardados/).waitFor();
+await pagina.waitForTimeout(1500);
+ok((await pagina.locator(".aviso--error").count()) === 0, "la foto enorme se subió sin error de tamaño");
 
 console.log("Producción → inventario");
 await pagina.goto(`${BASE}/panel/produccion`);
@@ -282,6 +290,11 @@ await foto("07g-impresora");
 const estadoImp = (await pagina.locator(".impresora-estado").innerText()).replace(/\u00a0/g, " ");
 ok(/Lista|Imprimiendo|En pausa|Terminada|Preparando|Fallida|Sin conexión/.test(estadoImp), `la página de la impresora muestra su estado (${estadoImp.split("\n")[0]})`);
 ok((await pagina.getByRole("button", { name: /luz/ }).count()) === 1, "hay control de luz");
+ok((await pagina.getByLabel("Boquilla (°C)").count()) === 1 && (await pagina.getByLabel("Cama (°C)").count()) === 1, "hay controles de temperatura de boquilla y cama");
+ok((await pagina.getByLabel(/Velocidad del ventilador de la pieza/).count()) === 1 && (await pagina.getByLabel(/Velocidad del ventilador auxiliar/).count()) === 1, "hay controles de los dos ventiladores");
+await pagina.getByLabel("Boquilla (°C)").fill("100");
+ok(await pagina.getByText(/La boquilla va de 150 a 300/).isVisible(), "una temperatura de boquilla fuera de rango se avisa");
+await pagina.getByLabel("Boquilla (°C)").fill("220");
 ok((await pagina.getByRole("link", { name: "Cuenta y usuarios" }).count()) === 1, "las pestañas de Administración están");
 
 console.log("Pedido público (no debe tocar el inventario)");
@@ -305,6 +318,7 @@ const srcPrincipal = await imgFicha.getAttribute("src");
 ok((await imgFicha.evaluate((e) => parseFloat(e.style.width))) >= 150, "la ficha aplica el zoom elegido (la misma foto y encuadre que la tarjeta)");
 await publica.getByRole("radio", { name: "Rojo" }).click();
 await publica.waitForTimeout(600);
+ok((await publica.locator("dialog[open] .detalle__foto img").evaluate((e) => e.naturalWidth)) <= 2000, "la foto del color (enorme al subirla) se guardó a 2000 px o menos");
 ok((await publica.locator("dialog[open] .detalle__foto img").getAttribute("src")) !== srcPrincipal, "al elegir un color con foto propia la ficha muestra esa foto");
 await publica.screenshot({ path: "out/07e-ficha-color.png" });
 await publica.getByRole("radio", { name: "Azul" }).click();

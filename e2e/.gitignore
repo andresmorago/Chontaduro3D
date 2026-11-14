@@ -1,3 +1,6 @@
 node_modules/
 out/
 package-lock.json
+
+# Foto enorme (≈20 MB) que genera `make e2e`
+grande.png

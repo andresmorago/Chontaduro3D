@@ -41,7 +41,7 @@ services:
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:-}
       APP_TIMEZONE: ${APP_TIMEZONE:-America/Bogota}
       MEDIA_DIR: ${MEDIA_DIR:-/media}
-      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-12}
       WHATSAPP_NEGOCIO: ${WHATSAPP_NEGOCIO:-}
       # Cloudflare Turnstile (reCAPTCHA de Cloudflare) en login y pedidos; vacío = apagado.
       TURNSTILE_SITEKEY: ${TURNSTILE_SITEKEY:-}

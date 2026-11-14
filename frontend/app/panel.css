@@ -263,3 +263,13 @@ button.fila:hover { background: var(--color-paper-2); }
 .color-foto-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .color-foto-btn__mini { width: 100%; height: 100%; aspect-ratio: auto; }
 .color-foto { display: grid; gap: var(--space-sm); padding: var(--space-sm); border-radius: var(--radius-control); background: var(--color-paper-2); }
+
+/* Controles de temperatura y ventiladores. */
+.control-grupo { display: grid; gap: var(--space-sm); margin: 0; padding: var(--space-md) 0 0; border: 0; border-top: var(--rule-hair) solid var(--color-rule); min-width: 0; }
+.control-grupo legend { padding: 0; float: left; width: 100%; margin-bottom: var(--space-xs); }
+.control-grupo > * { clear: both; }
+.control-fila { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-sm) var(--space-md); }
+.control-fila__campo { flex: 0 1 11rem; min-width: 8rem; }
+.control-fila__campo--ancho { flex: 1 1 14rem; }
+.control-fila__campo input[type="range"] { width: 100%; accent-color: var(--color-accent); min-height: 32px; }
+.control-fila__ahora { flex: 1 1 9rem; align-self: center; font-size: var(--text-sm); color: var(--color-muted); }

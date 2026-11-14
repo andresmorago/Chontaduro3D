@@ -2,6 +2,7 @@ import io
 
 from PIL import Image
 
+from app.config import settings
 from tests.conftest import crear_articulo
 
 
@@ -52,7 +53,7 @@ async def test_rechaza_lo_que_no_es_imagen_aunque_diga_que_lo_es(admin):
 
 async def test_rechaza_archivo_demasiado_grande(admin):
     a = await crear_articulo(admin)
-    r = await subir(admin, a, b"0" * (6 * 1024 * 1024))
+    r = await subir(admin, a, b"0" * ((settings.max_upload_mb + 1) * 1024 * 1024 + 1))
     assert r.status_code == 413
 
 

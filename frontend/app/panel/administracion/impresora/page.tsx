@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminPestanas } from "@/components/panel/AdminPestanas";
+import { ControlesTermicos } from "@/components/panel/ControlesTermicos";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { api } from "@/lib/api";
@@ -115,6 +116,8 @@ export default function Impresora() {
                   <div><dt>Boquilla{d.boquilla_mm ? ` (${d.boquilla_mm} mm)` : ""}</dt><dd className="num">{grados(d.boquilla)}{d.boquilla_objetivo ? ` → ${grados(d.boquilla_objetivo)}` : ""}</dd></div>
                   <div><dt>Cama</dt><dd className="num">{grados(d.cama)}{d.cama_objetivo ? ` → ${grados(d.cama_objetivo)}` : ""}</dd></div>
                   <div><dt>Wi-Fi</dt><dd className="num">{d.wifi ?? "—"}</dd></div>
+                  <div><dt>Ventilador pieza</dt><dd className="num">{d.ventilador_pieza != null ? `${d.ventilador_pieza} %` : "—"}</dd></div>
+                  <div><dt>Ventilador auxiliar</dt><dd className="num">{d.ventilador_aux != null ? `${d.ventilador_aux} %` : "—"}</dd></div>
                   <div><dt>Velocidad</dt><dd>{VELOCIDADES.find((v) => v.valor === String(d.velocidad))?.etiqueta ?? "—"}</dd></div>
                 </dl>
               </>
@@ -133,6 +136,8 @@ export default function Impresora() {
               {d?.luz === "on" ? "Apagar luz" : "Encender luz"}
             </Boton>
           </div>
+
+          <ControlesTermicos datos={d} conectada={conectada} ocupado={ocupado} ordenar={(c, v, t) => ordenar(c, v, t)} />
 
           <div className="field">
             <span className="field__label" id="etq-vel">Velocidad de impresión</span>

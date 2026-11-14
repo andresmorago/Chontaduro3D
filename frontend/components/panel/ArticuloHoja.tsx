@@ -9,7 +9,7 @@ import { Hoja } from "@/components/ui/Hoja";
 import { Icono } from "@/components/ui/Icono";
 import { EncuadreFoto } from "@/components/panel/EncuadreFoto";
 import { api } from "@/lib/api";
-import { CENTRADO, aCampos, encuadreDe, esHeic, type Encuadre } from "@/lib/foto";
+import { CENTRADO, aCampos, encuadreDe, esHeic, prepararFoto, type Encuadre } from "@/lib/foto";
 import { dinero, fechaHora } from "@/lib/format";
 import { mensajeDe } from "@/lib/hooks";
 import type { Articulo, ArticuloEntrada, PrecioHistorial } from "@/lib/types";
@@ -51,6 +51,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vista, setVista] = useState<string | null>(null);
   const [heic, setHeic] = useState(false);
+  const [preparando, setPreparando] = useState(false);
   const [enc, setEnc] = useState<Encuadre>(CENTRADO);
   const [historial, setHistorial] = useState<PrecioHistorial[]>([]);
   const [guardando, setGuardando] = useState(false);
@@ -100,10 +101,13 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
     return soltarUrls;
   }, [objetivo]);
 
-  function elegirFoto(f: File | null) {
+  async function elegirFoto(original: File | null) {
+    if (!original) return;
+    setPreparando(true);
+    const f = await prepararFoto(original); // se achica antes de subir: una foto de celular pesa varios MB
+    setPreparando(false);
     setArchivo(f);
     setEnc(CENTRADO); // una foto nueva empieza centrada y completa
-    if (!f) return;
     // Un HEIC no se puede mostrar en el navegador de escritorio: el servidor lo convierte al guardar.
     setHeic(esHeic(f));
     setVista(esHeic(f) ? null : nuevaUrl(f));
@@ -111,9 +115,12 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
 
   const actColor = (i: number, parcial: Partial<FilaColor>) => setColores((cs) => cs.map((c, j) => (j === i ? { ...c, ...parcial } : c)));
 
-  function elegirFotoColor(f: File | null) {
+  async function elegirFotoColor(original: File | null) {
     const i = colorEnSubida.current;
-    if (!f) return;
+    if (!original) return;
+    setPreparando(true);
+    const f = await prepararFoto(original);
+    setPreparando(false);
     actColor(i, { archivo: f, quitar: false, enc: CENTRADO, heic: esHeic(f), vista: esHeic(f) ? null : nuevaUrl(f), abierto: true });
   }
 
@@ -163,7 +170,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
         }
       }
       mostrar(editando ? "Cambios guardados." : `Artículo creado: ${guardado.codigo}.`);
-      if (fallos.length) mostrar(`No se pudo subir ${fallos.join("; ")}. Ábrelo de nuevo para reintentar.`, { tipo: "error" });
+      if (fallos.length) mostrar(`El artículo se guardó, pero NO se pudo subir ${fallos.join("; ")}. Ábrelo de nuevo para reintentar.`, { tipo: "error", ms: 15000 });
       onGuardado();
       onCerrar();
     } catch (err) {
@@ -214,7 +221,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
       pie={
         <>
           <Boton variante="secondary" onClick={onCerrar}>Cancelar</Boton>
-          <Boton variante="accent" type="submit" form="form-articulo" cargando={guardando}>Guardar</Boton>
+          <Boton variante="accent" type="submit" form="form-articulo" cargando={guardando || preparando} disabled={preparando}>{preparando ? "Preparando foto…" : "Guardar"}</Boton>
         </>
       }
     >
@@ -234,8 +241,8 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
             <Boton variante="secondary" pequeno onClick={() => entradaArchivo.current?.click()}>{vista || heic ? "Cambiar foto" : "Subir foto"}</Boton>
             {(vista || heic) && <Boton variante="ghost" pequeno onClick={quitarImagen}>Quitar</Boton>}
           </div>
-          <input ref={entradaArchivo} className="visually-hidden" type="file" accept={ACEPTA} tabIndex={-1} onChange={(e) => { elegirFoto(e.target.files?.[0] ?? null); e.target.value = ""; }} aria-label="Elegir foto" />
-          <p className="field__hint">JPG, PNG, WEBP o HEIC (iPhone), hasta 5 MB.</p>
+          <input ref={entradaArchivo} className="visually-hidden" type="file" accept={ACEPTA} tabIndex={-1} onChange={(e) => { void elegirFoto(e.target.files?.[0] ?? null); e.target.value = ""; }} aria-label="Elegir foto" />
+          <p className="field__hint">JPG, PNG, WEBP o HEIC (iPhone). Se achica sola antes de subir.</p>
         </div>
 
         <Entrada etiqueta="Nombre" value={nombre} maxLength={120} required onChange={(e) => setNombre(e.target.value)} autoComplete="off" />
@@ -283,7 +290,7 @@ export function ArticuloHoja({ objetivo, onCerrar, onGuardado }: Props) {
               <Boton variante="secondary" pequeno onClick={() => setColores([...colores, { nombre: "", hex: "#9ca3af", imagen_url: null, enc: CENTRADO, archivo: null, vista: null, heic: false, quitar: false, abierto: false }])}>+ Agregar color</Boton>
             </div>
           )}
-          <input ref={entradaColor} className="visually-hidden" type="file" accept={ACEPTA} tabIndex={-1} onChange={(e) => { elegirFotoColor(e.target.files?.[0] ?? null); e.target.value = ""; }} aria-label="Elegir foto del color" />
+          <input ref={entradaColor} className="visually-hidden" type="file" accept={ACEPTA} tabIndex={-1} onChange={(e) => { void elegirFotoColor(e.target.files?.[0] ?? null); e.target.value = ""; }} aria-label="Elegir foto del color" />
         </fieldset>
 
         <label className="check">

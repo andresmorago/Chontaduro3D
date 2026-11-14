@@ -15,7 +15,7 @@ from app.config import settings
 from app.core import auditoria
 from app.core.deps import DB, PROTEGIDO, Admin
 from app.core.tokens import ahora
-from app.impresora.bambu import VELOCIDADES
+from app.impresora.bambu import LIMITES, VELOCIDADES, validar_numero
 from app.models import ComandoImpresora, EstadoImpresora, TrabajoImpresora
 from app.schemas.impresora import (
     ComandoIn,
@@ -85,6 +85,10 @@ _NOMBRE = {
     "cancelar": "Cancelar impresión",
     "luz": "Luz",
     "velocidad": "Velocidad",
+    "temp_boquilla": "La temperatura de la boquilla",
+    "temp_cama": "La temperatura de la cama",
+    "ventilador_pieza": "El ventilador de la pieza",
+    "ventilador_aux": "El ventilador auxiliar",
 }
 
 
@@ -96,7 +100,12 @@ async def ordenar(datos: ComandoIn, db: DB, usuario: Admin) -> ComandoOut:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "La luz es «on» u «off».")
     if datos.comando == "velocidad" and datos.valor not in VELOCIDADES:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "La velocidad va de 1 a 4.")
-    if datos.comando not in ("luz", "velocidad") and datos.valor is not None:
+    if datos.comando in LIMITES:
+        try:
+            validar_numero(datos.comando, datos.valor)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    elif datos.comando not in ("luz", "velocidad") and datos.valor is not None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Esa orden no lleva valor.")
 
     fila = await _estado(db)

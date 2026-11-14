@@ -8,7 +8,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const SECRETO = process.env.PROXY_SHARED_SECRET ?? "";
 const DESARROLLO = process.env.NODE_ENV !== "production";
-const TOPE_CUERPO = 7 * 1024 * 1024;
+// Un poco más que MAX_UPLOAD_MB (12 MB) del backend: el multipart añade unos KB.
+const TOPE_CUERPO = 14 * 1024 * 1024;
 
 function iguales(a: string, b: string): boolean {
   if (a.length !== b.length) return false;

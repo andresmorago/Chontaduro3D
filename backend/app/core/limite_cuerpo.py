@@ -12,7 +12,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.config import settings
 
 TOPE_GENERAL = 256 * 1024  # JSON de la API: de sobra para un pedido o una venta
-RUTA_IMAGEN = re.compile(r"^/api/articulos/[0-9a-fA-F-]{36}/imagen$")
+# Foto principal del artículo y foto de uno de sus colores: las dos son subidas de imagen.
+RUTA_IMAGEN = re.compile(r"^/api/articulos/[0-9a-fA-F-]{36}(/colores/[0-9a-fA-F-]{36})?/imagen$")
 
 
 class CuerpoDemasiadoGrande(Exception):

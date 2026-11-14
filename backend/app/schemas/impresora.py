@@ -32,6 +32,8 @@ class DatosImpresoraOut(Salida):
     cama_objetivo: float | None = None
     boquilla_mm: str | None = None
     velocidad: int | None = None
+    ventilador_pieza: int | None = None
+    ventilador_aux: int | None = None
     luz: Literal["on", "off"] | None = None
     wifi: str | None = None
     error: int = 0
@@ -60,7 +62,10 @@ class ImpresoraOut(Salida):
 
 
 class ComandoIn(Entrada):
-    comando: Literal["pausar", "reanudar", "cancelar", "luz", "velocidad"]
+    comando: Literal[
+        "pausar", "reanudar", "cancelar", "luz", "velocidad",
+        "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux",
+    ]  # fmt: skip
     valor: str | None = Field(default=None, max_length=3)
 
 

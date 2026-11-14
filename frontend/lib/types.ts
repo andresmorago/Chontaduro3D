@@ -250,6 +250,8 @@ export interface DatosImpresora {
   cama_objetivo: number | null;
   boquilla_mm: string | null;
   velocidad: number | null;
+  ventilador_pieza: number | null;
+  ventilador_aux: number | null;
   luz: "on" | "off" | null;
   wifi: string | null;
   error: number;
@@ -273,7 +275,7 @@ export interface Impresora {
   trabajos_pendientes: number;
 }
 
-export type ComandoImpresora = "pausar" | "reanudar" | "cancelar" | "luz" | "velocidad";
+export type ComandoImpresora = "pausar" | "reanudar" | "cancelar" | "luz" | "velocidad" | "temp_boquilla" | "temp_cama" | "ventilador_pieza" | "ventilador_aux";
 
 export interface OrdenImpresora {
   id: number;

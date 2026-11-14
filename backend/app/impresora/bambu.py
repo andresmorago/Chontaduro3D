@@ -22,12 +22,48 @@ ESTADOS = {
 ACTIVOS = {"PREPARE", "RUNNING", "PAUSE"}
 VELOCIDADES = {"1": "Silencioso", "2": "Estándar", "3": "Deportivo", "4": "Ludicrous"}
 
+# Órdenes con un valor numérico → (mínimo, máximo, unidad). Límites de la A1; la boquilla admite 0
+# (apagar) o de BOQUILLA_MIN hacia arriba: por debajo no hay nada útil que hacer con ella.
+LIMITES = {
+    "temp_boquilla": (0, 300, "°C"),
+    "temp_cama": (0, 100, "°C"),
+    "ventilador_pieza": (0, 100, "%"),
+    "ventilador_aux": (0, 100, "%"),
+}
+BOQUILLA_MIN = 150
+NOMBRES_NUMERICOS = {
+    "temp_boquilla": "La temperatura de la boquilla",
+    "temp_cama": "La temperatura de la cama",
+    "ventilador_pieza": "El ventilador de la pieza",
+    "ventilador_aux": "El ventilador auxiliar",
+}
+
+
+def validar_numero(comando: str, valor: str | None) -> int:
+    """El valor entero de una orden numérica, o ValueError con un mensaje claro."""
+    minimo, maximo, unidad = LIMITES[comando]
+    try:
+        n = int(str(valor).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"{NOMBRES_NUMERICOS[comando]} debe ser un número entero.") from None
+    if not minimo <= n <= maximo:
+        raise ValueError(f"{NOMBRES_NUMERICOS[comando]} va de {minimo} a {maximo} {unidad}.")
+    if comando == "temp_boquilla" and 0 < n < BOQUILLA_MIN:
+        raise ValueError(f"La boquilla se apaga (0) o va de {BOQUILLA_MIN} a {maximo} °C.")
+    return n
+
 
 def _entero(v: Any) -> int | None:
     try:
         return int(float(v))
     except (TypeError, ValueError):
         return None
+
+
+def _ventilador(v: Any) -> int | None:
+    """La impresora informa los ventiladores en 15 pasos (0–15): se muestran en %."""
+    g = _entero(v)
+    return round(g * 100 / 15) if g is not None and 0 <= g <= 15 else None
 
 
 def _numero(v: Any) -> float | None:
@@ -90,6 +126,8 @@ def normalizar(raw: dict[str, Any]) -> dict[str, Any]:
         "cama_objetivo": _numero(raw.get("bed_target_temper")),
         "boquilla_mm": raw.get("nozzle_diameter") or None,
         "velocidad": _entero(raw.get("spd_lvl")),
+        "ventilador_pieza": _ventilador(raw.get("cooling_fan_speed")),
+        "ventilador_aux": _ventilador(raw.get("big_fan1_speed")),
         "luz": luz if luz in ("on", "off") else None,
         "wifi": raw.get("wifi_signal") or None,
         "error": _entero(raw.get("print_error")) or 0,
@@ -121,6 +159,16 @@ def construir_orden(
         if valor not in VELOCIDADES:
             raise ValueError("La velocidad va de 1 a 4.")
         return {"print": {"sequence_id": sec, "command": "print_speed", "param": valor}}
+    if comando in LIMITES:
+        n = validar_numero(comando, valor)
+        # G-code de Marlin que entiende la A1; debe terminar en salto de línea.
+        gcode = {
+            "temp_boquilla": f"M104 S{n}",
+            "temp_cama": f"M140 S{n}",
+            "ventilador_pieza": f"M106 P1 S{(n * 255 + 50) // 100}",
+            "ventilador_aux": f"M106 P2 S{(n * 255 + 50) // 100}",
+        }[comando]
+        return {"print": {"sequence_id": sec, "command": "gcode_line", "param": gcode + "\n"}}
     raise ValueError(f"Orden desconocida: {comando}")
 
 

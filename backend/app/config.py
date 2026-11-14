@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     admin_password: str = ""
 
     media_dir: str = "/media"
-    max_upload_mb: int = 5
+    max_upload_mb: int = 12
 
     whatsapp_negocio: str = ""
 

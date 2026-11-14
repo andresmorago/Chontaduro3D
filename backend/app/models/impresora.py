@@ -26,7 +26,10 @@ from app.models.base import MarcaDeTiempo, uuid_pk
 
 ESTADOS_TRABAJO = ("en_curso", "terminado", "interrumpido")
 GESTION_TRABAJO = ("pendiente", "importado", "ignorado")
-COMANDOS = ("pausar", "reanudar", "cancelar", "luz", "velocidad")
+COMANDOS = (
+    "pausar", "reanudar", "cancelar", "luz", "velocidad",
+    "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux",
+)  # fmt: skip
 ESTADOS_COMANDO = ("pendiente", "enviado", "fallido", "vencido")
 
 
@@ -114,7 +117,7 @@ class ComandoImpresora(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
-    comando: Mapped[str] = mapped_column(String(12), nullable=False)
+    comando: Mapped[str] = mapped_column(String(20), nullable=False)
     valor: Mapped[str | None] = mapped_column(String(12))
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL")

@@ -28,5 +28,32 @@ export function geometria(ratio: number, e: Encuadre): CSSProperties {
   return { width: `${ancho}%`, height: `${alto}%`, left: `${((100 - ancho) * e.x) / 100}%`, top: `${((100 - alto) * e.y) / 100}%` };
 }
 
+/** Una foto de celular puede pesar varios MB y pasar el límite de subida. Antes de enviarla se achica
+ *  a 2000 px de lado y se comprime (JPEG): se ve igual en el catálogo y sube en segundos. Si no se puede
+ *  decodificar aquí (HEIC en escritorio) o ya es liviana, se envía tal cual. */
+export async function prepararFoto(f: File, ladoMax = 2000, umbral = 2 * 1024 * 1024): Promise<File> {
+  if (esHeic(f) || f.size <= umbral) return f;
+  try {
+    const bmp = await createImageBitmap(f, { imageOrientation: "from-image" });
+    const k = Math.min(1, ladoMax / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k));
+    const h = Math.max(1, Math.round(bmp.height * k));
+    const lienzo = document.createElement("canvas");
+    lienzo.width = w;
+    lienzo.height = h;
+    const ctx = lienzo.getContext("2d");
+    if (!ctx) return f;
+    ctx.fillStyle = "#fff"; // el JPEG no tiene transparencia
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const blob = await new Promise<Blob | null>((ok) => lienzo.toBlob(ok, "image/jpeg", 0.88));
+    if (!blob || blob.size >= f.size) return f;
+    return new File([blob], `${f.name.replace(/\.\w+$/, "")}.jpg`, { type: "image/jpeg" });
+  } catch {
+    return f;
+  }
+}
+
 /** Los .heic/.heif los lee el servidor, pero el navegador de escritorio no sabe mostrarlos. */
 export const esHeic = (f: File) => /hei[cf]/i.test(f.type) || /\.hei[cf]$/i.test(f.name);
