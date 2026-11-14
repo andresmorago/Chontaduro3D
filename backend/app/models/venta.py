@@ -52,6 +52,9 @@ class VentaItem(Base):
     articulo_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("articulos.id"), index=True
     )
+    color_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("articulo_colores.id", ondelete="SET NULL"), index=True
+    )
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
     # Precio congelado al vender: cambiar el precio maestro no reescribe el pasado.
     precio_unitario: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)

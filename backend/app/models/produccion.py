@@ -60,6 +60,9 @@ class ProduccionItem(Base):
     articulo_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("articulos.id"), index=True
     )
+    color_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("articulo_colores.id", ondelete="SET NULL"), index=True
+    )
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
 
 

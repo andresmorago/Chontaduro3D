@@ -99,6 +99,15 @@ class ArticuloUpdate(Entrada):
         return _sin_repetidos(v)
 
 
+class StockColor(Salida):
+    """Stock de un color de un artículo (`color_id` None = stock «sin color asignado»)."""
+
+    color_id: UUID | None
+    nombre: str | None
+    hex: str | None
+    stock: int
+
+
 class ArticuloOut(Salida):
     id: UUID
     codigo: str
@@ -114,6 +123,8 @@ class ArticuloOut(Salida):
     publicado: bool
     activo: bool
     colores: list[ColorOut] = []
+    # Stock por color (solo en artículos con colores; el «sin color asignado» solo si hay stock).
+    stock_colores: list[StockColor] = []
 
 
 class PrecioHistorialOut(Salida):
@@ -124,6 +135,8 @@ class PrecioHistorialOut(Salida):
 # --- Producción --------------------------------------------------------------
 class ItemCantidad(Entrada):
     articulo_id: UUID
+    # Obligatorio si el artículo se ofrece en colores; debe omitirse si no los tiene.
+    color_id: UUID | None = None
     cantidad: int = Cantidad
 
 
@@ -159,6 +172,9 @@ class ProduccionIn(Entrada):
 
 class ProduccionItemOut(Salida):
     articulo_id: UUID
+    color_id: UUID | None = None
+    color: str | None = None
+    color_hex: str | None = None
     codigo: str
     nombre: str
     cantidad: int
@@ -205,6 +221,7 @@ class ParametrosOut(Salida):
 # --- Ventas ------------------------------------------------------------------
 class VentaItemIn(Entrada):
     articulo_id: UUID
+    color_id: UUID | None = None
     cantidad: int = Cantidad
     # Opcional: vender con descuento. Si falta, se usa el precio maestro de ese momento.
     precio_unitario: Dinero | None = None
@@ -225,6 +242,9 @@ class VentaIn(Entrada):
 
 class VentaItemOut(Salida):
     articulo_id: UUID
+    color_id: UUID | None = None
+    color: str | None = None
+    color_hex: str | None = None
     codigo: str
     nombre: str
     cantidad: int
@@ -246,6 +266,8 @@ class VentaOut(Salida):
 # --- Inventario --------------------------------------------------------------
 class AjusteIn(Entrada):
     articulo_id: UUID
+    # Obligatorio en un artículo con colores (salvo para REDUCIR el stock «sin color asignado»).
+    color_id: UUID | None = None
     cantidad: int = Field(ge=-10_000, le=10_000)
     nota: str = Field(min_length=3, max_length=300)
 
@@ -264,6 +286,7 @@ class MovimientoOut(Salida):
     nombre: str
     tipo: str
     cantidad: int
+    color: str | None = None
     nota: str | None
     creado_en: datetime
 
@@ -312,6 +335,18 @@ class PedidoCreado(Salida):
 
 
 # --- Público -----------------------------------------------------------------
+class ColorPublicoOut(Salida):
+    id: UUID
+    nombre: str
+    hex: str
+    imagen_url: str | None = None
+    foto_x: float = 50
+    foto_y: float = 50
+    foto_zoom: float = 1
+    # Solo «hay / no hay»: el catálogo nunca expone el stock exacto.
+    disponible: bool = False
+
+
 class ArticuloPublico(Salida):
     id: UUID
     codigo: str
@@ -323,7 +358,7 @@ class ArticuloPublico(Salida):
     foto_zoom: float = 1
     precio: DineroSalida
     disponible: bool
-    colores: list[ColorOut] = []
+    colores: list[ColorPublicoOut] = []
 
 
 class CatalogoPublico(Salida):

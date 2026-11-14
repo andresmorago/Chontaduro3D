@@ -10,9 +10,17 @@ from sqlalchemy import delete, func, select
 from app.config import settings
 from app.core import auditoria, energia
 from app.core.deps import DB, PROTEGIDO, Admin
-from app.core.inventario import bloquear_articulos, stock_de
+from app.core.inventario import (
+    Clave,
+    bloquear_articulos,
+    colores_de_articulos,
+    etiqueta,
+    stock_por_clave,
+    validar_colores,
+)
 from app.models import (
     Articulo,
+    ArticuloColor,
     MovimientoInventario,
     Produccion,
     ProduccionFilamento,
@@ -51,15 +59,19 @@ def validar_fecha(fecha: date | None, max_dias: int = DIAS_ATRAS_VENTAS) -> date
 
 async def _salida(db, produccion: Produccion) -> ProduccionOut:
     filas = await db.execute(
-        select(ProduccionItem, Articulo)
+        select(ProduccionItem, Articulo, ArticuloColor)
         .join(Articulo, Articulo.id == ProduccionItem.articulo_id)
+        .outerjoin(ArticuloColor, ArticuloColor.id == ProduccionItem.color_id)
         .where(ProduccionItem.produccion_id == produccion.id)
-        .order_by(Articulo.codigo)
+        .order_by(Articulo.codigo, ArticuloColor.orden)
     )
     items = [
-        ProduccionItemOut(articulo_id=a.id, codigo=a.codigo, nombre=a.nombre, cantidad=i.cantidad)
-        for i, a in filas
-    ]
+        ProduccionItemOut(
+            articulo_id=a.id, color_id=i.color_id, color=c.nombre if c else None,
+            color_hex=c.hex if c else None, codigo=a.codigo, nombre=a.nombre, cantidad=i.cantidad,
+        )
+        for i, a, c in filas
+    ]  # fmt: skip
     filamentos = [
         FilamentoOut(descripcion=f.descripcion, gramos=f.gramos)
         for f in (
@@ -86,10 +98,11 @@ async def _salida(db, produccion: Produccion) -> ProduccionOut:
     )  # fmt: skip
 
 
-def _cantidades(datos: ProduccionIn) -> dict[UUID, int]:
-    cantidades: dict[UUID, int] = defaultdict(int)
+def _cantidades(datos: ProduccionIn) -> dict[Clave, int]:
+    """Piezas por (artículo, color): la misma pareja en varias líneas se suma."""
+    cantidades: dict[Clave, int] = defaultdict(int)
     for item in datos.items:
-        cantidades[item.articulo_id] += item.cantidad
+        cantidades[(item.articulo_id, item.color_id)] += item.cantidad
     return dict(cantidades)
 
 
@@ -108,23 +121,28 @@ def _gramos_del_lote(datos: ProduccionIn) -> Decimal | None:
     return gramos_total
 
 
-def _poner_detalle(db, p: Produccion, datos: ProduccionIn, cantidades: dict[UUID, int]) -> None:
+def _poner_detalle(db, p: Produccion, datos: ProduccionIn, cantidades: dict[Clave, int]) -> None:
     for n, f in enumerate(datos.filamentos):
         db.add(
             ProduccionFilamento(
                 produccion_id=p.id, orden=n, descripcion=f.descripcion, gramos=f.gramos
             )
         )
-    for articulo_id, cantidad in cantidades.items():
-        db.add(ProduccionItem(produccion_id=p.id, articulo_id=articulo_id, cantidad=cantidad))
+    for (articulo_id, color_id), cantidad in cantidades.items():
+        db.add(
+            ProduccionItem(
+                produccion_id=p.id, articulo_id=articulo_id, color_id=color_id, cantidad=cantidad
+            )
+        )
 
 
 @router.post("", response_model=ProduccionOut, status_code=status.HTTP_201_CREATED)
 async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOut:
     cantidades = _cantidades(datos)
-    articulos = await bloquear_articulos(db, cantidades)
+    ids = {a for a, _ in cantidades}
+    articulos = await bloquear_articulos(db, ids)
 
-    desconocidos = set(cantidades) - set(articulos)
+    desconocidos = ids - set(articulos)
     archivados = [a.nombre for a in articulos.values() if not a.activo]
     if desconocidos or archivados:
         raise HTTPException(
@@ -132,6 +150,8 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
             "Hay artículos que no existen o están archivados"
             + (f": {', '.join(archivados)}." if archivados else "."),
         )
+    # Producir un artículo con colores exige decir de qué color salió cada pieza.
+    validar_colores(cantidades, articulos, await colores_de_articulos(db, ids))
 
     gramos_total = _gramos_del_lote(datos)
 
@@ -180,10 +200,11 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
         trabajo.gestion, trabajo.produccion_id = "importado", p.id
     _poner_detalle(db, p, datos, cantidades)
     if datos.afecta_inventario:  # carga histórica: solo historial y métricas, sin tocar el stock
-        for articulo_id, cantidad in cantidades.items():
+        for (articulo_id, color_id), cantidad in cantidades.items():
             db.add(
                 MovimientoInventario(
                     articulo_id=articulo_id,
+                    color_id=color_id,
                     tipo="produccion",
                     cantidad=cantidad,
                     produccion_id=p.id,
@@ -216,51 +237,62 @@ async def modificar(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese lote no existe.")
 
     cantidades = _cantidades(datos)
-    previos = {
-        a: n
-        for a, n in await db.execute(
-            select(ProduccionItem.articulo_id, ProduccionItem.cantidad).where(
-                ProduccionItem.produccion_id == p.id
-            )
+    previos: dict[Clave, int] = {
+        (a, c): n
+        for a, c, n in await db.execute(
+            select(
+                ProduccionItem.articulo_id, ProduccionItem.color_id, ProduccionItem.cantidad
+            ).where(ProduccionItem.produccion_id == p.id)
         )
     }
     # Lo que este lote tiene hoy en el libro mayor (su alta y las correcciones anteriores).
-    efecto_actual = {
-        a: int(n)
-        for a, n in await db.execute(
-            select(MovimientoInventario.articulo_id, func.sum(MovimientoInventario.cantidad))
+    efecto_actual: dict[Clave, int] = {
+        (a, c): int(n)
+        for a, c, n in await db.execute(
+            select(
+                MovimientoInventario.articulo_id,
+                MovimientoInventario.color_id,
+                func.sum(MovimientoInventario.cantidad),
+            )
             .where(MovimientoInventario.produccion_id == p.id)
-            .group_by(MovimientoInventario.articulo_id)
+            .group_by(MovimientoInventario.articulo_id, MovimientoInventario.color_id)
         )
     }
-    articulos = await bloquear_articulos(db, set(cantidades) | set(previos) | set(efecto_actual))
+    ids = {a for a, _ in cantidades} | {a for a, _ in previos} | {a for a, _ in efecto_actual}
+    articulos = await bloquear_articulos(db, ids)
+    colores = await colores_de_articulos(db, ids)
 
-    desconocidos = set(cantidades) - set(articulos)
+    desconocidos = {a for a, _ in cantidades} - set(articulos)
     # Un artículo archivado después de producirse puede seguir en su lote, pero no entrar a otro.
+    previos_articulos = {a for a, _ in previos}
     archivados = [
-        articulos[a].nombre for a in cantidades if a in articulos and not articulos[a].activo
-        and a not in previos
-    ]  # fmt: skip
+        articulos[a].nombre
+        for a in {a for a, _ in cantidades}
+        if a in articulos and not articulos[a].activo and a not in previos_articulos
+    ]
     if desconocidos or archivados:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Hay artículos que no existen o están archivados"
             + (f": {', '.join(archivados)}." if archivados else "."),
         )
+    # Las líneas nuevas deben traer color si el artículo los tiene; una línea que ya estaba (p. ej.
+    # de antes de que existieran los colores) puede seguir sin él.
+    validar_colores([k for k in cantidades if k not in previos], articulos, colores)
 
     efecto_nuevo = cantidades if datos.afecta_inventario else {}
     delta = {
-        a: efecto_nuevo.get(a, 0) - efecto_actual.get(a, 0)
-        for a in set(efecto_nuevo) | set(efecto_actual)
+        k: efecto_nuevo.get(k, 0) - efecto_actual.get(k, 0)
+        for k in set(efecto_nuevo) | set(efecto_actual)
     }
-    delta = {a: d for a, d in delta.items() if d != 0}
-    quitan = {a: -d for a, d in delta.items() if d < 0}
+    delta = {k: d for k, d in delta.items() if d != 0}
+    quitan = {k: -d for k, d in delta.items() if d < 0}
     if quitan:
-        stock = await stock_de(db, quitan)
+        stock = await stock_por_clave(db, {a for a, _ in quitan})
         faltan = [
-            f"{articulos[a].nombre}: quitarías {n} y solo hay {stock.get(a, 0)} en stock"
-            for a, n in quitan.items()
-            if stock.get(a, 0) < n
+            f"{etiqueta(articulos[a], c, colores)}: quitarías {n} y solo hay {stock.get((a, c), 0)}"
+            for (a, c), n in quitan.items()
+            if stock.get((a, c), 0) < n
         ]
         if faltan:
             raise HTTPException(
@@ -302,11 +334,13 @@ async def modificar(
     await db.execute(delete(ProduccionItem).where(ProduccionItem.produccion_id == p.id))
     await db.execute(delete(ProduccionFilamento).where(ProduccionFilamento.produccion_id == p.id))
     _poner_detalle(db, p, datos, cantidades)
-    for articulo_id, d in sorted(delta.items()):
+    for (articulo_id, color_id), d in sorted(
+        delta.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))
+    ):
         db.add(
             MovimientoInventario(
-                articulo_id=articulo_id, tipo="ajuste", cantidad=d, produccion_id=p.id,
-                nota=f"Corrección del lote del {p.fecha.isoformat()}",
+                articulo_id=articulo_id, color_id=color_id, tipo="ajuste", cantidad=d,
+                produccion_id=p.id, nota=f"Corrección del lote del {p.fecha.isoformat()}",
             )
         )  # fmt: skip
     auditoria.registrar(

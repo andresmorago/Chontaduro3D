@@ -3,11 +3,17 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.api.articulos import a_salida
+from app.api.articulos import salidas
 from app.core import auditoria
 from app.core.deps import DB, PROTEGIDO, Admin
-from app.core.inventario import bloquear_articulos, stock_de
-from app.models import Articulo, MovimientoInventario
+from app.core.inventario import (
+    bloquear_articulos,
+    colores_de_articulos,
+    exigir_stock_por_clave,
+    stock_por_clave,
+    validar_colores,
+)
+from app.models import Articulo, ArticuloColor, MovimientoInventario
 from app.schemas.dominio import AjusteIn, ArticuloOut, MovimientoOut
 
 router = APIRouter(prefix="/inventario", tags=["inventario"], dependencies=PROTEGIDO)
@@ -15,7 +21,7 @@ router = APIRouter(prefix="/inventario", tags=["inventario"], dependencies=PROTE
 
 @router.get("", response_model=list[ArticuloOut])
 async def existencias(db: DB) -> list[ArticuloOut]:
-    """Stock actual de cada artículo activo."""
+    """Stock actual de cada artículo activo, con el desglose por color."""
     articulos = (
         (
             await db.execute(
@@ -25,8 +31,7 @@ async def existencias(db: DB) -> list[ArticuloOut]:
         .scalars()
         .all()
     )
-    stock = await stock_de(db, [a.id for a in articulos])
-    return [a_salida(a, stock[a.id]) for a in articulos]
+    return await salidas(db, list(articulos))
 
 
 @router.get("/movimientos", response_model=list[MovimientoOut])
@@ -35,8 +40,9 @@ async def kardex(
 ) -> list[MovimientoOut]:
     limite = max(1, min(limite, 200))
     consulta = (
-        select(MovimientoInventario, Articulo)
+        select(MovimientoInventario, Articulo, ArticuloColor.nombre)
         .join(Articulo, Articulo.id == MovimientoInventario.articulo_id)
+        .outerjoin(ArticuloColor, ArticuloColor.id == MovimientoInventario.color_id)
         .order_by(MovimientoInventario.creado_en.desc(), MovimientoInventario.id.desc())
         .limit(limite)
         .offset(max(desplazar, 0))
@@ -46,33 +52,39 @@ async def kardex(
     return [
         MovimientoOut(
             id=m.id, articulo_id=a.id, codigo=a.codigo, nombre=a.nombre, tipo=m.tipo,
-            cantidad=m.cantidad, nota=m.nota, creado_en=m.creado_en,
+            cantidad=m.cantidad, color=nombre_color, nota=m.nota, creado_en=m.creado_en,
         )
-        for m, a in await db.execute(consulta)
+        for m, a, nombre_color in await db.execute(consulta)
     ]  # fmt: skip
 
 
 @router.post("/ajustes", response_model=ArticuloOut, status_code=status.HTTP_201_CREATED)
 async def ajustar(datos: AjusteIn, db: DB, usuario: Admin) -> ArticuloOut:
-    """Corrección manual (conteo físico, pieza dañada…). Nunca deja el stock en negativo."""
+    """Corrección manual (conteo físico, pieza dañada, o mover stock «sin color asignado» a su
+    color). En un artículo con colores se indica de cuál. Nunca deja un stock en negativo."""
     articulos = await bloquear_articulos(db, [datos.articulo_id])
     articulo = articulos.get(datos.articulo_id)
     if articulo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese artículo no existe.")
-    actual = (await stock_de(db, [articulo.id]))[articulo.id]
-    if actual + datos.cantidad < 0:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Ese ajuste dejaría el stock en {actual + datos.cantidad}. Hay {actual} unidades.",
-        )
+    colores = await colores_de_articulos(db, [articulo.id])
+    clave = (articulo.id, datos.color_id)
+    # El stock «sin color asignado» solo se puede REDUCIR (para pasarlo a un color); sumarle no.
+    validar_colores([clave], articulos, colores, permitir_sin_color=datos.cantidad < 0)
+    if datos.cantidad < 0:
+        stock = await stock_por_clave(db, [articulo.id])
+        exigir_stock_por_clave({clave: -datos.cantidad}, stock, articulos, colores)
     db.add(
         MovimientoInventario(
-            articulo_id=articulo.id, tipo="ajuste", cantidad=datos.cantidad, nota=datos.nota
+            articulo_id=articulo.id, color_id=datos.color_id, tipo="ajuste",
+            cantidad=datos.cantidad, nota=datos.nota,
         )
-    )
+    )  # fmt: skip
     auditoria.registrar(
         db, "ajuste_inventario", usuario_id=usuario.id,
-        detalle={"codigo": articulo.codigo, "cantidad": datos.cantidad},
+        detalle={
+            "codigo": articulo.codigo, "cantidad": datos.cantidad,
+            "color": colores[articulo.id].get(datos.color_id) if datos.color_id else None,
+        },
     )  # fmt: skip
     await db.commit()
-    return a_salida(articulo, actual + datos.cantidad)
+    return (await salidas(db, [articulo]))[0]

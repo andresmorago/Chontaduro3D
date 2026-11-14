@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.core import auditoria, imagenes
 from app.core.deps import DB, PROTEGIDO, Admin
-from app.core.inventario import bloquear_articulos, stock_de
+from app.core.inventario import Clave, bloquear_articulos, stock_de, stock_por_clave
 from app.models import Articulo, ArticuloColor, PrecioHistorial
 from app.schemas.dominio import (
     ArticuloIn,
@@ -15,6 +15,7 @@ from app.schemas.dominio import (
     ColorIn,
     ColorOut,
     PrecioHistorialOut,
+    StockColor,
 )
 
 router = APIRouter(prefix="/articulos", tags=["articulos"], dependencies=PROTEGIDO)
@@ -64,18 +65,53 @@ def _poner_colores(db, articulo_id: UUID, colores: list[ColorIn]) -> None:
         )
 
 
+def stock_colores_de(
+    articulo_id: UUID, colores: list[ColorOut], por_clave: dict[Clave, int]
+) -> list[StockColor]:
+    """Desglose de stock por color de un artículo (vacío si no tiene colores). El stock «sin color
+    asignado» (anterior a los colores) solo aparece mientras haya."""
+    if not colores:
+        return []
+    filas = [
+        StockColor(
+            color_id=c.id, nombre=c.nombre, hex=c.hex, stock=por_clave.get((articulo_id, c.id), 0)
+        )
+        for c in colores
+    ]
+    sin_color = por_clave.get((articulo_id, None), 0)
+    if sin_color:
+        filas.append(StockColor(color_id=None, nombre=None, hex=None, stock=sin_color))
+    return filas
+
+
+async def salidas(db, articulos: list[Articulo]) -> list[ArticuloOut]:
+    """Los artículos con su stock total, sus colores y el stock de cada color."""
+    ids = [a.id for a in articulos]
+    stock = await stock_de(db, ids)
+    colores = await colores_de(db, ids)
+    por_clave = await stock_por_clave(db, ids)
+    return [
+        a_salida(a, stock[a.id], colores[a.id], stock_colores_de(a.id, colores[a.id], por_clave))
+        for a in articulos
+    ]
+
+
 async def _salida(db, a: Articulo) -> ArticuloOut:
-    stock = (await stock_de(db, [a.id]))[a.id]
-    return a_salida(a, stock, (await colores_de(db, [a.id]))[a.id])
+    return (await salidas(db, [a]))[0]
 
 
-def a_salida(a: Articulo, stock: int, colores: list[ColorOut] | None = None) -> ArticuloOut:
+def a_salida(
+    a: Articulo,
+    stock: int,
+    colores: list[ColorOut] | None = None,
+    stock_colores: list[StockColor] | None = None,
+) -> ArticuloOut:
     return ArticuloOut(
         id=a.id, codigo=a.codigo, nombre=a.nombre, descripcion=a.descripcion,
         imagen_url=url_imagen(a.imagen), foto_x=a.foto_x, foto_y=a.foto_y, foto_zoom=a.foto_zoom,
         precio_venta=a.precio_venta,
         stock_minimo=a.stock_minimo, stock=stock, publicado=a.publicado, activo=a.activo,
-        colores=colores or [],
+        colores=colores or [], stock_colores=stock_colores or [],
     )  # fmt: skip
 
 
@@ -91,11 +127,7 @@ async def listar(db: DB, incluir_inactivos: bool = False) -> list[ArticuloOut]:
     consulta = select(Articulo).order_by(Articulo.codigo)
     if not incluir_inactivos:
         consulta = consulta.where(Articulo.activo.is_(True))
-    articulos = (await db.execute(consulta)).scalars().all()
-    ids = [a.id for a in articulos]
-    stock = await stock_de(db, ids)
-    colores = await colores_de(db, ids)
-    return [a_salida(a, stock[a.id], colores[a.id]) for a in articulos]
+    return await salidas(db, list((await db.execute(consulta)).scalars().all()))
 
 
 @router.post("", response_model=ArticuloOut, status_code=status.HTTP_201_CREATED)
@@ -133,6 +165,19 @@ async def _reemplazar_colores(db, a: Articulo, colores: list[ColorIn]) -> list[s
             "Hay colores que ya no existen. Recarga e inténtalo.",
         )
     conservar = set(ids)
+    por_clave = await stock_por_clave(db, [a.id])
+    con_stock = [
+        f"{c.nombre} ({por_clave[(a.id, i)]})"
+        for i, c in existentes.items()
+        if i not in conservar and por_clave.get((a.id, i), 0) != 0
+    ]
+    if con_stock:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se pueden quitar colores con unidades en inventario: "
+            + ", ".join(con_stock)
+            + ". Ajusta su stock a 0 antes (Inventario → Ajustar).",
+        )
     huerfanas = []
     for i, c in existentes.items():
         if i not in conservar:

@@ -8,12 +8,13 @@ from app.config import settings
 from app.core import turnstile
 from app.core.cliente import ip_cliente, origen_hash
 from app.core.deps import DB
-from app.core.inventario import stock_de
+from app.core.inventario import stock_de, stock_por_clave
 from app.core.tokens import ahora
 from app.models import Articulo, Pedido
 from app.schemas.dominio import (
     ArticuloPublico,
     CatalogoPublico,
+    ColorPublicoOut,
     ConfigPublica,
     PedidoCreado,
     PedidoPublicoIn,
@@ -41,13 +42,19 @@ async def catalogo(db: DB) -> CatalogoPublico:
     )
     stock = await stock_de(db, [a.id for a in articulos])
     colores = await colores_de(db, [a.id for a in articulos])
+    por_clave = await stock_por_clave(db, [a.id for a in articulos])
     return CatalogoPublico(
         articulos=[
             ArticuloPublico(
                 id=a.id, codigo=a.codigo, nombre=a.nombre, descripcion=a.descripcion,
                 imagen_url=url_imagen(a.imagen), foto_x=a.foto_x, foto_y=a.foto_y,
                 foto_zoom=a.foto_zoom, precio=a.precio_venta, disponible=stock[a.id] > 0,
-                colores=colores[a.id],
+                colores=[
+                    ColorPublicoOut(
+                        **c.model_dump(), disponible=por_clave.get((a.id, c.id), 0) > 0
+                    )
+                    for c in colores[a.id]
+                ],
             )
             for a in articulos
         ],

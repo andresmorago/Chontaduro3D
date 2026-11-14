@@ -37,6 +37,11 @@ class MovimientoInventario(Base):
     produccion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("producciones.id"), index=True
     )
+    # Color al que pertenece el movimiento (None = artículo sin colores, o stock anterior a los
+    # colores). El stock de un artículo con colores se lleva POR color; el total es la suma.
+    color_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("articulo_colores.id", ondelete="SET NULL"), index=True
+    )
     venta_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("ventas.id"), index=True
     )
