@@ -132,14 +132,16 @@ def _color(v: Any) -> str | None:
 def tarea_de(t: dict[str, Any]) -> Tarea | None:
     """Normaliza una tarea de la nube. None si no es un trabajo ya cerrado (en curso o sin fechas).
 
-    Estado: 2 = terminado; otro estado con hora de fin (fallido o cancelado) = interrumpido."""
+    Estado: 2 = terminado; 3 = fallido o cancelado (interrumpido); otros = en curso."""
     if not isinstance(t, dict) or t.get("id") in (None, ""):
         return None
     inicio, fin = _fecha(t.get("startTime")), _fecha(t.get("endTime"))
     if inicio is None or fin is None or fin < inicio:
         return None
     estado_raw = t.get("status")
-    if estado_raw == 1:  # en curso en la nube
+    # 2 = terminado, 3 = fallido o cancelado. Cualquier otro (1, 4…) es un trabajo EN CURSO: la
+    # nube le pone una hora de fin provisional, que no es el final real. Se ignora hasta cerrarse.
+    if estado_raw not in (2, 3):
         return None
     filamentos = []
     for m in t.get("amsDetailMapping") or []:

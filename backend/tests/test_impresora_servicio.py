@@ -91,6 +91,21 @@ async def test_ciclo_completo_de_un_trabajo(servicio, cliente, db):
     assert len(await trabajos(db)) == 1
 
 
+async def test_progreso_real_no_arrastra_el_100_del_trabajo_anterior(servicio, cliente, db):
+    poner(cliente, "FINISH", progreso=100)  # el trabajo anterior terminó al 100 %
+    await servicio._seguir_trabajos()
+    poner(cliente, "PREPARE", progreso=100)  # empieza el nuevo y la impresora aún informa 100
+    await servicio._seguir_trabajos()
+    (t,) = await trabajos(db)
+    assert t.estado == "en_curso" and t.progreso == 0
+    poner(cliente, "RUNNING", progreso=3)
+    await servicio._seguir_trabajos()
+    assert (await trabajos(db))[0].progreso == 3
+    poner(cliente, "RUNNING", progreso=2)  # puede bajar: es el valor real, no un máximo
+    await servicio._seguir_trabajos()
+    assert (await trabajos(db))[0].progreso == 2
+
+
 async def test_cancelado_queda_interrumpido_con_su_progreso(servicio, cliente, db):
     poner(cliente, "IDLE")
     await servicio._seguir_trabajos()

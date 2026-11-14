@@ -77,6 +77,8 @@ async def aplicar(db: AsyncSession, tareas: list[Tarea]) -> dict[str, int]:
             )
             creadas += 1
             continue
+        if existente.estado == "en_curso":
+            continue  # lo está siguiendo el servicio en vivo; la nube lo completa cuando termine
         cambio = False
         if existente.nube_id is None:
             existente.nube_id, cambio = t.id, True

@@ -12,7 +12,10 @@
 .bandejas { grid-auto-rows: 1fr; }
 .pedidos-grid > .pedido { align-content: start; }
 .bandeja { min-height: 72px; }
-.bandeja__texto > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bandeja { position: relative; }
+.bandeja__texto > * { white-space: nowrap; }
+/* La etiqueta «En uso» va en la esquina: el texto de la tarjeta conserva todo su ancho. */
+.bandeja__uso { position: absolute; top: var(--space-xs); right: var(--space-xs); }
 
 
 @media (min-width: 75rem) {

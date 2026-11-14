@@ -19,7 +19,7 @@ function Bandeja({ b, titulo }: { b: BandejaAms; titulo: string }) {
         <strong>{titulo}</strong>
         <span className="muted">{b.vacia ? "Vacía" : `${b.tipo ?? "Filamento"}${b.restante != null ? ` · ${b.restante} %` : ""}`}</span>
       </span>
-      {b.en_uso && <span className="etiqueta etiqueta--ok">En uso</span>}
+      {b.en_uso && <span className="etiqueta etiqueta--ok bandeja__uso">En uso</span>}
     </li>
   );
 }

@@ -31,6 +31,13 @@ NUBE_CADA_S = 600  # el historial de la nube cambia poco: cada 10 minutos basta
 NUBE_REINTENTO_S = 120  # tras un fallo, se reintenta antes
 
 
+def _progreso(snap: maquina.Instantanea) -> int:
+    """Progreso real. Al preparar es 0: aún se informa el 100 % del trabajo anterior."""
+    if snap.gcode_state == "PREPARE":
+        return 0
+    return max(0, min(snap.progreso, 100))
+
+
 def _ahora() -> datetime:
     return datetime.now(UTC)
 
@@ -150,14 +157,14 @@ class Servicio:
                     abierto = TrabajoImpresora(
                         nombre=snap.nombre[:200], archivo=snap.archivo[:300] or None,
                         tarea_id=snap.tarea_id[:40], inicio_en=ahora,
-                        inicio_observado=self._vio_inactiva, progreso=snap.progreso,
+                        inicio_observado=self._vio_inactiva, progreso=_progreso(snap),
                         plate=lector3mf.plate_de(snap.archivo, snap.nombre),
                     )  # fmt: skip
                     db.add(abierto)
                     await db.flush()
                     log.info("Trabajo nuevo: «%s»", abierto.nombre)
                 if accion.actualizar_progreso and abierto is not None:
-                    abierto.progreso = max(abierto.progreso, min(snap.progreso, 100))
+                    abierto.progreso = _progreso(snap)
             if (
                 abierto is not None
                 and abierto.gramos_total is None

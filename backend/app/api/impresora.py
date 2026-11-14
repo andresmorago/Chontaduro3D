@@ -152,7 +152,7 @@ async def ver_orden(orden_id: int, db: DB) -> ComandoOut:
 def _salida(t: TrabajoImpresora) -> TrabajoOut:
     zona = ZoneInfo(settings.app_timezone)
     # Tiempo MEDIDO: el que informa Bambu Cloud; si no, el visto en vivo (si se vio el inicio).
-    medido = t.minutos_medidos
+    medido = None if t.estado == "en_curso" else t.minutos_medidos
     if medido is None and t.inicio_observado and t.fin_en is not None:
         medido = max(1, round((t.fin_en - t.inicio_en).total_seconds() / 60))
     minutos = medido if medido is not None else t.minutos_estimados

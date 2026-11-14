@@ -44,9 +44,11 @@ def test_tarea_terminada():
 
 def test_estados_de_la_nube():
     assert tarea_de(tarea_cruda(status=2)).estado == "terminado"
-    for otro in (3, 4, 5):
-        assert tarea_de(tarea_cruda(status=otro)).estado == "interrumpido"
-    assert tarea_de(tarea_cruda(status=1)) is None  # en curso: lo ve el servicio en vivo
+    assert tarea_de(tarea_cruda(status=3)).estado == "interrumpido"
+    # Cualquier otro estado es un trabajo EN CURSO: la nube le pone una hora de fin provisional
+    # (p. ej. «hace 2 minutos» en uno que sigue imprimiendo) y no debe tomarse como el final.
+    for en_curso in (0, 1, 4, 5, None):
+        assert tarea_de(tarea_cruda(status=en_curso)) is None, en_curso
 
 
 def test_tolera_datos_incompletos_o_raros():
@@ -243,6 +245,28 @@ async def test_une_por_nombre_y_hora_si_no_hay_id_comun(db):
     await db.refresh(otro)
     assert en_vivo.nube_id == "999" and otro.nube_id is None
     assert len((await db.execute(select(TrabajoImpresora))).scalars().all()) == 2
+
+
+async def test_un_trabajo_en_curso_no_se_toca_con_datos_de_la_nube(db):
+    t = tarea_de(tarea_cruda())
+    vivo = TrabajoImpresora(nombre="x", tarea_id=t.id, estado="en_curso", inicio_en=t.inicio,
+                            minutos_estimados=383)  # fmt: skip
+    db.add(vivo)
+    await db.commit()
+    r = await sincronizacion.aplicar(db, [t])
+    await db.commit()
+    await db.refresh(vivo)
+    assert r == {"creadas": 0, "completadas": 0}
+    assert vivo.minutos_medidos is None and vivo.nube_id is None and vivo.fin_en is None
+
+
+async def test_api_no_muestra_tiempo_medido_de_un_trabajo_en_curso(admin, db):
+    ahora_ = ahora()
+    db.add(TrabajoImpresora(nombre="x", tarea_id="9", estado="en_curso", inicio_en=ahora_,
+                            minutos_medidos=2, minutos_estimados=383))  # fmt: skip
+    await db.commit()
+    j = (await admin.get("/api/impresora/trabajos")).json()[0]
+    assert j["minutos"] == 383 and j["minutos_origen"] == "estimado"  # no el «2 min (medido)»
 
 
 async def test_corrige_el_tiempo_si_antes_se_guardo_el_estimado(db):
