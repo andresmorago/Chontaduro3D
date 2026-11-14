@@ -12,10 +12,10 @@
 .bandejas { grid-auto-rows: 1fr; }
 .pedidos-grid > .pedido { align-content: start; }
 .bandeja { min-height: 72px; }
-.bandeja { position: relative; }
-.bandeja__texto > * { white-space: nowrap; }
-/* La etiqueta «En uso» va en la esquina: el texto de la tarjeta conserva todo su ancho. */
-.bandeja__uso { position: absolute; top: var(--space-xs); right: var(--space-xs); }
+/* El texto de una tarjeta se parte en líneas si hace falta (nunca se sale ni se recorta con «…»); las filas
+   se igualan al alto de la más alta. La etiqueta «En uso» acompaña al título en la misma línea o baja. */
+.bandeja__texto { min-width: 0; }
+.bandeja__titulo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); }
 
 
 @media (min-width: 75rem) {
@@ -59,3 +59,17 @@
   .lista--tarjetas { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
   .barras { height: 260px; }
 }
+
+/* Regla general: el texto nunca se sale de su caja. Una palabra más larga que el espacio se parte, y los
+   elementos de rejillas y filas flexibles pueden encogerse por debajo del ancho de su contenido. */
+body { overflow-wrap: anywhere; }
+.bandeja, .dato, .pedido, .fila, .ficha, .articulo, .tarjeta, .ticket, .trabajo, .color-item, .field, .linea,
+.fila__titulo, .fila__fin, .barra-cobro, .impresora-datos > div, .control-fila > * { min-width: 0; }
+
+/* Correcciones del detector de desbordes (make desbordes). */
+input[type="range"] { margin: 0; }  /* el navegador le pone 2 px de margen y se sale de su caja */
+.field input, .field select, .field textarea { min-width: 0; max-width: 100%; }
+/* Pares de campos (fecha + casilla): dos columnas solo si caben; si no, uno debajo del otro. */
+.cuando, .ticket--lote .cuando { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+.linea__precio { white-space: normal; flex-wrap: wrap; }
+@media (max-width: 22.5rem) { .segmentado__op { padding-inline: 2px; font-size: var(--text-xs); } }

@@ -17,10 +17,12 @@ function Bandeja({ b, titulo }: { b: BandejaAms; titulo: string }) {
     <li className={`bandeja${b.en_uso ? " bandeja--uso" : ""}`}>
       <span className="bandeja__color" style={b.color ? { background: b.color } : undefined} aria-hidden="true" />
       <span className="bandeja__texto">
-        <strong>{titulo}</strong>
-        <span className="muted">{b.vacia ? "Vacía" : `${b.marca ?? b.tipo ?? "Filamento"} · ${b.restante != null ? `${b.restante} % restante` : "sin medir"}`}</span>
+        <span className="bandeja__titulo">
+          <strong>{titulo}</strong>
+          {b.en_uso && <span className="etiqueta etiqueta--ok">En uso</span>}
+        </span>
+        <span className="muted">{b.vacia ? "Vacía" : `${b.marca ?? b.tipo ?? "Filamento"} · ${b.restante != null ? `${b.restante} %` : "sin medir"}`}</span>
       </span>
-      {b.en_uso && <span className="etiqueta etiqueta--ok bandeja__uso">En uso</span>}
     </li>
   );
 }

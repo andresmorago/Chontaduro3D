@@ -69,7 +69,7 @@ export default function Pedidos() {
                 </a>
                 <span className="muted num">{p.whatsapp}</span>
               </div>
-              <div className="segmentado" role="group" aria-label={`Estado del pedido de ${p.nombre}`}>
+              <div className="segmentado segmentado--rejilla" role="group" aria-label={`Estado del pedido de ${p.nombre}`}>
                 {ESTADOS.map((e) => (
                   <button key={e.valor} type="button" className="segmentado__op" aria-pressed={p.estado === e.valor} onClick={() => p.estado !== e.valor && void cambiar(p, e.valor)}>{e.etiqueta}</button>
                 ))}
