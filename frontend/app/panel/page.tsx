@@ -42,6 +42,7 @@ export default function Inicio() {
         </Link>
       </div>
 
+      <div className="dos-paneles">
       <section className="seccion" aria-labelledby="t-semana">
         <h2 id="t-semana">Ventas de los últimos 7 días</h2>
         {p.ultimos_dias.every((d) => d.total === 0) ? (
@@ -83,6 +84,7 @@ export default function Inicio() {
           </div>
         )}
       </section>
+      </div>
     </>
   );
 }

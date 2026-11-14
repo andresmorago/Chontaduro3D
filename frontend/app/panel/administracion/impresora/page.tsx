@@ -87,6 +87,7 @@ export default function Impresora() {
       {d && d.error !== 0 && <p className="alerta" role="alert">La impresora reporta un error (código {d.error}). Míralo en su pantalla.</p>}
       {d && d.error === 0 && d.alertas > 0 && <p className="alerta" role="status">La impresora tiene {d.alertas === 1 ? "1 aviso" : `${d.alertas} avisos`} en su pantalla.</p>}
 
+      <div className="dos-paneles dos-paneles--iguales">
       <section className="seccion" aria-labelledby="t-estado">
         <h2 id="t-estado">Estado</h2>
         {estado.cargando ? (
@@ -196,6 +197,7 @@ export default function Impresora() {
           <div><Link className="btn btn--accent" href="/panel/produccion">Ir a Producción</Link></div>
         </div>
       </section>
+      </div>
     </>
   );
 }

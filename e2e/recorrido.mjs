@@ -97,7 +97,7 @@ await pagina.goto(`${BASE}/panel`);
 await pagina.waitForURL("**/entrar");
 ok(true, "/panel sin sesión redirige a /entrar");
 // Un correo inexistente: así la prueba no bloquea la cuenta real (el límite es de 5 fallos por correo).
-await pagina.getByLabel("Correo").fill("nadie@example.com");
+await pagina.getByLabel("Correo").fill(`nadie-${Date.now()}@example.com`); // distinto cada corrida: el límite por correo (5 por 15 min) no se acumula
 await pagina.getByLabel("Contraseña").fill("clave-equivocada-123");
 await pagina.getByRole("button", { name: "Entrar" }).click();
 await pagina.locator(".alerta").waitFor();
@@ -179,7 +179,10 @@ await foto("07a-produccion-filamento");
 await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
 await pagina.getByText(/entraron al inventario/).waitFor();
 await foto("07-produccion");
-const meta = (await pagina.locator(".lista .fila__meta").first().innerText()).replace(/\u00a0/g, " ");
+// Se espera a que el historial muestre el lote recién guardado (la recarga llega después del aviso).
+const filaMeta = pagina.locator(".lista .fila__meta").filter({ hasText: "187,5 g" }).first();
+await filaMeta.waitFor();
+const meta = (await filaMeta.innerText()).replace(/\u00a0/g, " ");
 ok(meta.includes("187,5 g") && meta.includes("2 h 30 min") && meta.includes("0,5 kWh") && meta.includes("$ 400"), `el lote guarda gramos, tiempo y energía (${meta.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "producir 3 deja 3 en inventario");
 

@@ -53,7 +53,7 @@ export default function Articulos() {
       ) : lista.length === 0 ? (
         <div className="vacio"><p>Ningún artículo coincide con «{q}».</p></div>
       ) : (
-        <div className="lista">
+        <div className="lista lista--tarjetas">
           {lista.map((a) => (
             <button key={a.id} type="button" className="fila" onClick={() => setObjetivo(a)} style={!a.activo ? { opacity: 0.6 } : undefined}>
               <span className="fila__foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} /></span>

@@ -1,0 +1,48 @@
+/* Panel en ESCRITORIO: usa todo el ancho, escala la letra y presenta las listas como cuadrículas.
+   Va después de squeeze.css (gana por orden). Móvil y tablet no cambian. */
+
+/* Dos paneles lado a lado (Inicio, Administración, Impresora): una columna en pantallas chicas. */
+.dos-paneles { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: var(--space-xl); align-items: start; }
+.pedidos-grid { display: grid; gap: var(--space-md); grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); align-items: start; }
+
+@media (min-width: 75rem) {
+  .dos-paneles { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .dos-paneles--iguales { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 60.0625rem) {
+  /* Todo el ancho disponible (con un tope en monitores enormes) en vez de la columna de 1280 px. */
+  .panel__main,
+  .panel__main:has(> .pagina--ancha) { max-width: calc(1760px + 2 * var(--gutter)); width: 100%; margin-inline: auto; }
+  .barras { height: 220px; }
+
+  /* Artículos: tarjetas con la foto grande. */
+  .lista--tarjetas, .lista--multi { background: transparent; box-shadow: none; overflow: visible; border-radius: 0; display: grid; gap: var(--space-md); }
+  .lista--tarjetas { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .lista--tarjetas > .fila { grid-template-columns: minmax(0, 1fr); align-content: start; align-items: start; gap: var(--space-xs); padding: 0 0 var(--space-md); border: 0; border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card); overflow: hidden; transition: transform var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out); }
+  .lista--tarjetas > .fila:hover { transform: translateY(-4px); box-shadow: var(--shadow-card-hover); background: var(--color-card); }
+  .lista--tarjetas .fila__foto { width: 100%; }
+  .lista--tarjetas .fila__foto .foto { border-radius: 0; aspect-ratio: 1; }
+  .lista--tarjetas .fila__titulo, .lista--tarjetas .fila__fin { padding-inline: var(--space-md); }
+  .lista--tarjetas .fila__fin { grid-auto-flow: column; justify-content: space-between; align-items: baseline; text-align: left; }
+  .lista--tarjetas .fila__fin .num { font-size: var(--text-lg); }
+
+  /* Inventario: filas en varias columnas, cada una como tarjeta. */
+  .lista--multi { grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); }
+  .lista--multi > .fila { grid-template-columns: 72px minmax(0, 1fr) auto; padding: var(--space-sm) var(--space-md); border: 0; border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card); }
+  .lista--multi > .fila--aviso { background: var(--color-card-accent-soft); }
+  .lista--multi .fila__foto { width: 72px; }
+  @media (hover: hover) { .lista--multi > .fila:hover, .lista--tarjetas > .fila:hover { transform: translateY(-2px); } }
+}
+
+/* Pantallas grandes: letra y márgenes mayores (en un monitor de 1800 px la de móvil se ve diminuta). */
+@media (min-width: 90rem) {
+  .panel { --text-xs: 0.875rem; --text-sm: 0.9875rem; --text-md: 1.125rem; --text-lg: 1.375rem; --text-xl: 1.75rem; --text-2xl: 2.2rem; --text-3xl: 2.8rem; --rail: 256px; --gutter: 56px; font-size: var(--text-md); }
+  .lista--tarjetas { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .lista--multi { grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); }
+}
+@media (min-width: 120rem) {
+  .panel { --text-xs: 0.9375rem; --text-sm: 1.0625rem; --text-md: 1.25rem; --text-lg: 1.5rem; --text-xl: 1.9rem; --text-2xl: 2.4rem; --text-3xl: 3rem; --rail: 280px; --gutter: 72px; }
+  .lista--tarjetas { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .barras { height: 260px; }
+}

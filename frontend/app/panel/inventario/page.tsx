@@ -98,7 +98,7 @@ export default function Inventario() {
           <a className="btn btn--primary" href="/panel/articulos">Crear artículo</a>
         </div>
       ) : (
-        <div className="lista">
+        <div className="lista lista--multi">
           {lista.map((a) => {
             const bajo = a.stock <= a.stock_minimo;
             return (

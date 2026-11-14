@@ -56,6 +56,7 @@ export default function Administracion() {
         <AdminPestanas />
       </div>
 
+      <div className="dos-paneles dos-paneles--iguales">
       <section className="seccion" aria-labelledby="t-cuenta">
         <h2 id="t-cuenta">Mi cuenta</h2>
         <form className="tarjeta bloque-clave" onSubmit={cambiar}>
@@ -94,6 +95,7 @@ export default function Administracion() {
         )}
         <p className="muted" style={{ fontSize: "var(--text-sm)" }}>Por ahora todos los usuarios tienen el mismo acceso (sin roles).</p>
       </section>
+      </div>
 
       <UsuarioNuevoHoja abierta={nuevo} onCerrar={() => setNuevo(false)} onCreado={() => void usuarios.recargar()} />
       <UsuarioGestionHoja usuario={gestionActual} onCerrar={() => setGestion(null)} onCambio={() => void usuarios.recargar()} />

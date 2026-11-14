@@ -53,7 +53,7 @@ export default function Pedidos() {
           <p>Cuando alguien pida algo desde el catálogo público, aparece aquí.</p>
         </div>
       ) : (
-        <div style={{ display: "grid", gap: "var(--space-md)" }}>
+        <div className="pedidos-grid">
           {visibles.map((p) => (
             <article key={p.id} className={`pedido${p.estado === "nuevo" ? " pedido--nuevo" : ""}`}>
               <div className="pedido__cab">
