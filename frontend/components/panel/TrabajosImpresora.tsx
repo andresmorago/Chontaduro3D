@@ -77,44 +77,70 @@ export function TrabajosImpresora({ usandoId, onUsar, refrescar }: Props) {
           <p>{vista === "pendiente" ? "No hay trabajos por revisar. Cuando la impresora termine uno, aparece aquí." : "No hay trabajos ignorados."}</p>
         </div>
       ) : (
-        <div className="lista trabajos">
-          {trabajos.map((t) => {
-            const enCurso = t.estado === "en_curso";
-            const aqui = usandoId === t.id;
-            return (
-              <div key={t.id} className="trabajo">
-                <div className="trabajo__cab">
-                  <span className="trabajo__nombre">{t.nombre}</span>
-                  {enCurso ? (
-                    <span className="etiqueta etiqueta--aviso">Imprimiendo · {t.progreso} %</span>
-                  ) : t.estado === "interrumpido" ? (
-                    <span className="etiqueta etiqueta--aviso">{t.origen === "nube" || t.progreso === 0 ? "Interrumpido" : `Interrumpido al ${t.progreso} %`}</span>
-                  ) : (
-                    <span className="etiqueta etiqueta--ok">Terminado</span>
-                  )}
-                </div>
-                <div className="trabajo__meta num">
-                  <span>{fechaCorta(t.fecha)}</span>
-                  <span>{t.minutos != null ? `${tiempoLargo(t.minutos)} (${t.minutos_origen})` : "sin tiempo"}</span>
-                  <span>{t.gramos_total != null ? `${gramos(t.gramos_total)} (estimado)` : "sin gramos"}</span>
-                  <Muestras t={t} />
-                </div>
-                {t.estado === "interrumpido" && <p className="field__hint">Se cortó antes de terminar: los gramos son los del archivo completo; ajústalos si hace falta.</p>}
-                {!enCurso && (
-                  <div className="trabajo__acciones">
-                    {vista === "pendiente" ? (
-                      <>
-                        <Boton variante="accent" pequeno disabled={aqui} onClick={() => onUsar(t)} aria-label={`Importar el trabajo ${t.nombre} como producción`}>{aqui ? "Cargado en el lote" : "Importar como producción"}</Boton>
-                        <Boton variante="ghost" pequeno cargando={ocupado === t.id} onClick={() => void cambiar(t, "ignorar")} aria-label={`Ignorar el trabajo ${t.nombre}`}>Ignorar</Boton>
-                      </>
-                    ) : (
-                      <Boton variante="secondary" pequeno cargando={ocupado === t.id} onClick={() => void cambiar(t, "restaurar")} aria-label={`Restaurar el trabajo ${t.nombre}`}>Restaurar</Boton>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="tabla-caja">
+          <table className="tabla-datos tabla-trab">
+            <caption className="visually-hidden">Trabajos de la impresora</caption>
+            <thead>
+              <tr>
+                <th scope="col">Trabajo</th>
+                <th scope="col" className="c-num c-mov-no">Tiempo</th>
+                <th scope="col" className="c-num c-mov-no">Gramos</th>
+                <th scope="col" className="c-mov-no">Filamentos</th>
+                <th scope="col">Estado</th>
+                <th scope="col" className="c-acc"><span className="visually-hidden">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {trabajos.map((t) => {
+                const enCurso = t.estado === "en_curso";
+                const aqui = usandoId === t.id;
+                const tiempo = t.minutos != null ? `${tiempoLargo(t.minutos)} (${t.minutos_origen})` : "sin tiempo";
+                const peso = t.gramos_total != null ? `${gramos(t.gramos_total)} (estimado)` : "sin gramos";
+                return (
+                  <tr key={t.id} data-aviso={aqui}>
+                    <th scope="row" className="t-nombre">
+                      {t.nombre}
+                      <span className="t-sec c-mov-no num">{fechaCorta(t.fecha)}</span>
+                      {t.estado === "interrumpido" && <span className="t-sec">Se cortó antes de terminar: gramos del archivo completo, ajústalos si hace falta.</span>}
+                      <span className="t-meta num">{fechaCorta(t.fecha)} · {tiempo} · {peso} <Muestras t={t} /></span>
+                    </th>
+                    <td className="c-num c-mov-no num">
+                      {t.minutos != null ? tiempoLargo(t.minutos) : "—"}
+                      {t.minutos != null && <span className="t-sec">{t.minutos_origen}</span>}
+                    </td>
+                    <td className="c-num c-mov-no num">
+                      {t.gramos_total != null ? gramos(t.gramos_total) : "—"}
+                      {t.gramos_total != null && <span className="t-sec">estimado</span>}
+                    </td>
+                    <td className="c-mov-no"><Muestras t={t} /></td>
+                    <td className="c-fin">
+                      {enCurso ? (
+                        <span className="etiqueta etiqueta--aviso">Imprimiendo · {t.progreso} %</span>
+                      ) : t.estado === "interrumpido" ? (
+                        <span className="etiqueta etiqueta--aviso">{t.origen === "nube" || t.progreso === 0 ? "Interrumpido" : `Interrumpido al ${t.progreso} %`}</span>
+                      ) : (
+                        <span className="etiqueta etiqueta--ok">Terminado</span>
+                      )}
+                    </td>
+                    <td className="c-acc c-ancho">
+                      {!enCurso && (
+                        <div className="t-acciones">
+                          {vista === "pendiente" ? (
+                            <>
+                              <Boton variante="accent" pequeno disabled={aqui} onClick={() => onUsar(t)} aria-label={`Importar el trabajo ${t.nombre} como producción`}>{aqui ? "En el lote" : "Importar"}</Boton>
+                              <Boton variante="ghost" pequeno cargando={ocupado === t.id} onClick={() => void cambiar(t, "ignorar")} aria-label={`Ignorar el trabajo ${t.nombre}`}>Ignorar</Boton>
+                            </>
+                          ) : (
+                            <Boton variante="secondary" pequeno cargando={ocupado === t.id} onClick={() => void cambiar(t, "restaurar")} aria-label={`Restaurar el trabajo ${t.nombre}`}>Restaurar</Boton>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Fragment, useState, type FormEvent } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Campo";
@@ -123,34 +123,55 @@ export default function Inventario() {
           <a className="btn btn--primary" href="/panel/articulos">Crear artículo</a>
         </div>
       ) : (
-        <div className="lista lista--multi">
-          {lista.map((a) => {
-            const bajo = a.stock <= a.stock_minimo;
-            return (
-              <button key={a.id} type="button" className={`fila${bajo ? " fila--aviso" : ""}`} onClick={() => setAbierto(a.id)}>
-                <span className="fila__foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} enc={encuadreDe(a)} /></span>
-                <span className="fila__titulo">
-                  <span className="code muted">{a.codigo}</span>
-                  <span className="fila__nombre">{a.nombre}</span>
-                  {a.stock_minimo > 0 && <span className="fila__meta">mínimo {a.stock_minimo}</span>}
-                  {a.stock_colores.length > 0 && (
-                    <span className="stock-colores" aria-label="Stock por color">
-                      {a.stock_colores.map((s) => (
-                        <span key={s.color_id ?? "sin-color"} className={`stock-color${s.color_id === null ? " stock-color--sin" : ""}${s.stock === 0 ? " stock-color--cero" : ""}`}>
-                          <span className="muestra-mini" style={s.hex ? { background: s.hex } : undefined} aria-hidden="true" />
-                          {s.nombre ?? "Sin color asignado"} <strong className="num">{s.stock}</strong>
+        <div className="tabla-caja">
+          <table className="tabla-datos">
+            <caption className="visually-hidden">Existencias por artículo y color</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="c-foto"><span className="visually-hidden">Foto</span></th>
+                <th scope="col" className="c-cod">Código</th>
+                <th scope="col">Artículo</th>
+                <th scope="col" className="c-num c-mov-no">Mínimo</th>
+                <th scope="col" className="c-num">Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((a) => {
+                const bajo = a.stock <= a.stock_minimo;
+                const colores = a.stock_colores;
+                return (
+                  <Fragment key={a.id}>
+                    <tr className={`t-cab t-clic${colores.length > 0 ? " t-con-sub" : ""}`} data-aviso={bajo} onClick={() => setAbierto(a.id)}>
+                      <td className="c-foto"><span className="t-foto"><Foto url={a.imagen_url} codigo="" nombre={a.nombre} enc={encuadreDe(a)} /></span></td>
+                      <td className="c-cod code">{a.codigo}</td>
+                      <th scope="row" className="t-nombre">
+                        <button type="button" className="t-enlace" onClick={(e) => { e.stopPropagation(); setAbierto(a.id); }} aria-label={`${a.nombre}: ver y corregir el conteo`}>{a.nombre}</button>
+                        <span className="t-meta num">{a.stock_minimo > 0 ? `Mínimo ${a.stock_minimo}` : "Sin mínimo"}</span>
+                      </th>
+                      <td className="c-num c-mov-no num">{a.stock_minimo > 0 ? a.stock_minimo : "—"}</td>
+                      <td className="c-num c-fin">
+                        <span className="t-estado">
+                          {bajo && <span className="etiqueta etiqueta--aviso">{a.stock === 0 ? "Agotado" : "Poco"}</span>}
+                          <span className={`stock-num ${a.stock === 0 ? "stock-num--cero" : bajo ? "stock-num--bajo" : ""}`}>{a.stock}</span>
                         </span>
-                      ))}
-                    </span>
-                  )}
-                </span>
-                <span className="fila__fin">
-                  <span className={`stock-num ${a.stock === 0 ? "stock-num--cero" : bajo ? "stock-num--bajo" : ""}`}>{a.stock}</span>
-                  {bajo && <span className="etiqueta etiqueta--aviso">{a.stock === 0 ? "Agotado" : "Poco"}</span>}
-                </span>
-              </button>
-            );
-          })}
+                      </td>
+                    </tr>
+                    {colores.map((s) => (
+                      <tr key={s.color_id ?? "sin-color"} className="t-sub t-clic" data-cero={s.stock === 0} onClick={() => setAbierto(a.id)}>
+                        <td className="c-foto" />
+                        <td className="c-cod" />
+                        <th scope="row" className="t-nombre">
+                          <span className="muestra-mini" style={s.hex ? { background: s.hex } : undefined} aria-hidden="true" /> {s.nombre ?? "Sin color asignado"}
+                        </th>
+                        <td className="c-mov-no" />
+                        <td className="c-num c-fin num">{s.stock}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
       <Detalle key={abierto ?? "ninguno"} articulo={elegido} onCambio={recargar} onCerrar={() => setAbierto(null)} />

@@ -94,7 +94,7 @@ for (const w of ANCHOS) {
   await p.goto(`${BASE}/panel/produccion`); await p.getByRole("button", { name: "Parámetros de energía" }).first().click(); await medir("panel parámetros (hoja)", w); await p.keyboard.press("Escape");
   const masLargo = p.locator(".selector").getByRole("button", { name: /Agregar una unidad de Prendedor navideño.*Verde esmeralda/ }); if (await masLargo.count()) { await masLargo.first().click(); await masLargo.first().click(); await medir("panel producción con artículo largo (color)", w); }
   await p.goto(`${BASE}/panel/vender`); await p.getByRole("heading", { level: 1 }).waitFor(); await medir("panel vender con colores", w);
-  await p.goto(`${BASE}/panel/inventario`); await p.locator("button.fila", { hasText: "Prendedor navideño" }).first().click(); await p.locator("dialog[open]").waitFor(); await medir("panel inventario ajuste con colores (hoja)", w); await p.keyboard.press("Escape");
+  await p.goto(`${BASE}/panel/inventario`); await p.locator("tr.t-cab", { hasText: "Prendedor navideño" }).first().click(); await p.locator("dialog[open]").waitFor(); await medir("panel inventario ajuste con colores (hoja)", w); await p.keyboard.press("Escape");
 }
 await b.close();
 

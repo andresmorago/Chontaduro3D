@@ -76,7 +76,7 @@ const sinScrollHorizontal = async (ancho) => {
 
 async function stockDe(nombre) {
   await pagina.goto(`${BASE}/panel/inventario`);
-  const fila = pagina.locator("button.fila", { hasText: nombre });
+  const fila = pagina.locator("tr.t-cab", { hasText: nombre });
   await fila.waitFor();
   return Number((await fila.locator(".stock-num").innerText()).trim());
 }
@@ -217,15 +217,15 @@ await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
 await pagina.getByText(/entraron al inventario/).waitFor();
 await foto("07-produccion");
 // Se espera a que el historial muestre el lote recién guardado (la recarga llega después del aviso).
-const filaMeta = pagina.locator(".lista .fila__meta").filter({ hasText: "187,5 g" }).first();
+const filaMeta = pagina.locator(".tabla-lotes tbody tr").filter({ hasText: "187,5 g" }).first();
 await filaMeta.waitFor();
 const meta = (await filaMeta.innerText()).replace(/\u00a0/g, " ");
 ok(meta.includes("187,5 g") && meta.includes("2 h 30 min") && meta.includes("0,5 kWh") && meta.includes("$ 400"), `el lote guarda gramos, tiempo y energía (${meta.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "producir 3 deja 3 en inventario");
 await pagina.goto(`${BASE}/panel/inventario`);
-const filaInv = pagina.locator("button.fila", { hasText: ARTICULO });
+const filaInv = pagina.locator("tr.t-cab", { hasText: ARTICULO });
 await filaInv.waitFor();
-const desglose = (await filaInv.locator(".stock-colores").innerText()).replace(/\s+/g, " ");
+const desglose = (await filaInv.locator("xpath=following-sibling::tr[position()<=2]").allInnerTexts()).join(" ").replace(/\s+/g, " ");
 ok(/Rojo 3/.test(desglose) && /Azul 0/.test(desglose), `el inventario desglosa el stock por color (${desglose})`);
 await foto("07a1-inventario-por-color");
 await filaInv.click();
@@ -248,7 +248,7 @@ await pagina.locator("dialog[open]").getByRole("button", { name: new RegExp(`Qui
 await pagina.getByRole("button", { name: "Guardar cambios" }).click();
 await pagina.getByText(/Lote corregido/).waitFor();
 await pagina.goto(`${BASE}/panel/produccion`);
-const metaEditada = (await pagina.locator(".lista .fila__meta").first().innerText()).replace(/\u00a0/g, " ");
+const metaEditada = (await pagina.locator(".tabla-lotes tbody tr").first().innerText()).replace(/\u00a0/g, " ");
 ok(metaEditada.includes("187,5 g") && metaEditada.includes("2 h 30 min"), "el lote editado conserva filamento y tiempo");
 ok((await stockDe(ARTICULO)) === 3, "volver el lote a 3 deja el inventario en 3");
 
@@ -262,15 +262,15 @@ await foto("07b-produccion-retrospectiva");
 await pagina.getByLabel("Sumar al inventario actual").uncheck();
 await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
 await pagina.getByText(/sin sumar al stock/).waitFor();
-const viejo = (await pagina.locator(".lista .fila__meta").filter({ hasText: "solo historial" }).first().innerText()).replace(/\u00a0/g, " ");
+const viejo = (await pagina.locator(".tabla-lotes tbody tr").filter({ hasText: "solo historial" }).first().innerText()).replace(/\u00a0/g, " ");
 ok(viejo.includes("solo historial"), `el lote viejo queda en el historial como «solo historial» (${viejo.replace(/\n/g, " ")})`);
 ok((await stockDe(ARTICULO)) === 3, "una carga histórica sin sumar NO cambia el inventario de hoy");
 
 console.log("Trabajos de la impresora → producción");
 await pagina.goto(`${BASE}/panel/produccion`);
-const trabA = pagina.locator(".trabajo", { hasText: "E2E trabajo A" });
+const trabA = pagina.locator(".tabla-trab tbody tr", { hasText: "E2E trabajo A" });
 await trabA.waitFor();
-const metaA = (await trabA.locator(".trabajo__meta").innerText()).replace(/\u00a0/g, " ");
+const metaA = (await trabA.locator(".t-meta").textContent()).replace(/\u00a0/g, " ");
 ok(metaA.includes("2 h 5 min (estimado)") && metaA.includes("42,5 g (estimado)"), `el trabajo muestra tiempo y gramos del archivo (${metaA.replace(/\n/g, " ")})`);
 await foto("07e-trabajos-impresora");
 await trabA.getByRole("button", { name: /Importar el trabajo/ }).click();
@@ -285,19 +285,19 @@ await pagina.getByLabel("Sumar al inventario actual").uncheck();
 await foto("07f-trabajo-importado");
 await pagina.getByRole("button", { name: "Sumar al inventario" }).click();
 await pagina.getByText(/sin sumar al stock/).waitFor();
-await pagina.locator(".trabajo", { hasText: "E2E trabajo A" }).waitFor({ state: "detached" });
+await pagina.locator(".tabla-trab tbody tr", { hasText: "E2E trabajo A" }).waitFor({ state: "detached" });
 ok(true, "el trabajo importado sale de la bandeja");
-ok((await pagina.locator(".lista .fila__meta").filter({ hasText: "de la impresora" }).count()) >= 1, "el lote queda marcado «de la impresora»");
+ok((await pagina.locator(".tabla-lotes tbody tr").filter({ hasText: "de la impresora" }).count()) >= 1, "el lote queda marcado «de la impresora»");
 ok((await stockDe(ARTICULO)) === 3, "importar sin sumar no cambia el inventario");
 await pagina.goto(`${BASE}/panel/produccion`);
-const trabB = pagina.locator(".trabajo", { hasText: "E2E trabajo B" });
+const trabB = pagina.locator(".tabla-trab tbody tr", { hasText: "E2E trabajo B" });
 await trabB.getByRole("button", { name: /Ignorar el trabajo/ }).click();
 await pagina.getByText(/Trabajo ignorado/).waitFor();
 await pagina.getByRole("button", { name: "Ignorados" }).click();
-await pagina.locator(".trabajo", { hasText: "E2E trabajo B" }).getByRole("button", { name: /Restaurar/ }).click();
+await pagina.locator(".tabla-trab tbody tr", { hasText: "E2E trabajo B" }).getByRole("button", { name: /Restaurar/ }).click();
 await pagina.getByText(/devuelto a la lista/).waitFor();
 await pagina.getByRole("button", { name: "Por revisar" }).click();
-await pagina.locator(".trabajo", { hasText: "E2E trabajo B" }).waitFor();
+await pagina.locator(".tabla-trab tbody tr", { hasText: "E2E trabajo B" }).waitFor();
 ok(true, "ignorar y restaurar un trabajo funciona");
 
 console.log("Administración → Impresora");
@@ -387,9 +387,10 @@ ok((await stockDe(ARTICULO)) === 3, "el pedido NO cambió el inventario");
 console.log("Pedidos en el panel");
 await pagina.goto(`${BASE}/panel/pedidos`);
 await pagina.getByText("Cliente de Prueba").first().waitFor();
-const pedidoPanel = (await pagina.locator(".pedido").first().innerText()).replace(/\s+/g, " ");
+const grupo = await pagina.evaluate(() => { const cab = document.querySelector(".tabla-ped tr.t-cab"); let n = 0, txt = cab.innerText; for (let r = cab.nextElementSibling; r && r.classList.contains("t-sub"); r = r.nextElementSibling) { n++; txt += " " + r.innerText; } return { n, txt }; });
+const pedidoPanel = grupo.txt.replace(/\s+/g, " ");
 ok(/Azul/.test(pedidoPanel) && /Rojo/.test(pedidoPanel), "el pedido en el panel muestra cada renglón con su color");
-ok((await pagina.locator(".pedido").first().locator(".pedido__items li").count()) === 2, "el pedido del panel es UNO con sus renglones, no varios pedidos");
+ok(grupo.n === 2, "el pedido del panel es UNO con sus renglones, no varios pedidos");
 await foto("10-pedidos");
 ok(await pagina.getByRole("link", { name: /Escribir por WhatsApp/ }).first().getAttribute("href").then((h) => h?.startsWith("https://wa.me/573001234567")), "el enlace de WhatsApp lleva el indicativo 57");
 

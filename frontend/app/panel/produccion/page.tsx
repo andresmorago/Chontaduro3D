@@ -119,6 +119,7 @@ export default function Produccion() {
       ) : (
         <div className="venta-grid venta-grid--lote">
           <Selector articulos={lista} cantidades={Object.fromEntries(items)} onCambiar={cambiar} />
+          <div className="ticket-col">
           <section className="ticket ticket--lote" id="ticket" aria-labelledby="t-lote">
             <h2 id="t-lote" className="ticket__titulo" style={{ fontSize: "var(--text-title)" }}>Este lote</h2>
             <div className="ticket__cuerpo">
@@ -183,6 +184,7 @@ export default function Produccion() {
               </Boton>
             </div>
           </section>
+          </div>
         </div>
       )}
 
@@ -202,31 +204,55 @@ export default function Produccion() {
         {(historial.datos ?? []).length === 0 ? (
           <div className="vacio"><p>Aún no registraste producción.</p></div>
         ) : (
-          <div className="lista lista--dos">
-            {(historial.datos ?? []).map((p) => (
-              <div key={p.id} className="fila fila--sin-foto">
-                <span className="fila__titulo">
-                  <span className="fila__nombre">{p.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}</span>
-                  <span className="fila__meta num">
-                    {fechaCorta(p.fecha)}
-                    {p.gramos_total != null ? ` · ${gramos(p.gramos_total)}` : ""}
-                    {p.minutos_impresion != null ? ` · ${tiempoLargo(p.minutos_impresion)}` : ""}
-                    {p.kwh != null ? ` · ${kwhTexto(p.kwh)}` : ""}
-                    {p.costo_energia != null ? ` · ${dinero(p.costo_energia)}` : ""}
-                    {p.nota ? ` · ${p.nota}` : ""}
-                    {!p.afecta_inventario ? " · solo historial" : ""}
-                    {p.desde_impresora ? " · de la impresora" : ""}
-                  </span>
-                  {p.filamentos.length > 1 && (
-                    <span className="fila__meta">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>
-                  )}
-                </span>
-                <span className="fila__fin num">
-                  +{p.items.reduce((s, i) => s + i.cantidad, 0)}
-                  <Boton variante="secondary" pequeno onClick={() => setEditando(p)} aria-label={`Editar el lote del ${fechaCorta(p.fecha)}`}>Editar</Boton>
-                </span>
-              </div>
-            ))}
+          <div className="tabla-caja">
+            <table className="tabla-datos tabla-lotes">
+              <caption className="visually-hidden">Últimos lotes de producción</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="c-mov-no">Fecha</th>
+                  <th scope="col">Lote</th>
+                  <th scope="col" className="c-num c-mov-no">Gramos</th>
+                  <th scope="col" className="c-num c-mov-no">Tiempo</th>
+                  <th scope="col" className="c-num c-mov-no">Energía</th>
+                  <th scope="col" className="c-num">Piezas</th>
+                  <th scope="col" className="c-acc"><span className="visually-hidden">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(historial.datos ?? []).map((p) => {
+                  const piezas = p.items.reduce((s, i) => s + i.cantidad, 0);
+                  const resumen = [
+                    fechaCorta(p.fecha),
+                    p.gramos_total != null ? gramos(p.gramos_total) : null,
+                    p.minutos_impresion != null ? tiempoLargo(p.minutos_impresion) : null,
+                    p.kwh != null ? kwhTexto(p.kwh) : null,
+                    p.costo_energia != null ? dinero(p.costo_energia) : null,
+                  ].filter(Boolean).join(" · ");
+                  const notas = [p.nota, !p.afecta_inventario ? "solo historial" : null, p.desde_impresora ? "de la impresora" : null].filter(Boolean).join(" · ");
+                  return (
+                    <tr key={p.id}>
+                      <td className="c-mov-no c-nw num">{fechaCorta(p.fecha)}</td>
+                      <th scope="row" className="t-nombre">
+                        {p.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}
+                        {p.filamentos.length > 1 && <span className="t-sec">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>}
+                        {notas && <span className="t-sec">{notas}</span>}
+                        <span className="t-meta num">{resumen}</span>
+                      </th>
+                      <td className="c-num c-mov-no num">{p.gramos_total != null ? gramos(p.gramos_total) : "—"}</td>
+                      <td className="c-num c-mov-no num">{p.minutos_impresion != null ? tiempoLargo(p.minutos_impresion) : "—"}</td>
+                      <td className="c-num c-mov-no num">
+                        {p.kwh != null ? kwhTexto(p.kwh) : "—"}
+                        {p.costo_energia != null && <span className="t-sec">{dinero(p.costo_energia)}</span>}
+                      </td>
+                      <td className="c-num c-fin num"><strong>+{piezas}</strong></td>
+                      <td className="c-acc c-ancho">
+                        <Boton variante="secondary" pequeno onClick={() => setEditando(p)} aria-label={`Editar el lote del ${fechaCorta(p.fecha)}`}>Editar</Boton>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
         {(historial.datos ?? []).length >= limite && limite < 100 && (
