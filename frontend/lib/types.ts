@@ -317,6 +317,36 @@ export interface Impresora {
   trabajos_pendientes: number;
 }
 
+// --- Administración → Conexión (impresora y cuenta de Bambu Cloud) ---------------
+export interface NubeConexion {
+  vinculada: boolean;
+  correo: string | null;
+  estado: NubeBambu["estado"];
+  sincronizada_en: string | null;
+  detalle: string | null;
+  /** Se pidió sincronizar y el servicio aún no lo atendió. */
+  pendiente: boolean;
+}
+
+export interface ConexionImpresora {
+  ip: string | null;
+  serial: string | null;
+  codigo_guardado: boolean;
+  /** Hay datos guardados pero no se pueden leer (cambió SECRET_KEY): hay que escribirlos otra vez. */
+  ilegible: boolean;
+  servicio_activo: boolean;
+  conectada: boolean;
+  /** Se guardó un cambio y el servicio aún no reconectó con él. */
+  pendiente: boolean;
+  error: "credenciales" | "red" | null;
+  nube: NubeConexion;
+}
+
+export interface PasoNube {
+  paso: "listo" | "codigo" | "tfa";
+  tfa_key: string | null;
+}
+
 export type ComandoImpresora = "pausar" | "reanudar" | "cancelar" | "luz" | "velocidad" | "temp_boquilla" | "temp_cama" | "ventilador_pieza" | "ventilador_aux";
 
 export interface OrdenImpresora {

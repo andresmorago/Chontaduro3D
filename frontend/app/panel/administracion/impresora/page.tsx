@@ -85,7 +85,7 @@ export default function Impresora() {
         <p className="alerta" role="alert">El servicio de la impresora no está respondiendo, así que no hay datos ni controles. Revisa que esté corriendo (<code>make prod-impresora-logs</code>).</p>
       )}
       {!estado.cargando && info?.servicio_activo && !info.conectada && (
-        <p className="alerta" role="alert">No se alcanza la impresora. Revisa que esté encendida y conectada a la red; mientras tanto no se pueden enviar controles.</p>
+        <p className="alerta" role="alert">No se alcanza la impresora. Revisa que esté encendida y conectada a la red, o que la IP y el código de acceso sean los correctos en <Link href="/panel/administracion/conexion">Conexión</Link>; mientras tanto no se pueden enviar controles.</p>
       )}
       {d && d.error !== 0 && <p className="alerta" role="alert">La impresora reporta un error (código {d.error}). Míralo en su pantalla.</p>}
       {d && d.error === 0 && d.alertas > 0 && <p className="alerta" role="status">La impresora tiene {d.alertas === 1 ? "1 aviso" : `${d.alertas} avisos`} en su pantalla.</p>}
@@ -196,9 +196,9 @@ export default function Impresora() {
             <p className={info.nube.estado === "requiere_login" || info.nube.estado === "error" ? "alerta" : "muted"} role={info.nube.estado === "requiere_login" || info.nube.estado === "error" ? "alert" : undefined}>
               <strong>Historial de Bambu Cloud:</strong>{" "}
               {info.nube.estado === "ok" && `sincronizado ${info.nube.sincronizada_en ? hace(info.nube.sincronizada_en) : ""}. Trae los trabajos de los últimos días.`}
-              {info.nube.estado === "requiere_login" && "el acceso venció o falta. Corre make bambu-login en la terminal para renovarlo."}
+              {info.nube.estado === "requiere_login" && <>el acceso venció. Vuelve a vincular tu cuenta en <Link href="/panel/administracion/conexion">Conexión</Link>.</>}
               {info.nube.estado === "error" && `no se pudo consultar (${info.nube.detalle ?? "error"}). Se reintenta solo.`}
-              {(info.nube.estado === "sin_configurar" || info.nube.estado === null) && "sin conectar. Corre make bambu-login en la terminal para traer los trabajos previos de Studio y Handy."}
+              {(info.nube.estado === "sin_configurar" || info.nube.estado === null) && <>sin vincular. Vincula tu cuenta en <Link href="/panel/administracion/conexion">Conexión</Link> para traer los trabajos previos de Studio y Handy.</>}
             </p>
           )}
           <div><Link className="btn btn--accent" href="/panel/produccion">Ir a Producción</Link></div>

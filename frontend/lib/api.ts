@@ -7,6 +7,7 @@ import type {
   ArticuloEntrada,
   CatalogoPublico,
   ComandoImpresora,
+  ConexionImpresora,
   ConfigPublica,
   EstadoPedido,
   ExtraProduccion,
@@ -16,6 +17,7 @@ import type {
   OrdenImpresora,
   Panel,
   Parametros,
+  PasoNube,
   Pedido,
   PrecioHistorial,
   Produccion,
@@ -152,6 +154,19 @@ export const api = {
     trabajos: (gestion: TrabajoImpresora["gestion"] = "pendiente") => pedir<TrabajoImpresora[]>(`/impresora/trabajos${q({ gestion })}`),
     ignorar: (id: string) => pedir<TrabajoImpresora>(`/impresora/trabajos/${id}/ignorar`, { metodo: "POST" }),
     restaurar: (id: string) => pedir<TrabajoImpresora>(`/impresora/trabajos/${id}/restaurar`, { metodo: "POST" }),
+    conexion: {
+      ver: () => pedir<ConexionImpresora>("/impresora/conexion"),
+      guardar: (d: { ip: string; serial: string; codigo_acceso: string | null }) =>
+        pedir<ConexionImpresora>("/impresora/conexion", { metodo: "PUT", cuerpo: d }),
+      nubeEntrar: (correo: string, clave: string) =>
+        pedir<PasoNube>("/impresora/conexion/nube/entrar", { metodo: "POST", cuerpo: { correo, clave } }),
+      nubeVerificar: (d: { codigo: string; correo?: string; tfa_key?: string }) =>
+        pedir<PasoNube>("/impresora/conexion/nube/verificar", { metodo: "POST", cuerpo: d }),
+      nubeToken: (token: string) =>
+        pedir<PasoNube>("/impresora/conexion/nube/token", { metodo: "POST", cuerpo: { token } }),
+      nubeSincronizar: () => pedir<ConexionImpresora>("/impresora/conexion/nube/sincronizar", { metodo: "POST" }),
+      nubeDesvincular: () => pedir<ConexionImpresora>("/impresora/conexion/nube", { metodo: "DELETE" }),
+    },
   },
   panel: () => pedir<Panel>("/panel"),
   usuarios: {

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const PESTANAS = [
   { href: "/panel/administracion", etiqueta: "Cuenta y usuarios" },
   { href: "/panel/administracion/impresora", etiqueta: "Impresora" },
+  { href: "/panel/administracion/conexion", etiqueta: "Conexión" },
 ];
 
 /** Pestañas de Administración (cada una es una página, así se puede abrir directo). */
