@@ -68,7 +68,9 @@ services:
     restart: always
 
   # Impresora Bambu Lab A1 (por la VPN a la red local): detecta los trabajos, guarda el estado y
-  # atiende los controles del panel. Es el ÚNICO servicio con las credenciales de la impresora.
+  # atiende los controles del panel. La IP, el serial, el código de acceso y la cuenta de Bambu Cloud
+  # se configuran en el panel (Administración → Conexión) y viven cifrados en la base: por eso este
+  # servicio necesita SECRET_KEY (la misma del backend) para descifrarlos.
   impresora:
     build:
       context: ./backend
@@ -77,15 +79,17 @@ services:
     entrypoint: ["python", "-m", "app.impresora.servicio"]
     environment:
       TZ: America/Bogota
-      # No firma nada ni sirve a nadie: usa la configuración de desarrollo (sin SECRET_KEY).
+      # No sirve a nadie ni firma sesiones; solo usa SECRET_KEY para descifrar la configuración.
       APP_ENV: development
       DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      # SOLO para importar UNA vez a la base lo que ya tenías en el .env (después se pueden borrar).
       BAMBU_IP: ${BAMBU_IP:-}
       BAMBU_SERIAL: ${BAMBU_SERIAL:-}
       BAMBU_ACCESS_CODE: ${BAMBU_ACCESS_CODE:-}
-      # Historial de Bambu Cloud (opcional): el token lo deja `make bambu-login` en ./data/nube.
       BAMBU_NUBE_DIAS: ${BAMBU_NUBE_DIAS:-7}
     volumes:
+      # Solo para importar una vez el token viejo de `make bambu-login` (ya retirado), si existe.
       - ./data/nube:/nube
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
     depends_on:

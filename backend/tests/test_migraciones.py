@@ -26,7 +26,8 @@ TABLAS = {
     "usuarios", "sesiones_refresh", "articulos", "precio_historial", "producciones",
     "produccion_items", "ventas", "venta_items", "movimientos_inventario", "pedidos",
     "registro_auditoria", "parametros", "produccion_filamentos", "articulo_colores",
-    "trabajos_impresora", "impresora_estado", "impresora_comandos", "pedido_items",
+    "trabajos_impresora", "impresora_estado", "impresora_comandos", "impresora_config",
+    "pedido_items",
 }  # fmt: skip
 
 

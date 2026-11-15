@@ -10,6 +10,7 @@ from app.api import (
     articulos,
     auth,
     impresora,
+    impresora_conexion,
     inventario,
     media,
     panel,
@@ -73,6 +74,7 @@ for r in (
     pedidos,
     panel,
     impresora,
+    impresora_conexion,
     publico,
     media,
 ):

@@ -1,8 +1,8 @@
 """Historial de trabajos de Bambu Cloud (el mismo que ven Bambu Studio y Bambu Handy).
 
 API NO oficial: puede cambiar sin aviso. Por eso el parseo es tolerante y cualquier fallo se
-informa (estado de la sincronización) sin afectar al resto de la app. El token lo deja el comando
-`make bambu-login` en un archivo (nunca la contraseña) y aquí se renueva solo."""
+informa (estado de la sincronización) sin afectar al resto de la app. El token lo deja el panel
+(Administración → Conexión) en la base, cifrado (nunca la contraseña), y aquí se renueva solo."""
 
 import contextlib
 import json
@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 AGENTE = "misimpresiones/1.0 (uso personal)"
+REVINCULAR = "vuelve a vincular tu cuenta en Administración → Conexión."
 
 
 class ErrorNube(Exception):
@@ -24,7 +25,7 @@ class ErrorNube(Exception):
 
 
 class RequiereLogin(ErrorNube):
-    """No hay token, o ya no sirve y no se pudo renovar: hay que repetir `make bambu-login`."""
+    """No hay token, o ya no sirve y no se pudo renovar: hay que volver a vincular la cuenta en el panel."""
 
 
 # ------------------------------------------------------------------------------- token
@@ -72,6 +73,27 @@ class AlmacenToken:
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
+
+
+class AlmacenMemoria:
+    """El token en memoria: el servicio lo lee de la base antes de consultar la nube y, si la
+    consulta lo renovó (`cambio`), lo devuelve a la base. Misma interfaz que `AlmacenToken`."""
+
+    def __init__(self) -> None:
+        self._s: Sesion | None = None
+        self.cambio = False
+
+    def poner(self, s: Sesion | None) -> None:
+        self._s, self.cambio = s, False
+
+    def existe(self) -> bool:
+        return self._s is not None
+
+    def cargar(self) -> Sesion | None:
+        return self._s
+
+    def guardar(self, s: Sesion) -> None:
+        self._s, self.cambio = s, True
 
 
 # ------------------------------------------------------------------------------ tareas
@@ -183,12 +205,12 @@ class ClienteNube:
     def _sesion(self) -> Sesion:
         s = self._almacen.cargar()
         if s is None:
-            raise RequiereLogin("Falta iniciar sesión en Bambu Cloud (make bambu-login).")
+            raise RequiereLogin("Falta iniciar sesión en Bambu Cloud (Administración → Conexión).")
         return s
 
     def _renovar(self, s: Sesion) -> Sesion:
         if not s.refresh_token:
-            raise RequiereLogin("El acceso a Bambu Cloud venció: repite make bambu-login.")
+            raise RequiereLogin(f"El acceso a Bambu Cloud venció: {REVINCULAR}")
         try:
             r = self._http.post(
                 f"{self._base}/v1/user-service/user/refreshtoken",
@@ -197,7 +219,7 @@ class ClienteNube:
         except httpx.HTTPError as e:
             raise ErrorNube(f"Sin conexión con Bambu Cloud ({type(e).__name__}).") from e
         if r.status_code in (400, 401, 403):
-            raise RequiereLogin("El acceso a Bambu Cloud venció: repite make bambu-login.")
+            raise RequiereLogin(f"El acceso a Bambu Cloud venció: {REVINCULAR}")
         if r.status_code != 200:
             raise ErrorNube(f"Bambu Cloud respondió {r.status_code} al renovar el acceso.")
         d = r.json()
@@ -227,7 +249,7 @@ class ClienteNube:
                 s = self._renovar(s)  # puede lanzar RequiereLogin
                 continue
             if r.status_code == 401:
-                raise RequiereLogin("Bambu Cloud rechazó el acceso: repite make bambu-login.")
+                raise RequiereLogin(f"Bambu Cloud rechazó el acceso: {REVINCULAR}")
             if r.status_code == 403:
                 raise ErrorNube("Bambu Cloud bloqueó la petición (403).")
             if r.status_code != 200:

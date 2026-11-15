@@ -2,8 +2,9 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, field_validator
 
+from app.impresora.ajustes import validar_codigo, validar_ip, validar_serial
 from app.schemas.comunes import Entrada, Numero, Salida
 
 EstadoTrabajo = Literal["en_curso", "terminado", "interrumpido"]
@@ -106,3 +107,78 @@ class TrabajoOut(Salida):
     gramos_total: Numero | None
     filamentos: list[FilamentoTrabajoOut]
     produccion_id: UUID | None
+
+
+# ------------------------------------------------------------ conexión (Administración → Conexión)
+class NubeConexionOut(Salida):
+    vinculada: bool
+    correo: str | None = None
+    estado: Literal["sin_configurar", "ok", "requiere_login", "error"] | None = None
+    sincronizada_en: datetime | None = None
+    detalle: str | None = None
+    # Se pidió sincronizar y el servicio aún no lo atendió.
+    pendiente: bool = False
+
+
+class ConexionOut(Salida):
+    """Lo guardado y cómo va. El código de acceso y el token NUNCA salen por aquí."""
+
+    ip: str | None = None
+    serial: str | None = None
+    codigo_guardado: bool = False
+    # Hay datos guardados pero no se pueden leer (cambió SECRET_KEY): hay que escribirlos de nuevo.
+    ilegible: bool = False
+    servicio_activo: bool = False
+    conectada: bool = False
+    # Se guardó un cambio y el servicio aún no reconectó con él.
+    pendiente: bool = False
+    # Si no conecta: «credenciales» (código de acceso rechazado) o «red» (no se alcanza la IP).
+    error: Literal["credenciales", "red"] | None = None
+    nube: NubeConexionOut = NubeConexionOut(vinculada=False)
+
+
+class ConexionIn(Entrada):
+    ip: str = Field(min_length=7, max_length=45)
+    serial: str = Field(min_length=8, max_length=20)
+    # Vacío = conservar el que ya está guardado.
+    codigo_acceso: str | None = Field(default=None, max_length=32)
+
+    @field_validator("ip")
+    @classmethod
+    def _ip(cls, v: str) -> str:
+        return validar_ip(v)
+
+    @field_validator("serial")
+    @classmethod
+    def _serial(cls, v: str) -> str:
+        return validar_serial(v)
+
+    @field_validator("codigo_acceso")
+    @classmethod
+    def _codigo(cls, v: str | None) -> str | None:
+        return validar_codigo(v) if v else None
+
+
+class NubeEntrarIn(Entrada):
+    # Bambu acepta correo o teléfono como cuenta.
+    correo: str = Field(min_length=3, max_length=254)
+    clave: str = Field(min_length=1, max_length=200)
+    # La contraseña no se repite en los mensajes de validación.
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+
+class NubeVerificarIn(Entrada):
+    codigo: str = Field(min_length=4, max_length=12)
+    # Verificación por correo: el correo. Por app de autenticación (2FA): la llave que dio Bambu.
+    correo: str | None = Field(default=None, min_length=3, max_length=254)
+    tfa_key: str | None = Field(default=None, min_length=4, max_length=200)
+
+
+class NubeTokenIn(Entrada):
+    token: str = Field(min_length=20, max_length=4096)
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+
+class NubePasoOut(Salida):
+    paso: Literal["listo", "codigo", "tfa"]
+    tfa_key: str | None = None

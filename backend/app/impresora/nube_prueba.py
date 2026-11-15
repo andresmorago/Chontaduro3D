@@ -3,18 +3,28 @@
 Muestra la FORMA de lo que devuelve la nube (campos, estados, conteos), sin imprimir el token ni
 datos personales, para poder ajustar el lector si Bambu cambia su API."""
 
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from app.config import settings
-from app.impresora import nube
+from app.db import SessionLocal
+from app.impresora import ajustes, nube
+
+
+async def _cargar() -> tuple[nube.Sesion | None, str | None]:
+    async with SessionLocal() as db:
+        fila = await ajustes.obtener(db)
+        return ajustes.sesion_de(fila), (fila.serial if fila else None)
 
 
 def main() -> int:
-    almacen = nube.AlmacenToken(settings.bambu_nube_archivo)
-    if not almacen.existe():
-        print("No hay token: corre primero `make bambu-login`.")
+    sesion, serial = asyncio.run(_cargar())
+    if sesion is None:
+        print("No hay cuenta vinculada: hazlo en Administración → Conexión.")
         return 1
+    almacen = nube.AlmacenMemoria()
+    almacen.poner(sesion)
     cliente = nube.ClienteNube(settings.bambu_nube_url, almacen)
     try:
         crudo = cliente._get("/v1/user-service/my/tasks", {"limit": 50})
@@ -34,7 +44,7 @@ def main() -> int:
         )  # fmt: skip
         print("ejemplo startTime/endTime:", filas[0].get("startTime"), "→", filas[0].get("endTime"))
     desde = datetime.now(UTC) - timedelta(days=settings.bambu_nube_dias)
-    tareas = cliente.tareas(desde, settings.bambu_serial or None)
+    tareas = cliente.tareas(desde, serial)
     print(f"\nÚltimos {settings.bambu_nube_dias} días (esta impresora): {len(tareas)} trabajos")
     for t in tareas[:15]:
         print(

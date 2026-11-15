@@ -1,6 +1,8 @@
 """Servicio de la impresora: `python -m app.impresora.servicio`.
 
-Cada pocos segundos: (1) guarda el estado en `impresora_estado`, (2) detecta trabajos nuevos o
+La configuración (IP, serial, código de acceso, cuenta de Bambu Cloud) sale de la base, donde la
+deja Administración → Conexión: el servicio reconecta solo cuando cambia. Cada pocos segundos:
+(1) guarda el estado en `impresora_estado`, (2) detecta trabajos nuevos o
 terminados y los guarda en `trabajos_impresora` (con gramos y tiempo del .3mf), (3) envía las
 órdenes pendientes que dejó el backend. Nunca se cae por un error de la impresora o de la red:
 registra y reintenta."""
@@ -10,12 +12,14 @@ import contextlib
 import logging
 import signal
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select, update
 
 from app.config import settings
+from app.core import secretos
 from app.db import SessionLocal, engine
-from app.impresora import bambu, lector3mf, maquina, nube, sincronizacion
+from app.impresora import ajustes, bambu, lector3mf, maquina, nube, sincronizacion
 from app.models import ComandoImpresora, EstadoImpresora, TrabajoImpresora
 
 log = logging.getLogger("impresora")
@@ -43,11 +47,15 @@ def _ahora() -> datetime:
 
 
 class Servicio:
-    def __init__(self, cliente=None, nube_cliente=None, almacen=None) -> None:
-        # `cliente` se inyecta en las pruebas; en producción es la conexión MQTT real.
-        self.cliente = cliente or bambu.ClienteBambu(
-            settings.bambu_ip, settings.bambu_serial, settings.bambu_access_code
-        )
+    def __init__(self, cliente=None, nube_cliente=None) -> None:
+        # `cliente` se inyecta en las pruebas y entonces no se reconecta con la configuración;
+        # en producción es la conexión MQTT real, creada con lo guardado en la base.
+        self.cliente = cliente
+        self._cliente_fijo = cliente is not None
+        self._conexion: ajustes.Conexion | None = None
+        self._heredado_revisado = False
+        self._solicitada_vista: datetime | None = None
+        self._solicitud_nueva = False
         self._ultimo_estado: dict | None = None
         self._ultima_escritura = datetime.min.replace(tzinfo=UTC)
         self._ultimo_pushall = datetime.min.replace(tzinfo=UTC)
@@ -55,19 +63,82 @@ class Servicio:
         self._vio_inactiva = False
         self._intentos: dict[str, tuple[int, datetime]] = {}
         self._parar = asyncio.Event()
-        # Historial de Bambu Cloud (opcional: solo si `make bambu-login` dejó el token).
-        self._almacen = almacen or nube.AlmacenToken(settings.bambu_nube_archivo)
-        self._nube = nube_cliente or nube.ClienteNube(settings.bambu_nube_url, self._almacen)
+        # Historial de Bambu Cloud (opcional: solo si se vinculó la cuenta en el panel). El token
+        # vive cifrado en la base; aquí se presta a `ClienteNube` y se devuelve si se renovó.
+        self._memoria = nube.AlmacenMemoria()
+        self._nube = nube_cliente or nube.ClienteNube(settings.bambu_nube_url, self._memoria)
         self._nube_proxima = datetime.min.replace(tzinfo=UTC)
+
+    # ------------------------------------------------------------- configuración
+    async def _importar_heredado(self, db, fila):
+        """Una sola vez al arrancar: si la base aún no tiene configuración, la toma de lo que se
+        usaba antes (BAMBU_* del .env y el token de data/nube/bambu.json) y lo deja guardado
+        (cifrado) en la base. Desde entonces el .env y el archivo ya no hacen falta."""
+        env_completo = settings.bambu_ip and settings.bambu_serial and settings.bambu_access_code
+        if env_completo and (fila is None or not (fila.ip and fila.serial and fila.codigo_acceso)):
+            try:
+                ip = ajustes.validar_ip(settings.bambu_ip)
+                serie = ajustes.validar_serial(settings.bambu_serial)
+                codigo = ajustes.validar_codigo(settings.bambu_access_code)
+            except ValueError as e:
+                log.warning("BAMBU_* del .env no sirven (%s); se ignoran.", e)
+            else:
+                fila = fila or await ajustes.obtener_o_crear(db)
+                fila.ip, fila.serial = ip, serie
+                fila.codigo_acceso = secretos.cifrar(codigo)
+                fila.version += 1
+                log.info("Configuración de la impresora importada del .env a la base.")
+        archivo = Path(settings.bambu_nube_archivo)
+        if (fila is None or not fila.nube_sesion) and archivo.is_file():
+            sesion = nube.AlmacenToken(archivo).cargar()
+            if sesion is not None:
+                fila = fila or await ajustes.obtener_o_crear(db)
+                ajustes.poner_sesion(fila, sesion)
+                fila.nube_solicitada_en = _ahora()
+                with contextlib.suppress(OSError):
+                    archivo.unlink()  # ya vive en la base: que no reaparezca al desvincular
+                log.info("Token de Bambu Cloud importado de %s a la base.", archivo)
+        return fila
+
+    async def _cargar_config(self) -> None:
+        """Lee la configuración de la base y reconecta si cambió."""
+        async with SessionLocal() as db:
+            fila = await ajustes.obtener(db)
+            if not self._heredado_revisado:
+                fila = await self._importar_heredado(db, fila)
+                await db.commit()
+                self._heredado_revisado = True
+            conexion = ajustes.conexion_de(fila)
+            solicitada = fila.nube_solicitada_en if fila else None
+        self._solicitud_nueva = solicitada is not None and solicitada != self._solicitada_vista
+        self._solicitada_vista = solicitada
+        if self._cliente_fijo or conexion == self._conexion:
+            return
+        if self.cliente is not None:
+            await asyncio.to_thread(self.cliente.detener)
+        self._conexion, self.cliente = conexion, None
+        self._ultimo_estado, self._vio_inactiva = None, False
+        self._ultimo_pushall = datetime.min.replace(tzinfo=UTC)
+        self._intentos.clear()
+        if conexion is None:
+            log.info(
+                "Sin configuración de la impresora: queda en espera (Administración → Conexión)."
+            )
+            return
+        self.cliente = bambu.ClienteBambu(conexion.ip, conexion.serial, conexion.codigo)
+        self.cliente.iniciar()
+        log.info("Conectando con la impresora en %s.", conexion.ip)
 
     # ------------------------------------------------------------------ estado
     async def _escribir_estado(self) -> None:
-        crudo = self.cliente.crudo()
+        crudo = self.cliente.crudo() if self.cliente else None
         datos = bambu.normalizar(crudo) if crudo else None
-        ultimo = self.cliente.ultimo_mensaje
+        ultimo = self.cliente.ultimo_mensaje if self.cliente else None
         reciente = ultimo is not None and (_ahora() - ultimo).total_seconds() < MENSAJE_RECIENTE_S
-        conectada = self.cliente.conectada and reciente
-        foto = {"datos": datos, "conectada": conectada}
+        conectada = bool(self.cliente and self.cliente.conectada and reciente)
+        version = self._conexion.version if self._conexion else None
+        error = None if conectada else getattr(self.cliente, "error_conexion", None)
+        foto = {"datos": datos, "conectada": conectada, "version": version, "error": error}
         ahora = _ahora()
         if (
             foto == self._ultimo_estado
@@ -80,6 +151,7 @@ class Servicio:
                 fila = EstadoImpresora(id=1)
                 db.add(fila)
             fila.conectada, fila.datos = conectada, datos
+            fila.config_version, fila.conexion_error = version, error
             fila.ultimo_mensaje_en, fila.actualizado_en = ultimo, ahora
             await db.commit()
         self._ultimo_estado, self._ultima_escritura = foto, ahora
@@ -101,7 +173,8 @@ class Servicio:
         try:
             info = await asyncio.to_thread(
                 lector3mf.leer_de_la_impresora,
-                settings.bambu_ip, settings.bambu_access_code,
+                self._conexion.ip if self._conexion else "",
+                self._conexion.codigo if self._conexion else "",
                 trabajo.archivo or crudo.get("gcode_file"), trabajo.nombre, trabajo.plate,
             )  # fmt: skip
         except Exception as e:  # noqa: BLE001 — la red o la impresora pueden fallar: se reintenta
@@ -117,6 +190,8 @@ class Servicio:
         log.info("«%s»: %s g, %s min (del .3mf)", trabajo.nombre, info.gramos, info.minutos)
 
     async def _seguir_trabajos(self) -> None:
+        if self.cliente is None:
+            return
         crudo = self.cliente.crudo()
         if not crudo or "gcode_state" not in crudo:
             return
@@ -181,27 +256,47 @@ class Servicio:
                 fila = EstadoImpresora(id=1)
                 db.add(fila)
             fila.nube_estado, fila.nube_detalle = estado, detalle
+            fila.nube_atendida_en = _ahora()
             if ok:
                 fila.nube_sincronizada_en = _ahora()
             await db.commit()
 
+    async def _devolver_token_renovado(self, antes: str | None) -> None:
+        """Si la consulta renovó el token, se guarda la versión nueva (salvo que mientras tanto
+        se haya vinculado otra cuenta o desvinculado: entonces manda lo del panel)."""
+        sesion = self._memoria.cargar()
+        if not self._memoria.cambio or sesion is None:
+            return
+        async with SessionLocal() as db:
+            fila = await ajustes.obtener(db)
+            if fila is not None and fila.nube_sesion == antes:
+                ajustes.poner_sesion(fila, sesion)
+                await db.commit()
+
     async def _sincronizar_nube(self) -> None:
         """Trae los trabajos de los últimos días del historial de Bambu Cloud."""
+        if self._solicitud_nueva:  # el panel pidió «sincronizar ahora» (o vinculó/desvinculó)
+            self._nube_proxima = datetime.min.replace(tzinfo=UTC)
         if _ahora() < self._nube_proxima:
             return
-        if not self._almacen.existe():
+        async with SessionLocal() as db:
+            fila = await ajustes.obtener(db)
+            cifrado = fila.nube_sesion if fila else None
+            sesion = ajustes.sesion_de(fila)
+        if sesion is None:
             self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
             await self._guardar_nube("sin_configurar", None)
             return
+        self._memoria.poner(sesion)
         desde = _ahora() - timedelta(days=settings.bambu_nube_dias)
+        serie = self._conexion.serial if self._conexion else None
         try:
-            tareas = await asyncio.to_thread(
-                self._nube.tareas, desde, settings.bambu_serial or None
-            )
+            tareas = await asyncio.to_thread(self._nube.tareas, desde, serie)
             async with SessionLocal() as db:
                 r = await sincronizacion.aplicar(db, tareas)
                 await db.commit()
             log.info("Historial de la nube: %d tareas, %s", len(tareas), r)
+            await self._devolver_token_renovado(cifrado)
             await self._guardar_nube("ok", None, ok=True)
             self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
         except nube.RequiereLogin as e:
@@ -209,6 +304,7 @@ class Servicio:
             self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
         except nube.ErrorNube as e:
             log.warning("Historial de la nube: %s", e)
+            await self._devolver_token_renovado(cifrado)
             await self._guardar_nube("error", str(e)[:200])
             self._nube_proxima = _ahora() + timedelta(seconds=NUBE_REINTENTO_S)
 
@@ -231,7 +327,7 @@ class Servicio:
             ).scalars().all()  # fmt: skip
             for orden in pendientes:
                 orden.atendido_en = _ahora()
-                if not self.cliente.conectada:
+                if self.cliente is None or not self.cliente.conectada:
                     orden.estado, orden.detalle = "fallido", "La impresora no está conectada."
                     continue
                 try:
@@ -245,10 +341,12 @@ class Servicio:
 
     # ------------------------------------------------------------------- bucle
     async def correr(self) -> None:
-        self.cliente.iniciar()
-        log.info("Servicio de impresora iniciado (%s).", settings.bambu_ip)
+        if self.cliente is not None:  # inyectado (pruebas)
+            self.cliente.iniciar()
+        log.info("Servicio de impresora iniciado.")
         while not self._parar.is_set():
             for paso in (
+                self._cargar_config,
                 self._escribir_estado,
                 self._seguir_trabajos,
                 self._sincronizar_nube,
@@ -259,13 +357,16 @@ class Servicio:
                 except Exception:  # noqa: BLE001
                     log.exception("Fallo en %s; se reintenta.", paso.__name__)
             if (
-                _ahora() - self._ultimo_pushall
-            ).total_seconds() > PEDIR_TODO_S and self.cliente.conectada:
+                self.cliente is not None
+                and (_ahora() - self._ultimo_pushall).total_seconds() > PEDIR_TODO_S
+                and self.cliente.conectada
+            ):
                 self.cliente.pedir_todo()
                 self._ultimo_pushall = _ahora()
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._parar.wait(), CICLO_S)
-        self.cliente.detener()
+        if self.cliente is not None:
+            await asyncio.to_thread(self.cliente.detener)
         await engine.dispose()
 
     def parar(self) -> None:
@@ -276,9 +377,6 @@ async def principal() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    if not (settings.bambu_ip and settings.bambu_serial and settings.bambu_access_code):
-        log.error("Faltan BAMBU_IP, BAMBU_SERIAL o BAMBU_ACCESS_CODE: el servicio queda en espera.")
-        await asyncio.Event().wait()
     servicio = Servicio()
     bucle = asyncio.get_running_loop()
     for senal in (signal.SIGINT, signal.SIGTERM):

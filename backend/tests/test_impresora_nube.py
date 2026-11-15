@@ -334,16 +334,15 @@ class FalsaNube:
         return self.tareas_
 
 
-class FalsoAlmacen:
-    def __init__(self, hay=True):
-        self.hay = hay
+async def servicio_con(db, cliente, nube_falsa, hay_token=True):
+    """Servicio con la cuenta de Bambu vinculada (o no) en la base, como lo deja el panel."""
+    from app.impresora import ajustes
 
-    def existe(self):
-        return self.hay
-
-
-def servicio_con(cliente, nube_falsa, hay_token=True):
-    return Servicio(cliente, nube_falsa, FalsoAlmacen(hay_token))
+    if hay_token:
+        fila = await ajustes.obtener_o_crear(db)
+        ajustes.poner_sesion(fila, Sesion("tok-" + "x" * 20, "ref", 0))
+        await db.commit()
+    return Servicio(cliente, nube_falsa)
 
 
 async def estado_nube(db):
@@ -356,7 +355,7 @@ async def test_servicio_sin_token_no_llama_a_la_nube(db):
     from tests.test_impresora_servicio import FalsoCliente
 
     n = FalsaNube()
-    s = servicio_con(FalsoCliente(), n, hay_token=False)
+    s = await servicio_con(db, FalsoCliente(), n, hay_token=False)
     await s._sincronizar_nube()
     assert n.llamadas == 0 and (await estado_nube(db))[0] == "sin_configurar"
 
@@ -365,7 +364,7 @@ async def test_servicio_sincroniza_y_espera_para_la_proxima(db):
     from tests.test_impresora_servicio import FalsoCliente
 
     n = FalsaNube([tarea_de(tarea_cruda())])
-    s = servicio_con(FalsoCliente(), n)
+    s = await servicio_con(db, FalsoCliente(), n)
     await s._sincronizar_nube()
     estado, _, cuando = await estado_nube(db)
     assert estado == "ok" and cuando is not None and n.llamadas == 1
@@ -377,10 +376,14 @@ async def test_servicio_sincroniza_y_espera_para_la_proxima(db):
 async def test_servicio_informa_login_vencido_y_errores_sin_caerse(db):
     from tests.test_impresora_servicio import FalsoCliente
 
-    s = servicio_con(FalsoCliente(), FalsaNube(error=nube.RequiereLogin("repite el login")))
+    s = await servicio_con(
+        db, FalsoCliente(), FalsaNube(error=nube.RequiereLogin("repite el login"))
+    )
     await s._sincronizar_nube()
     assert (await estado_nube(db))[:2] == ("requiere_login", "repite el login")
-    s = servicio_con(FalsoCliente(), FalsaNube(error=nube.ErrorNube("Bambu Cloud bloqueó (403)")))
+    s = await servicio_con(
+        db, FalsoCliente(), FalsaNube(error=nube.ErrorNube("Bambu Cloud bloqueó (403)"))
+    )
     await s._sincronizar_nube()
     assert (await estado_nube(db))[:2] == ("error", "Bambu Cloud bloqueó (403)")
     assert s._nube_proxima < ahora() + timedelta(seconds=300)  # tras un fallo reintenta pronto

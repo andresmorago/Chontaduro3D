@@ -15,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Text,
     func,
     text,
 )
@@ -104,6 +105,13 @@ class EstadoImpresora(Base):
     nube_estado: Mapped[str | None] = mapped_column(String(20))
     nube_sincronizada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     nube_detalle: Mapped[str | None] = mapped_column(String(200))
+    # Última vez que el servicio terminó un intento con la nube (bien o mal): sirve para saber si
+    # una sincronización pedida desde el panel ya fue atendida.
+    nube_atendida_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Versión de `ConfigImpresora` que el servicio ya aplicó (conectó con esos datos).
+    config_version: Mapped[int | None] = mapped_column(Integer)
+    # Por qué no conecta: «credenciales» (código de acceso rechazado) o «red» (no se alcanza).
+    conexion_error: Mapped[str | None] = mapped_column(String(20))
 
 
 class ComandoImpresora(Base):
@@ -128,3 +136,29 @@ class ComandoImpresora(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     atendido_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ConfigImpresora(Base):
+    """Cómo conectar con la impresora y con la cuenta de Bambu Cloud (una fila). La escribe el
+    panel (Administración → Conexión) y la lee el servicio `impresora`, que reconecta solo cuando
+    cambia. Los secretos van cifrados (app/core/secretos.py); nunca se devuelven por la API."""
+
+    __tablename__ = "impresora_config"
+    __table_args__ = (CheckConstraint("id = 1", name="fila_unica"),)
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1, server_default="1")
+    ip: Mapped[str | None] = mapped_column(String(45))
+    serial: Mapped[str | None] = mapped_column(String(32))
+    codigo_acceso: Mapped[str | None] = mapped_column(Text)  # cifrado
+    # Sube con cada cambio de ip/serial/código: el servicio reconecta y avisa que ya lo aplicó.
+    version: Mapped[int] = mapped_column(Integer, server_default="1", nullable=False)
+    # Bambu Cloud: JSON {access_token, refresh_token, expira_en}, cifrado.
+    # La contraseña NO se guarda.
+    nube_sesion: Mapped[str | None] = mapped_column(Text)
+    nube_correo: Mapped[str | None] = mapped_column(String(254))
+    # El panel la actualiza para pedir «sincronizar ya»; el servicio la compara con
+    # `nube_atendida_en`.
+    nube_solicitada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

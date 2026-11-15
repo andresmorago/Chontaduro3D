@@ -2,7 +2,12 @@
 
 from app.models.articulo import Articulo, ArticuloColor, PrecioHistorial
 from app.models.auditoria import RegistroAuditoria
-from app.models.impresora import ComandoImpresora, EstadoImpresora, TrabajoImpresora
+from app.models.impresora import (
+    ComandoImpresora,
+    ConfigImpresora,
+    EstadoImpresora,
+    TrabajoImpresora,
+)
 from app.models.inventario import MovimientoInventario
 from app.models.parametros import Parametros
 from app.models.pedido import Pedido, PedidoItem
@@ -14,6 +19,7 @@ __all__ = [
     "Articulo",
     "ArticuloColor",
     "ComandoImpresora",
+    "ConfigImpresora",
     "EstadoImpresora",
     "MovimientoInventario",
     "Parametros",

@@ -39,11 +39,14 @@ class Settings(BaseSettings):
     turnstile_secretkey: str = ""
     turnstile_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
-    # Impresora Bambu Lab (solo las usa el servicio `impresora`; el backend web no las recibe).
+    # Impresora Bambu Lab: AHORA se configuran en Administración → Conexión (quedan cifradas en la
+    # base). Estas variables solo se leen UNA vez, para importar a la base lo que ya tenías en el
+    # .env; después se pueden borrar. Solo las recibe el servicio `impresora`.
     bambu_ip: str = ""
     bambu_serial: str = ""
     bambu_access_code: str = ""
-    # Historial de Bambu Cloud (opcional): el token lo deja `make bambu-login` en este archivo.
+    # Historial de Bambu Cloud: el token se vincula en el panel. Este archivo (el de
+    # `make bambu-login`, ya retirado) solo se importa una vez a la base si existe.
     bambu_nube_url: str = "https://api.bambulab.com"
     bambu_nube_archivo: str = "/nube/bambu.json"
     bambu_nube_dias: int = 7

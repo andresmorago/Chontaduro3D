@@ -189,6 +189,7 @@ class ClienteBambu:
         self._estado: dict[str, Any] = {}
         self._ultimo: datetime | None = None
         self._conectada = False
+        self._error: str | None = None
         # Cliente único por proceso: dos con el mismo id se expulsan entre sí.
         self._c = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, client_id=f"misimpresiones-{uuid.uuid4().hex[:8]}"
@@ -199,6 +200,7 @@ class ClienteBambu:
         self._c.tls_insecure_set(True)
         self._c.reconnect_delay_set(min_delay=2, max_delay=30)
         self._c.on_connect = self._al_conectar
+        self._c.on_connect_fail = self._al_fallar
         self._c.on_disconnect = self._al_desconectar
         self._c.on_message = self._al_mensaje
 
@@ -214,11 +216,23 @@ class ClienteBambu:
     # --- callbacks (hilo de paho) ---
     def _al_conectar(self, cliente, _u, _f, rc, *_a) -> None:
         if getattr(rc, "is_failure", False):
+            # La impresora contestó y rechazó: casi siempre el código de acceso.
+            motivo = str(rc).lower()
+            with self._lock:
+                self._error = (
+                    "credenciales" if ("password" in motivo or "authorized" in motivo) else "red"
+                )
             return
         with self._lock:
             self._conectada = True
+            self._error = None
         cliente.subscribe(f"device/{self._serie}/report")
         self.pedir_todo()
+
+    def _al_fallar(self, *_a) -> None:
+        # Ni siquiera se pudo abrir la conexión: IP equivocada, apagada o sin ruta (VPN caída).
+        with self._lock:
+            self._error = "red"
 
     def _al_desconectar(self, *_a) -> None:
         with self._lock:
@@ -249,6 +263,12 @@ class ClienteBambu:
                 nodo = fila["node"]
                 break
         return self._publicar(construir_orden(comando, valor, nodo))
+
+    @property
+    def error_conexion(self) -> str | None:
+        """«credenciales» (código de acceso rechazado), «red» (no se alcanza) o None."""
+        with self._lock:
+            return None if self._conectada else self._error
 
     @property
     def conectada(self) -> bool:

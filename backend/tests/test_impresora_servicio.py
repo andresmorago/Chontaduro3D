@@ -246,3 +246,127 @@ async def test_orden_sin_conexion_o_con_error_queda_fallida(servicio, cliente, d
         .first()
     )
     assert ultimo.estado == "fallido"
+
+
+# ------------------------------------------------- configuración tomada de la base (panel)
+class ClienteCreado(FalsoCliente):
+    creados: list = []
+
+    def __init__(self, ip, serial, codigo):
+        super().__init__()
+        self.datos = (ip, serial, codigo)
+        self.iniciado = self.detenido = False
+        ClienteCreado.creados.append(self)
+
+    def iniciar(self):
+        self.iniciado = True
+
+    def detener(self):
+        self.detenido = True
+
+
+async def guardar_config(db, ip="10.0.4.244", codigo="12345678"):
+    from app.core import secretos
+    from app.impresora import ajustes
+
+    f = await ajustes.obtener_o_crear(db)
+    f.ip, f.serial, f.codigo_acceso = ip, "03919D550007E91", secretos.cifrar(codigo)
+    f.version += 1
+    await db.commit()
+
+
+@pytest.fixture
+def real(monkeypatch):
+    from app.impresora import bambu
+
+    ClienteCreado.creados = []
+    monkeypatch.setattr(bambu, "ClienteBambu", ClienteCreado)
+    return ClienteCreado
+
+
+async def test_sin_configuracion_espera_y_lo_dice(db, real):
+    s = Servicio()
+    await s._cargar_config()
+    await s._escribir_estado()
+    assert s.cliente is None and real.creados == []
+    fila = await db.get(EstadoImpresora, 1)
+    assert fila.conectada is False and fila.config_version is None
+    await s._seguir_trabajos()  # sin cliente: no hace nada ni falla
+    await s._atender_ordenes()
+
+
+async def test_conecta_con_lo_guardado_en_la_base_y_reconecta_al_cambiar(db, real):
+    s = Servicio()
+    await guardar_config(db)
+    await s._cargar_config()
+    (c1,) = real.creados
+    assert c1.datos == ("10.0.4.244", "03919D550007E91", "12345678") and c1.iniciado
+    await s._cargar_config()  # sin cambios: no reconecta
+    assert len(real.creados) == 1
+
+    await guardar_config(db, ip="192.168.1.9", codigo="87654321")
+    await s._cargar_config()
+    c2 = real.creados[-1]
+    assert c1.detenido and c2.datos == ("192.168.1.9", "03919D550007E91", "87654321")
+    await s._escribir_estado()
+    db.expire_all()
+    fila = await db.get(EstadoImpresora, 1)
+    assert (
+        fila.config_version
+        == (
+            await db.get(__import__("app.models", fromlist=["ConfigImpresora"]).ConfigImpresora, 1)
+        ).version
+    )
+
+
+async def test_informa_el_motivo_si_no_conecta(db, real):
+    s = Servicio()
+    await guardar_config(db)
+    await s._cargar_config()
+    s.cliente.conectada = False
+    s.cliente.error_conexion = "credenciales"
+    await s._escribir_estado()
+    db.expire_all()
+    assert (await db.get(EstadoImpresora, 1)).conexion_error == "credenciales"
+
+
+async def test_importa_una_vez_el_env_y_el_archivo_viejo(db, real, monkeypatch, tmp_path):
+    from app.config import settings
+    from app.impresora import ajustes, nube
+
+    archivo = tmp_path / "bambu.json"
+    nube.AlmacenToken(archivo).guardar(nube.Sesion("tok-" + "z" * 30, "ref", 0))
+    monkeypatch.setattr(settings, "bambu_ip", "10.0.4.244")
+    monkeypatch.setattr(settings, "bambu_serial", "03919D550007E91")
+    monkeypatch.setattr(settings, "bambu_access_code", "12345678")
+    monkeypatch.setattr(settings, "bambu_nube_archivo", str(archivo))
+    s = Servicio()
+    await s._cargar_config()
+    db.expire_all()
+    f = await ajustes.obtener(db)
+    assert f.ip == "10.0.4.244" and ajustes.conexion_de(f).codigo == "12345678"
+    assert ajustes.sesion_de(f).access_token.startswith("tok-")
+    assert not archivo.exists()  # ya vive en la base
+    assert real.creados and s._solicitud_nueva  # conectó y pidió sincronizar
+
+    # lo guardado en el panel manda sobre el .env, y desvincular no revive el archivo
+    f.nube_sesion = None
+    f.ip = "192.168.1.9"
+    f.version += 1
+    await db.commit()
+    s2 = Servicio()
+    await s2._cargar_config()
+    db.expire_all()
+    f = await ajustes.obtener(db)
+    assert f.ip == "192.168.1.9" and f.nube_sesion is None
+
+
+async def test_un_env_invalido_se_ignora(db, real, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "bambu_ip", "8.8.8.8")
+    monkeypatch.setattr(settings, "bambu_serial", "03919D550007E91")
+    monkeypatch.setattr(settings, "bambu_access_code", "12345678")
+    s = Servicio()
+    await s._cargar_config()
+    assert s.cliente is None and real.creados == []
