@@ -233,6 +233,16 @@ class VentaIn(Entrada):
     metodo_pago: MetodoPago = "efectivo"
     nota: str | None = Field(default=None, max_length=300)
     items: list[VentaItemIn] = Field(min_length=1, max_length=100)
+    # Opcional: el pedido del catálogo que esta venta atiende. Con `cerrar_pedido` el pedido pasa a
+    # «cerrado» al registrar la venta (si no, queda como estaba: p. ej. para una entrega parcial).
+    pedido_id: UUID | None = None
+    cerrar_pedido: bool = False
+
+    @model_validator(mode="after")
+    def _cerrar_necesita_pedido(self) -> "VentaIn":
+        if self.cerrar_pedido and self.pedido_id is None:
+            raise ValueError("Para cerrar un pedido hay que indicar cuál.")
+        return self
 
     @field_validator("cliente", "nota")
     @classmethod
@@ -261,6 +271,9 @@ class VentaOut(Salida):
     anulada: bool
     creado_en: datetime
     items: list[VentaItemOut]
+    pedido_id: UUID | None = None
+    # Quién hizo el pedido al que está asociada (para mostrarlo sin otra consulta).
+    pedido_nombre: str | None = None
 
 
 # --- Inventario --------------------------------------------------------------
@@ -348,6 +361,15 @@ class PedidoItemOut(Salida):
     subtotal: DineroSalida
 
 
+class PedidoVentaOut(Salida):
+    """Una venta que atendió el pedido."""
+
+    id: UUID
+    fecha: date
+    total: DineroSalida
+    anulada: bool
+
+
 class PedidoOut(Salida):
     id: UUID
     nombre: str
@@ -357,6 +379,9 @@ class PedidoOut(Salida):
     total_estimado: DineroSalida
     estado: str
     creado_en: datetime
+    # Ventas asociadas (con las anuladas marcadas) y lo vendido sin contar las anuladas.
+    ventas: list[PedidoVentaOut] = []
+    total_vendido: DineroSalida = Decimal(0)
 
 
 class PedidoCreado(Salida):

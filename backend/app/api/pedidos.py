@@ -7,8 +7,14 @@ from sqlalchemy import select
 
 from app.core import auditoria
 from app.core.deps import DB, PROTEGIDO, Admin
-from app.models import Articulo, Pedido, PedidoItem
-from app.schemas.dominio import EstadoPedido, PedidoEstadoIn, PedidoItemOut, PedidoOut
+from app.models import Articulo, Pedido, PedidoItem, Venta
+from app.schemas.dominio import (
+    EstadoPedido,
+    PedidoEstadoIn,
+    PedidoItemOut,
+    PedidoOut,
+    PedidoVentaOut,
+)
 
 router = APIRouter(prefix="/pedidos", tags=["pedidos"], dependencies=PROTEGIDO)
 
@@ -32,6 +38,16 @@ async def _salidas(db, pedidos: list[Pedido]) -> list[PedidoOut]:
                     subtotal=a.precio_venta * i.cantidad,
                 )
             )  # fmt: skip
+    ventas: dict[UUID, list[PedidoVentaOut]] = defaultdict(list)
+    if ids:
+        for v in (
+            await db.execute(
+                select(Venta).where(Venta.pedido_id.in_(ids)).order_by(Venta.fecha, Venta.creado_en)
+            )
+        ).scalars():
+            ventas[v.pedido_id].append(
+                PedidoVentaOut(id=v.id, fecha=v.fecha, total=v.total, anulada=v.anulada)
+            )
     return [
         PedidoOut(
             id=p.id,
@@ -42,6 +58,8 @@ async def _salidas(db, pedidos: list[Pedido]) -> list[PedidoOut]:
             total_estimado=sum((i.subtotal for i in renglones[p.id]), Decimal(0)),
             estado=p.estado,
             creado_en=p.creado_en,
+            ventas=ventas[p.id],
+            total_vendido=sum((v.total for v in ventas[p.id] if not v.anulada), Decimal(0)),
         )  # fmt: skip
         for p in pedidos
     ]

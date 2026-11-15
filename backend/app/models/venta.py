@@ -36,6 +36,11 @@ class Venta(MarcaDeTiempo, Base):
     nota: Mapped[str | None] = mapped_column(String(300))
     anulada: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
     anulada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Pedido del catálogo que esta venta atiende (opcional). Un pedido puede tener varias ventas
+    # (entregas parciales). Asociarla NO cambia el inventario: eso lo hace la venta como siempre.
+    pedido_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pedidos.id", ondelete="SET NULL"), index=True
+    )
 
 
 class VentaItem(Base):

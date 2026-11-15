@@ -18,7 +18,14 @@ from app.core.inventario import (
     validar_colores,
 )
 from app.core.tokens import ahora
-from app.models import Articulo, ArticuloColor, MovimientoInventario, Venta, VentaItem
+from app.models import (
+    Articulo,
+    ArticuloColor,
+    MovimientoInventario,
+    Pedido,
+    Venta,
+    VentaItem,
+)
 from app.schemas.dominio import VentaIn, VentaItemOut, VentaOut
 
 router = APIRouter(prefix="/ventas", tags=["ventas"], dependencies=PROTEGIDO)
@@ -40,10 +47,11 @@ async def _salida(db, venta: Venta) -> VentaOut:
         )
         for i, a, c in filas
     ]  # fmt: skip
+    pedido = await db.get(Pedido, venta.pedido_id) if venta.pedido_id else None
     return VentaOut(
         id=venta.id, fecha=venta.fecha, cliente=venta.cliente, metodo_pago=venta.metodo_pago,
         nota=venta.nota, total=venta.total, anulada=venta.anulada, creado_en=venta.creado_en,
-        items=items,
+        items=items, pedido_id=venta.pedido_id, pedido_nombre=pedido.nombre if pedido else None,
     )  # fmt: skip
 
 
@@ -72,9 +80,24 @@ async def registrar(datos: VentaIn, db: DB, usuario: Admin) -> VentaOut:
     validar_colores(por_clave, articulos, colores, permitir_sin_color=True)
     exigir_stock_por_clave(por_clave, await stock_por_clave(db, ids), articulos, colores)
 
+    pedido = None
+    if datos.pedido_id is not None:
+        # Se bloquea el pedido: dos ventas a la vez no lo cierran dos veces ni lo atienden cerrado.
+        pedido = (
+            await db.execute(select(Pedido).where(Pedido.id == datos.pedido_id).with_for_update())
+        ).scalar_one_or_none()
+        if pedido is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Ese pedido no existe.")
+        if pedido.estado in ("cerrado", "descartado"):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Ese pedido ya está {pedido.estado}. Cámbialo a «Contactado» si aún lo atiendes.",
+            )
+
+    cliente = datos.cliente or (pedido.nombre if pedido else None)
     venta = Venta(
-        fecha=validar_fecha(datos.fecha), cliente=datos.cliente, metodo_pago=datos.metodo_pago,
-        nota=datos.nota, total=Decimal(0),
+        fecha=validar_fecha(datos.fecha), cliente=cliente, metodo_pago=datos.metodo_pago,
+        nota=datos.nota, total=Decimal(0), pedido_id=pedido.id if pedido else None,
     )  # fmt: skip
     db.add(venta)
     await db.flush()
@@ -107,8 +130,15 @@ async def registrar(datos: VentaIn, db: DB, usuario: Admin) -> VentaOut:
     venta.total = total
     auditoria.registrar(
         db, "venta_registrada", usuario_id=usuario.id,
-        detalle={"total": float(total), "unidades": sum(por_clave.values())},
+        detalle={"total": float(total), "unidades": sum(por_clave.values())}
+        | ({"pedido": str(pedido.id)} if pedido else {}),
     )  # fmt: skip
+    if pedido is not None and datos.cerrar_pedido:
+        pedido.estado = "cerrado"
+        auditoria.registrar(
+            db, "pedido_estado", usuario_id=usuario.id,
+            detalle={"pedido": str(pedido.id), "despues": "cerrado", "por_venta": str(venta.id)},
+        )  # fmt: skip
     await db.commit()
     await db.refresh(venta)
     return await _salida(db, venta)
