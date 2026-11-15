@@ -38,7 +38,7 @@ function Paso({ n, etiqueta, onMenos, onMas, masDeshabilitado }: { n: number; et
 }
 
 /** Rejilla de fichas. Un artículo sin colores es una ficha: un toque suma una unidad y aparece su contador.
- *  Un artículo CON colores es una ficha ancha con una fila por color, cada una con su propio contador. */
+ *  Un artículo CON colores es una ficha con una fila por color, cada una con su propio contador (en escritorio todas las tarjetas miden lo mismo de ancho; ver panel-escritorio.css). */
 export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostrarPrecio, incluirSinColor }: Props) {
   const [q, setQ] = useState("");
   const visibles = useMemo(() => {
@@ -110,11 +110,10 @@ export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostra
                   {sinStock ? "Sin stock" : `Stock ${a.stock}`}
                 </span>
               </button>
-              {n > 0 && (
-                <div className="ficha__paso">
-                  <Paso n={n} etiqueta={a.nombre} onMenos={() => onCambiar(a, null, -1)} onMas={() => onCambiar(a, null, 1)} masDeshabilitado={Boolean(exigirStock) && n >= a.stock} />
-                </div>
-              )}
+              {/* Siempre presente: en escritorio todas las tarjetas tienen la misma estructura (y no saltan al elegir). En móvil solo aparece al elegir. */}
+              <div className="ficha__paso" data-vacio={n === 0}>
+                <Paso n={n} etiqueta={a.nombre} onMenos={() => onCambiar(a, null, -1)} onMas={() => onCambiar(a, null, 1)} masDeshabilitado={Boolean(exigirStock) && n >= a.stock} />
+              </div>
             </div>
           );
         })}

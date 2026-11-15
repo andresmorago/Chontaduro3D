@@ -291,6 +291,7 @@ button.fila:hover { background: var(--color-paper-2); }
 .paso__btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; }
 .paso__n { display: grid; place-items: center; padding: 0 var(--space-2xs); font-weight: 700; }
 .ficha__paso { display: flex; justify-content: center; }
+.ficha__paso[data-vacio="true"] { display: none; } /* móvil: el contador aparece al elegir; en escritorio siempre se ve (panel-escritorio.css) */
 @media (pointer: coarse) { .paso { grid-template-columns: 44px minmax(36px, auto) 44px; } .paso__btn { min-height: 44px; } }
 
 /* Color de una línea de venta o de producción. */
