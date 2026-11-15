@@ -42,3 +42,22 @@ final se acuerda al vender). El mensaje de WhatsApp lista todos los renglones.
   existente como un renglón; las columnas antiguas de `pedidos` (`articulo_id`, `cantidad`, `color`) quedan deprecadas y opcionales.
   Revertir la migración conserva el primer renglón de cada pedido.
 - Pruebas: `backend/tests/test_carrito.py` y el recorrido `make e2e`.
+
+## Atender un pedido con una venta
+
+Una venta puede asociarse (opcionalmente) a un pedido, y así el pedido se cierra con la venta realizada.
+
+- **Desde Pedidos**: *Atender con una venta* abre `/panel/vender?pedido=<id>`; Vender carga los renglones del pedido
+  (el color se busca por nombre; la cantidad se limita a lo que hay), pone el cliente y marca *Cerrar el pedido al
+  registrar la venta*. Lo que no se pueda cargar (color por elegir, sin stock) se avisa en pantalla.
+- **Desde Vender**: el selector *Pedido que atiendes (opcional)* lista los pedidos «nuevo» y «contactado». Si la venta
+  está vacía se cargan sus artículos; si ya tenía líneas no se pisan (botón *Cargar los artículos del pedido*).
+- **API**: `POST /api/ventas` acepta `pedido_id` y `cerrar_pedido`. Solo se asocian pedidos nuevos o contactados
+  (409 si ya están cerrados o descartados, 422 si no existe). Si no se escribe cliente, se usa el nombre del pedido.
+  Un pedido puede tener varias ventas (entregas parciales): `cerrar_pedido` decide cuándo se cierra.
+- **Qué NO hace**: asociar no cambia el inventario (lo mueve la venta, como siempre) ni el precio (la venta usa el
+  precio de hoy o el que escribas). **Anular** una venta no reabre el pedido: la tarjeta del pedido marca la venta
+  como anulada y no la cuenta en *Vendido*; el estado se cambia a mano.
+- Datos: `ventas.pedido_id` (FK, `ON DELETE SET NULL`); `PedidoOut.ventas` y `total_vendido`; `VentaOut.pedido_id`
+  y `pedido_nombre`.
+

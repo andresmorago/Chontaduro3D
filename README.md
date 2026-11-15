@@ -28,13 +28,14 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | Dar de alta un producto | **Artículos → Nuevo artículo** (nombre, foto, descripción, precio). El precio se puede cambiar cuando quieras; queda historial y las ventas pasadas no cambian. |
 | Cargar producción de meses atrás (carga retrospectiva) | **Producción**: elige la *Fecha de producción* (hasta 5 años atrás). Desmarca *Sumar al inventario actual* si esas piezas ya se vendieron: quedan en el historial y las métricas sin inflar el stock de hoy. Cada lote puede llevar sus propios valores de energía (kWh y potencia de esa época). |
 | Registrar lo que imprimí | **Producción**: cada ficha trae un **+** (un toque suma una pieza) y, al elegir, un contador −/n/+ cuyo número también se puede **escribir**. Un artículo con colores ocupa dos columnas con una fila por color (cada una con su contador). Guardar → suma al inventario **de ese color**. Opcional: gramos de filamento (total o **por filamento**) y **tiempo de impresión**; con los *Parámetros de energía* (precio del kWh y potencia de la impresora) cada lote guarda sus kWh y su costo de energía. |
-| Registrar una venta | **Vender**: igual que Producción (+, contador y filas por color); el **+** se bloquea al llegar a lo que hay de ese color. Forma de pago, *Registrar venta* → resta del inventario del color vendido. Hay *Deshacer* y *Anular* (la pieza vuelve a su color). |
+| Registrar una venta | **Vender**: igual que Producción (+, contador y filas por color); el **+** se bloquea al llegar a lo que hay de ese color. Forma de pago, *Registrar venta* → resta del inventario del color vendido. Hay *Deshacer* y *Anular* (la pieza vuelve a su color). Opcional: elige el **pedido que atiendes** para asociarla y cerrarlo (ver abajo). |
 | Ver o corregir el stock por color | **Inventario**: cada artículo con colores muestra su desglose («● Rojo 3 · ● Azul 0»). *Corregir el conteo* pide elegir el color. Ver [docs/inventario-por-color.md](docs/inventario-por-color.md). |
+| Atender un pedido y cerrarlo con la venta | En **Pedidos**, *Atender con una venta* abre **Vender** con los artículos, colores y cantidades del pedido ya cargados (limitados al stock; lo que no se pueda cargar se avisa) y el cliente puesto. Al *Registrar venta* el pedido queda **Cerrado** (casilla «Cerrar el pedido al registrar la venta»; desmárcala para una entrega parcial). En Vender también puedes elegir el pedido a mano, o dejar la venta suelta. La tarjeta del pedido muestra lo **vendido**. Ver [docs/carrito-de-pedidos.md](docs/carrito-de-pedidos.md#atender-un-pedido-con-una-venta). |
 | Corregir un conteo | **Inventario → artículo → Corregir el conteo** (queda en el historial de movimientos). |
 | Dar acceso a otra persona o cambiar contraseñas | **Administración → Cuenta y usuarios**: crear usuarios, restablecer la contraseña de otro (cierra sus sesiones), desactivar/activar, y *Mi cuenta* para cambiar la tuya. Sin roles por ahora. |
 | Conectar la impresora y mi cuenta de Bambu Lab | **Administración → Conexión**: IP, número de serie y código de acceso de la impresora, y vincular la cuenta de Bambu (correo, contraseña y código de verificación). Ver [Impresora 3D](#impresora-3d-bambu-lab-a1). |
 | Ver o controlar la impresora | **Administración → Impresora**: estado, temperaturas, filamento (AMS), pausar/reanudar/cancelar, luz, velocidad y ventiladores. |
-| Ver lo que pidieron los clientes | **Pedidos**: un pedido puede traer **varios artículos y colores** (el cliente usa el mini carrito del catálogo); se ven todos los renglones, las piezas y un total estimado a precios de hoy. Botón directo a WhatsApp y estados. No descuenta inventario. Ver [docs/carrito-de-pedidos.md](docs/carrito-de-pedidos.md). |
+| Ver lo que pidieron los clientes | **Pedidos**: un pedido puede traer **varios artículos y colores** (el cliente usa el mini carrito del catálogo); se ven todos los renglones, las piezas y un total estimado a precios de hoy. Botón directo a WhatsApp, estados y **Atender con una venta**. No descuenta inventario por sí solo. Ver [docs/carrito-de-pedidos.md](docs/carrito-de-pedidos.md). |
 
 ## Modelo en una línea
 
@@ -54,7 +55,7 @@ Cada movimiento lleva además su **color** (`color_id`): el stock de un artícul
 ## Pruebas
 
 ```bash
-make test    # unas 300 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
+make test    # unas 310 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
 make e2e     # recorrido completo con navegador real (Playwright) contra el stack de desarrollo; capturas en e2e/out
 make typecheck
 make desbordes  # detector: recorre sitio público y panel a 9 anchos (1800–320 px) y falla si algún texto se sale de su tarjeta
