@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Icono } from "@/components/ui/Icono";
@@ -38,7 +39,7 @@ export default function Pedidos() {
     <>
       <div className="pagina-cab">
         <h1>Pedidos</h1>
-        <p className="lead">Solicitudes del catálogo. No descuentan inventario: cuando concretes la venta, regístrala en Vender.</p>
+        <p className="lead">Solicitudes del catálogo. No descuentan inventario: cuando concretes la venta, atiéndela desde aquí o en Vender, y el pedido se cierra con ella.</p>
       </div>
       <div className="filtros" role="group" aria-label="Filtrar pedidos" style={{ marginBottom: "var(--space-md)" }}>
         <button type="button" className="etiqueta" style={{ minHeight: 40, padding: "0 var(--space-md)", background: filtro === "abiertos" ? "var(--color-ink)" : undefined, color: filtro === "abiertos" ? "var(--color-paper)" : undefined }} aria-pressed={filtro === "abiertos"} onClick={() => setFiltro("abiertos")}>Por atender</button>
@@ -71,7 +72,16 @@ export default function Pedidos() {
                   </li>
                 ))}
               </ul>
+              {p.ventas.length > 0 && (
+                <p className="muted pedido__ventas">
+                  {p.total_vendido > 0 ? <>Vendido: <strong className="num sin-corte">{dinero(p.total_vendido)}</strong></> : "Sin ventas vigentes"}
+                  {p.ventas.some((v) => v.anulada) && ` · ${p.ventas.filter((v) => v.anulada).length === 1 ? "1 venta anulada" : `${p.ventas.filter((v) => v.anulada).length} ventas anuladas`}`}
+                </p>
+              )}
               <div className="pedido__acciones">
+                {(p.estado === "nuevo" || p.estado === "contactado") && (
+                  <Link className="btn btn--primary btn--small" href={`/panel/vender?pedido=${p.id}`}>Atender con una venta</Link>
+                )}
                 <a className="btn btn--accent btn--small" target="_blank" rel="noopener noreferrer" href={enlaceWhatsapp(p.whatsapp, `Hola ${p.nombre}, te escribimos por tu pedido: ${p.items.map((i) => `${i.cantidad} × ${i.articulo}${i.color ? ` (${i.color})` : ""}`).join(", ")}.`)} onClick={() => p.estado === "nuevo" && void cambiar(p, "contactado")}>
                   <Icono nombre="whatsapp" tamano={18} /> Escribir por WhatsApp
                 </a>

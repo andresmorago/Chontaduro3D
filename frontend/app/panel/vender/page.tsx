@@ -1,22 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Contador } from "@/components/ui/Contador";
-import { Entrada } from "@/components/ui/Campo";
+import { Entrada, Seleccion } from "@/components/ui/Campo";
 import { Segmentado } from "@/components/ui/Segmentado";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
 import { clave, hexColor, nombreColor, partirClave, stockDe } from "@/lib/lineas";
 import { dinero, hora } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
+import { lineasDePedido, type LineaVenta as Linea } from "@/lib/pedidoAVenta";
 import type { Articulo, MetodoPago, Venta } from "@/lib/types";
-
-interface Linea {
-  cantidad: number;
-  precio: number | null; // null = precio de la lista
-}
 
 const METODOS = [
   { valor: "efectivo", etiqueta: "Efectivo" },
@@ -28,6 +24,11 @@ export default function Vender() {
   const { mostrar } = useAvisos();
   const articulos = useCargar(() => api.articulos.listar());
   const ventas = useCargar(api.ventas.deHoy);
+  const pedidos = useCargar(() => api.pedidos.listar());
+  // Pedido que esta venta atiende (opcional). Llega por ?pedido= desde Pedidos → «Atender».
+  const [pedidoId, setPedidoId] = useState("");
+  const [cerrarPedido, setCerrarPedido] = useState(true);
+  const [pedidoUrl, setPedidoUrl] = useState<string | null>(null);
   const [lineas, setLineas] = useState<Record<string, Linea>>({});
   const [metodo, setMetodo] = useState<MetodoPago>("efectivo");
   const [cliente, setCliente] = useState("");
@@ -36,6 +37,8 @@ export default function Vender() {
 
   const lista = articulos.datos ?? [];
   const porId = new Map(lista.map((a) => [a.id, a]));
+  const abiertos = (pedidos.datos ?? []).filter((p) => p.estado === "nuevo" || p.estado === "contactado");
+  const pedido = abiertos.find((p) => p.id === pedidoId) ?? null;
   // Cada línea es un (artículo, color): la clave las distingue (ver lib/lineas.ts).
   const items = Object.entries(lineas).filter(([k, l]) => l.cantidad > 0 && porId.has(partirClave(k).articuloId));
   const precioDe = (a: Articulo, l: Linea) => l.precio ?? a.precio_venta;
@@ -63,6 +66,36 @@ export default function Vender() {
     poner(k, nuevo);
   }
 
+  /** Carga en la venta lo que pidió el cliente (con el color y lo que alcance del stock). */
+  function cargarPedido(p: (typeof abiertos)[number]) {
+    const { lineas: nuevas, avisos } = lineasDePedido(p, porId);
+    setLineas(nuevas);
+    if (!cliente.trim()) setCliente(p.nombre);
+    if (avisos.length > 0) mostrar(avisos.join(" "), { tipo: "error", ms: 9000 });
+  }
+
+  function elegirPedido(id: string) {
+    setPedidoId(id);
+    const p = abiertos.find((x) => x.id === id);
+    // Con la venta vacía se carga solo; si ya había líneas no se pisan (hay un botón para cargarlo).
+    if (p && items.length === 0) cargarPedido(p);
+  }
+
+  // Llegada desde Pedidos → «Atender»: ?pedido=<id>. Se espera a tener artículos y pedidos cargados.
+  useEffect(() => {
+    setPedidoUrl(new URLSearchParams(window.location.search).get("pedido"));
+  }, []);
+  useEffect(() => {
+    if (!pedidoUrl || articulos.cargando || pedidos.cargando) return;
+    const p = abiertos.find((x) => x.id === pedidoUrl);
+    setPedidoUrl(null);
+    window.history.replaceState(null, "", "/panel/vender");
+    if (!p) return mostrar("Ese pedido ya no está por atender.", { tipo: "error" });
+    setPedidoId(p.id);
+    cargarPedido(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoUrl, articulos.cargando, pedidos.cargando]);
+
   async function deshacer(id: string) {
     try {
       await api.ventas.anular(id);
@@ -80,18 +113,22 @@ export default function Vender() {
       const v = await api.ventas.registrar({
         metodo_pago: metodo,
         cliente: cliente.trim() || undefined,
+        ...(pedido ? { pedido_id: pedido.id, cerrar_pedido: cerrarPedido } : {}),
         items: items.map(([k, l]) => {
           const { articuloId, colorId } = partirClave(k);
           return { articulo_id: articuloId, ...(colorId ? { color_id: colorId } : {}), cantidad: l.cantidad, ...(l.precio !== null ? { precio_unitario: l.precio } : {}) };
         }),
       });
+      const cerrado = Boolean(pedido && cerrarPedido);
       setLineas({});
       setCliente("");
-      mostrar(`Venta registrada · ${dinero(v.total)}`, { accion: { etiqueta: "Deshacer", alPulsar: () => deshacer(v.id) } });
-      await Promise.all([articulos.recargar(), ventas.recargar()]);
+      setPedidoId("");
+      mostrar(`Venta registrada${cerrado ? " y pedido cerrado" : ""} · ${dinero(v.total)}`, { accion: { etiqueta: "Deshacer", alPulsar: () => deshacer(v.id) } });
+      await Promise.all([articulos.recargar(), ventas.recargar(), pedidos.recargar()]);
     } catch (e) {
       mostrar(mensajeDe(e), { tipo: "error" });
       void articulos.recargar(); // el stock pudo cambiar: se muestra el real
+      void pedidos.recargar(); // y el pedido pudo cerrarse o descartarse mientras tanto
     } finally {
       setEnviando(false);
     }
@@ -168,6 +205,25 @@ export default function Vender() {
               <span className="muted">{piezas === 1 ? "1 pieza" : `${piezas} piezas`}</span>
               <strong>{dinero(total)}</strong>
             </div>
+            {abiertos.length > 0 && (
+              <div className="ticket__pedido">
+                <Seleccion etiqueta="Pedido que atiendes (opcional)" value={pedidoId} onChange={(e) => elegirPedido(e.target.value)}>
+                  <option value="">Ninguno: venta suelta</option>
+                  {abiertos.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre} · {dinero(p.total_estimado)}</option>
+                  ))}
+                </Seleccion>
+                {pedido && (
+                  <>
+                    <label className="ticket__cerrar">
+                      <input type="checkbox" checked={cerrarPedido} onChange={(e) => setCerrarPedido(e.target.checked)} />
+                      <span>Cerrar el pedido al registrar la venta</span>
+                    </label>
+                    <Boton variante="secondary" pequeno onClick={() => cargarPedido(pedido)}>Cargar los artículos del pedido</Boton>
+                  </>
+                )}
+              </div>
+            )}
             <Segmentado etiqueta="Forma de pago" valor={metodo} opciones={[...METODOS]} onCambio={setMetodo} />
             <Entrada etiqueta="Cliente (opcional)" value={cliente} maxLength={120} onChange={(e) => setCliente(e.target.value)} autoComplete="off" />
             <Boton variante="accent" bloque cargando={enviando} disabled={items.length === 0} onClick={registrar}>
@@ -200,7 +256,7 @@ export default function Vender() {
                     {v.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}
                   </span>
                   <span className="fila__meta">
-                    {hora(v.creado_en)} · {v.metodo_pago}{v.cliente ? ` · ${v.cliente}` : ""}{v.anulada ? " · anulada" : ""}
+                    {hora(v.creado_en)} · {v.metodo_pago}{v.cliente ? ` · ${v.cliente}` : ""}{v.pedido_nombre ? ` · pedido de ${v.pedido_nombre}` : ""}{v.anulada ? " · anulada" : ""}
                   </span>
                 </span>
                 <span className="fila__fin">

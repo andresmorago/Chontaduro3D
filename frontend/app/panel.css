@@ -312,3 +312,10 @@ button.fila:hover { background: var(--color-paper-2); }
 .pedido__precio, .sin-corte { white-space: nowrap; overflow-wrap: normal; }
 .pedido__precio { text-align: right; }
 .pedido__items li:last-child { border-bottom: 0; }
+
+/* Venta ↔ pedido: selector del pedido que se atiende y resumen de lo vendido en la tarjeta del pedido. */
+.ticket__pedido { display: grid; gap: var(--space-sm); }
+.ticket__cerrar { display: flex; align-items: flex-start; gap: var(--space-xs); min-width: 0; }
+.ticket__cerrar input { margin-top: 0.2em; flex: none; }
+.ticket__cerrar span { min-width: 0; }
+.pedido__ventas { margin: 0; }

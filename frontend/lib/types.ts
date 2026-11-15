@@ -147,6 +147,9 @@ export interface VentaEntrada {
   metodo_pago: MetodoPago;
   nota?: string;
   items: VentaItemEntrada[];
+  /** Asocia la venta a un pedido; con `cerrar_pedido` el pedido pasa a «cerrado». */
+  pedido_id?: string;
+  cerrar_pedido?: boolean;
 }
 
 export interface VentaItem {
@@ -170,6 +173,9 @@ export interface Venta {
   anulada: boolean;
   creado_en: string;
   items: VentaItem[];
+  /** Pedido del catálogo que esta venta atendió (opcional). */
+  pedido_id: string | null;
+  pedido_nombre: string | null;
 }
 
 export interface Movimiento {
@@ -195,6 +201,14 @@ export interface PedidoItem {
   subtotal: number;
 }
 
+/** Una venta que atendió un pedido. */
+export interface PedidoVenta {
+  id: string;
+  fecha: string;
+  total: number;
+  anulada: boolean;
+}
+
 export interface Pedido {
   id: string;
   nombre: string;
@@ -204,6 +218,9 @@ export interface Pedido {
   total_estimado: number;
   estado: EstadoPedido;
   creado_en: string;
+  ventas: PedidoVenta[];
+  /** Lo vendido a este pedido, sin contar las ventas anuladas. */
+  total_vendido: number;
 }
 
 /** Un color en el catálogo público: solo «hay / no hay», nunca la cifra. */
