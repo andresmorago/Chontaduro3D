@@ -25,7 +25,7 @@ class ErrorNube(Exception):
 
 
 class RequiereLogin(ErrorNube):
-    """No hay token, o ya no sirve y no se pudo renovar: hay que volver a vincular la cuenta en el panel."""
+    """No hay token, o ya no sirve y no se pudo renovar: hay que vincular la cuenta otra vez."""
 
 
 # ------------------------------------------------------------------------------- token

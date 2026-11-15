@@ -346,11 +346,14 @@ async def test_importa_una_vez_el_env_y_el_archivo_viejo(db, real, monkeypatch, 
     f = await ajustes.obtener(db)
     assert f.ip == "10.0.4.244" and ajustes.conexion_de(f).codigo == "12345678"
     assert ajustes.sesion_de(f).access_token.startswith("tok-")
-    assert not archivo.exists()  # ya vive en la base
+    assert archivo.exists()  # no se borra: puede ser de otro servicio
     assert real.creados and s._solicitud_nueva  # conectó y pidió sincronizar
 
     # lo guardado en el panel manda sobre el .env, y desvincular no revive el archivo
     f.nube_sesion = None
+    from app.core.tokens import ahora
+
+    f.nube_solicitada_en = ahora()  # lo que hace el panel al desvincular
     f.ip = "192.168.1.9"
     f.version += 1
     await db.commit()

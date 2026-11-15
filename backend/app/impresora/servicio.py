@@ -73,7 +73,12 @@ class Servicio:
     async def _importar_heredado(self, db, fila):
         """Una sola vez al arrancar: si la base aún no tiene configuración, la toma de lo que se
         usaba antes (BAMBU_* del .env y el token de data/nube/bambu.json) y lo deja guardado
-        (cifrado) en la base. Desde entonces el .env y el archivo ya no hacen falta."""
+        (cifrado) en la base. Desde entonces el .env y el archivo ya no hacen falta.
+
+        NO borra ni modifica nada fuera de la base: el archivo puede ser compartido con otro
+        servicio (p. ej. el de producción con código anterior). Para que no reaparezca tras
+        desvincular, el token solo se importa si la cuenta nunca se vinculó ni desvinculó
+        (`nube_solicitada_en` vacío)."""
         env_completo = settings.bambu_ip and settings.bambu_serial and settings.bambu_access_code
         if env_completo and (fila is None or not (fila.ip and fila.serial and fila.codigo_acceso)):
             try:
@@ -89,14 +94,13 @@ class Servicio:
                 fila.version += 1
                 log.info("Configuración de la impresora importada del .env a la base.")
         archivo = Path(settings.bambu_nube_archivo)
-        if (fila is None or not fila.nube_sesion) and archivo.is_file():
+        nunca_vinculada = fila is None or (not fila.nube_sesion and fila.nube_solicitada_en is None)
+        if nunca_vinculada and archivo.is_file():
             sesion = nube.AlmacenToken(archivo).cargar()
             if sesion is not None:
                 fila = fila or await ajustes.obtener_o_crear(db)
                 ajustes.poner_sesion(fila, sesion)
                 fila.nube_solicitada_en = _ahora()
-                with contextlib.suppress(OSError):
-                    archivo.unlink()  # ya vive en la base: que no reaparezca al desvincular
                 log.info("Token de Bambu Cloud importado de %s a la base.", archivo)
         return fila
 

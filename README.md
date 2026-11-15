@@ -113,7 +113,7 @@ Cómo se protege (detalle en [docs/conexion-impresora.md](docs/conexion-impresor
 - La IP debe ser de red local o VPN (se rechaza internet, loopback y link-local) y el número de serie solo admite letras y números.
 - Si cambias `SECRET_KEY`, lo guardado deja de poder leerse y el panel pide escribirlo otra vez.
 
-**Si ya usabas `.env`:** al arrancar, el servicio importa **una vez** `BAMBU_IP`, `BAMBU_SERIAL` y `BAMBU_ACCESS_CODE` (y el token viejo de `data/nube/bambu.json`, que borra al importarlo) a la base. Después puedes quitarlos del `.env`. `make bambu-login` ya no existe.
+**Si ya usabas `.env`:** al arrancar, el servicio importa **una vez** `BAMBU_IP`, `BAMBU_SERIAL` y `BAMBU_ACCESS_CODE` (y el token viejo de `data/nube/bambu.json`, que no se borra: puedes eliminarlo cuando quieras) a la base. Después puedes quitarlos del `.env`. `make bambu-login` ya no existe.
 
 En desarrollo: `make impresora-up` (perfil `impresora`) y `make impresora-logs`. En producción corre con el stack: `make prod-impresora-logs`. `make bambu-nube-prueba` muestra la forma de los datos de la nube (sin secretos), útil si Bambu cambia su API.
 

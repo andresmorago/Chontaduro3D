@@ -38,7 +38,7 @@ Se configura en **Administración → Conexión**. Esta nota explica cómo funci
 ## Migración desde el `.env`
 
 Al arrancar, si la base no tiene configuración, el servicio importa una vez `BAMBU_IP`, `BAMBU_SERIAL` y
-`BAMBU_ACCESS_CODE` y el token de `data/nube/bambu.json` (lo borra tras importarlo). Después el `.env` ya no se usa
+`BAMBU_ACCESS_CODE` y el token de `data/nube/bambu.json` (solo si la cuenta nunca se vinculó desde el panel; no borra el archivo). Después el `.env` ya no se usa
 para eso y esas variables se pueden quitar.
 
 ## Pruebas

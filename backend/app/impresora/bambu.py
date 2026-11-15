@@ -31,6 +31,7 @@ LIMITES = {
     "ventilador_aux": (0, 100, "%"),
 }
 BOQUILLA_MIN = 150
+SIN_RESPUESTA_S = 10  # tras esto sin conectar, se informa «red» aunque el sistema siga esperando
 NOMBRES_NUMERICOS = {
     "temp_boquilla": "La temperatura de la boquilla",
     "temp_cama": "La temperatura de la cama",
@@ -190,6 +191,7 @@ class ClienteBambu:
         self._ultimo: datetime | None = None
         self._conectada = False
         self._error: str | None = None
+        self._iniciada: datetime | None = None
         # Cliente único por proceso: dos con el mismo id se expulsan entre sí.
         self._c = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, client_id=f"misimpresiones-{uuid.uuid4().hex[:8]}"
@@ -206,6 +208,7 @@ class ClienteBambu:
 
     # --- ciclo de vida ---
     def iniciar(self) -> None:
+        self._iniciada = datetime.now(UTC)
         self._c.connect_async(self._ip, 8883, keepalive=30)
         self._c.loop_start()
 
@@ -268,7 +271,15 @@ class ClienteBambu:
     def error_conexion(self) -> str | None:
         """«credenciales» (código de acceso rechazado), «red» (no se alcanza) o None."""
         with self._lock:
-            return None if self._conectada else self._error
+            if self._conectada:
+                return None
+            # Sin respuesta ni rechazo tras unos segundos: el sistema tarda minutos en dar por
+            # perdida una IP a la que no llega nada, pero para la persona ya es «no se alcanza».
+            sin_respuesta = (
+                self._iniciada is not None
+                and (datetime.now(UTC) - self._iniciada).total_seconds() > SIN_RESPUESTA_S
+            )
+            return self._error or ("red" if sin_respuesta else None)
 
     @property
     def conectada(self) -> bool:

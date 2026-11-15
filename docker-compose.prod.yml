@@ -89,7 +89,7 @@ services:
       BAMBU_ACCESS_CODE: ${BAMBU_ACCESS_CODE:-}
       BAMBU_NUBE_DIAS: ${BAMBU_NUBE_DIAS:-7}
     volumes:
-      # Solo para importar una vez el token viejo de `make bambu-login` (ya retirado), si existe.
+      # Solo lectura de una vez: importa el token viejo de `make bambu-login` (ya retirado), si existe.
       - ./data/nube:/nube
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
     depends_on:
