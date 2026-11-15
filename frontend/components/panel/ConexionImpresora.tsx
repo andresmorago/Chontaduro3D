@@ -59,7 +59,7 @@ export function ConexionImpresora({ conexion, recargar }: Props) {
       setEsperando(true);
       // El servicio reconecta con lo nuevo en unos segundos: se espera su resultado.
       let c = await api.impresora.conexion.ver();
-      for (let i = 0; i < 20 && montado.current && !(c.servicio_activo && !c.pendiente && (c.conectada || c.error)); i++) {
+      for (let i = 0; i < 20 && montado.current && !((c.servicio_activo && !c.pendiente && (c.conectada || c.error)) || (!c.servicio_activo && i >= 2)); i++) {
         await pausa(1000);
         c = await api.impresora.conexion.ver();
       }
