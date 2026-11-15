@@ -5,8 +5,9 @@ Plataforma para un emprendimiento de impresión 3D: **artículos maestros**, **p
 y dejan un **pedido** (que no toca el inventario).
 
 - Backend: Python 3.13 · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL 17
-- Frontend: TypeScript · Next.js 15 (App Router) · diseño Hallmark, tema Terrazzo
+- Frontend: TypeScript · Next.js 15 (App Router) · diseño Hallmark, tema Squeeze (ver [design.md](design.md))
 - Estructura de despliegue replicada de `misturnos` (Docker Compose, migraciones al arrancar con respaldo previo, túnel de Cloudflare)
+- Impresora Bambu Lab A1 integrada (estado, trabajos y controles), configurada desde el propio panel: sin `.env` ni scripts
 
 ## Arrancar en desarrollo
 
@@ -30,7 +31,9 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | Registrar una venta | **Vender**: igual que Producción (+, contador y filas por color); el **+** se bloquea al llegar a lo que hay de ese color. Forma de pago, *Registrar venta* → resta del inventario del color vendido. Hay *Deshacer* y *Anular* (la pieza vuelve a su color). |
 | Ver o corregir el stock por color | **Inventario**: cada artículo con colores muestra su desglose («● Rojo 3 · ● Azul 0»). *Corregir el conteo* pide elegir el color. Ver [docs/inventario-por-color.md](docs/inventario-por-color.md). |
 | Corregir un conteo | **Inventario → artículo → Corregir el conteo** (queda en el historial de movimientos). |
-| Dar acceso a otra persona o cambiar contraseñas | **Administración**: crear usuarios, restablecer la contraseña de otro (cierra sus sesiones), desactivar/activar, y *Mi cuenta* para cambiar la tuya. Sin roles por ahora. |
+| Dar acceso a otra persona o cambiar contraseñas | **Administración → Cuenta y usuarios**: crear usuarios, restablecer la contraseña de otro (cierra sus sesiones), desactivar/activar, y *Mi cuenta* para cambiar la tuya. Sin roles por ahora. |
+| Conectar la impresora y mi cuenta de Bambu Lab | **Administración → Conexión**: IP, número de serie y código de acceso de la impresora, y vincular la cuenta de Bambu (correo, contraseña y código de verificación). Ver [Impresora 3D](#impresora-3d-bambu-lab-a1). |
+| Ver o controlar la impresora | **Administración → Impresora**: estado, temperaturas, filamento (AMS), pausar/reanudar/cancelar, luz, velocidad y ventiladores. |
 | Ver lo que pidieron los clientes | **Pedidos**: un pedido puede traer **varios artículos y colores** (el cliente usa el mini carrito del catálogo); se ven todos los renglones, las piezas y un total estimado a precios de hoy. Botón directo a WhatsApp y estados. No descuenta inventario. Ver [docs/carrito-de-pedidos.md](docs/carrito-de-pedidos.md). |
 
 ## Modelo en una línea
@@ -51,7 +54,7 @@ Cada movimiento lleva además su **color** (`color_id`): el stock de un artícul
 ## Pruebas
 
 ```bash
-make test    # unas 270 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
+make test    # unas 300 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
 make e2e     # recorrido completo con navegador real (Playwright) contra el stack de desarrollo; capturas en e2e/out
 make typecheck
 make desbordes  # detector: recorre sitio público y panel a 9 anchos (1800–320 px) y falla si algún texto se sale de su tarjeta
@@ -93,23 +96,51 @@ Un servicio aparte (`impresora`) se conecta a la A1 por la red local (MQTT en el
 
 1. **Estado**: lo guarda en la base para la página *Administración → Impresora* (progreso, temperaturas, AMS, luz, velocidad).
 2. **Trabajos**: detecta cada trabajo (empieza, termina, se cancela) y lee del `.3mf` los gramos por filamento y el tiempo estimado. Aparecen en *Producción → Trabajos de la impresora*: se **importan** como producción (traen fecha, tiempo y gramos; si el trabajo trae los gramos de cada filamento, el lote se abre en **«Por filamento»** con cada uno rotulado por su color, p. ej. «PLA Rojo 24,5 g»; las piezas y su color los eliges tú) o se **ignoran**. Un trabajo no se puede importar dos veces.
-3. **Controles**: pausar, reanudar, cancelar, luz y velocidad. El backend deja la orden en una tabla y el servicio la envía; una orden de más de 30 s no se ejecuta.
+3. **Controles**: pausar, reanudar, cancelar, luz, velocidad, temperaturas y ventiladores. El backend deja la orden en una tabla y el servicio la envía; una orden de más de 30 s no se ejecuta.
 
-Configuración (solo en `.env`, nunca versionada): `BAMBU_IP`, `BAMBU_SERIAL`, `BAMBU_ACCESS_CODE` (ver `.env.example`). Solo el servicio `impresora` las recibe; el backend web no.
-En desarrollo: `make impresora-up` (perfil `impresora`) y `make impresora-logs`. En producción corre con el stack: `make prod-impresora-logs`.
+### Configuración desde el panel (Administración → Conexión)
 
-Limitaciones: la A1 no guarda historial de trabajos, así que solo se registran los que ocurren con el servicio encendido; los gramos son los **estimados del slicer** (en un trabajo cancelado sobrestiman); el tiempo es el *medido* (impresora ocupada) cuando se vio el inicio y, si no, el estimado del archivo. La conexión usa el certificado propio de la impresora, sin verificarlo: se asume una red local/VPN de confianza.
+No hace falta `.env` ni ningún script: todo se hace en la pestaña **Conexión**.
 
-### Historial de Bambu Cloud (trabajos previos)
+**Impresora.** Escribe la IP (Ajustes → WLAN en la pantalla de la impresora), el número de serie y el código de acceso, y pulsa *Guardar y conectar*. El servicio toma los datos de la base, reconecta solo y el panel te dice si quedó **Conectada**, si el **código de acceso fue rechazado** o si **no se alcanza la IP** (impresora apagada, IP errónea o VPN caída). Para cambiar solo la IP, deja el código vacío: se conserva el guardado.
 
-La A1 no guarda historial; el que ves en Bambu Studio y Bambu Handy está en la nube de Bambu. Para traerlo a *Producción → Trabajos de la impresora*:
+**Cuenta de Bambu Lab** (historial de Studio y Handy): *Vincular cuenta* con tu correo y contraseña; si Bambu pide verificación, escribes el código que llega al correo (o el de tu app 2FA). Si Bambu bloquea el inicio de sesión desde el servidor, *Pegar el token* (cookie `token` de bambulab.com). Después puedes **Sincronizar ahora** o **Desvincular**.
 
-1. Corre `make bambu-login` en tu terminal (correo, contraseña y el código que Bambu envía a tu correo; si el inicio de sesión falla o se bloquea, `make bambu-login ARGS=--pegar` para pegar el token copiado del navegador). Guarda **solo el token** en `data/nube/bambu.json` (modo 600, fuera de git); la contraseña no se guarda. El servicio lo renueva solo; si vence del todo, la página *Administración → Impresora* lo avisa.
-2. El servicio `impresora` consulta la nube al arrancar y cada 10 minutos y trae los últimos `BAMBU_NUBE_DIAS` (7 por defecto). Cada trabajo se une con el detectado en vivo (mismo identificador, o mismo nombre y hora), así que no se duplica, y suma el **tiempo medido** que informa la nube. Lo que ya importaste o ignoraste no se revierte.
-3. `make bambu-nube-prueba` muestra la forma de los datos de la nube (sin secretos), útil si Bambu cambia su API.
+Cómo se protege (detalle en [docs/conexion-impresora.md](docs/conexion-impresora.md)):
 
-Es una API **no oficial**: puede cambiar o bloquearse sin aviso. Si falla, el resto de la app sigue igual y los trabajos en vivo siguen llegando.
+- El código de acceso y el token se guardan **cifrados** en la base (Fernet, clave derivada de `SECRET_KEY`); la API nunca los devuelve y los respaldos no los llevan en claro.
+- La contraseña de Bambu solo pasa hacia Bambu para entrar: **no se guarda** ni se registra; se conserva únicamente el token, que el servicio renueva solo.
+- La IP debe ser de red local o VPN (se rechaza internet, loopback y link-local) y el número de serie solo admite letras y números.
+- Si cambias `SECRET_KEY`, lo guardado deja de poder leerse y el panel pide escribirlo otra vez.
+
+**Si ya usabas `.env`:** al arrancar, el servicio importa **una vez** `BAMBU_IP`, `BAMBU_SERIAL` y `BAMBU_ACCESS_CODE` (y el token viejo de `data/nube/bambu.json`, que borra al importarlo) a la base. Después puedes quitarlos del `.env`. `make bambu-login` ya no existe.
+
+En desarrollo: `make impresora-up` (perfil `impresora`) y `make impresora-logs`. En producción corre con el stack: `make prod-impresora-logs`. `make bambu-nube-prueba` muestra la forma de los datos de la nube (sin secretos), útil si Bambu cambia su API.
+
+Limitaciones: la A1 no guarda historial de trabajos, así que solo se registran los que ocurren con el servicio encendido (o los que trae Bambu Cloud); los gramos son los **estimados del slicer** (en un trabajo cancelado sobrestiman); el tiempo es el *medido* (impresora ocupada, o el que informa la nube) y, si no, el estimado del archivo. La conexión usa el certificado propio de la impresora, sin verificarlo: se asume una red local/VPN de confianza.
+
+### Historial de Bambu Cloud
+
+La A1 no guarda historial; el que ves en Bambu Studio y Bambu Handy está en la nube de Bambu. Con la cuenta vinculada, el servicio consulta la nube al arrancar, cada 10 minutos y cuando pulsas *Sincronizar ahora*, y trae los últimos `BAMBU_NUBE_DIAS` (7 por defecto, único ajuste que sigue en `.env`). Cada trabajo se une con el detectado en vivo (mismo identificador, o mismo nombre y hora), así que no se duplica, y suma el **tiempo medido** que informa la nube. Lo que ya importaste o ignoraste no se revierte.
+
+Es una API **no oficial**: puede cambiar o bloquearse sin aviso. Si falla, el resto de la app sigue igual y los trabajos en vivo siguen llegando; la pestaña Conexión muestra el motivo.
 
 ## Un solo stack en marcha
 
 Normalmente solo corre **producción** (`misimpresiones-prod`: `make prod-up-tunnel`). El stack de **desarrollo** (`misimpresiones`: `make up`) y el de pruebas (`make test`, `make e2e`) se levantan solo mientras se trabaja, y se apagan con `make down` (conserva los datos de `data/postgres`). `make e2e` y `make iphone` necesitan el de desarrollo encendido.
+
+## Estructura del repositorio
+
+| Ruta | Qué hay |
+| --- | --- |
+| `backend/` | API FastAPI (`app/api`), modelos y migraciones, servicio de la impresora (`app/impresora`) y pruebas (`tests/`) |
+| `frontend/` | Next.js: catálogo público, panel (`app/panel/*`) y componentes |
+| `cloudflare/` | Worker de workers.dev y `urlsync` (mantiene el Worker apuntando al túnel) |
+| `e2e/` | Pruebas con navegador real (Playwright): recorrido, desbordes e iPhone |
+| `docs/` | [Túnel de Cloudflare](docs/tunel-cloudflare.md), [inventario por color](docs/inventario-por-color.md), [carrito de pedidos](docs/carrito-de-pedidos.md), [conexión de la impresora](docs/conexion-impresora.md) |
+| `data/` | Datos locales (ignorado por git): bases, imágenes y respaldos |
+| `design.md` | Sistema de diseño bloqueado (Squeeze) |
+
+## Variables de entorno (`.env`)
+
+`.env.example` documenta todas; las que más importan: `POSTGRES_*` y `DATABASE_URL`, `SECRET_KEY` (obligatoria en producción; también cifra la configuración de la impresora), `ADMIN_EMAIL`/`ADMIN_PASSWORD` (para `make admin`), `TURNSTILE_*`, `WHATSAPP_NEGOCIO`, `NOMBRE_NEGOCIO`, `PROXY_SHARED_SECRET`/`TRUST_PROXY` y las de Cloudflare (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `WORKER_NOMBRE`). La impresora **no** se configura aquí (ver arriba). El `.env` no se versiona.
