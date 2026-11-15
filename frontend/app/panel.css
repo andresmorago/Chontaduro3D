@@ -66,19 +66,49 @@ button.fila:hover { background: var(--color-paper-2); }
 .stock-num--cero { color: var(--color-error); }
 .buscador-panel { max-width: 28rem; }
 
-/* ---------- Selector de artículos (vender / producir) ---------- */
-.selector { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr)); gap: var(--space-xs); }
-.ficha { position: relative; display: grid; gap: var(--space-3xs); align-content: start; padding: var(--space-xs) var(--space-sm); text-align: left; background: var(--color-plate); border: var(--rule-bar) solid var(--color-ink); min-height: 76px; transition: box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
-.ficha:hover:not(:disabled) { box-shadow: var(--shadow-lift); }
-.ficha:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
-.ficha:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
-.ficha:disabled { background: var(--color-paper-3); color: var(--color-muted); cursor: not-allowed; }
-.ficha[data-en-ticket="true"] { background: var(--color-accent-soft); }
-.ficha__codigo { font-size: var(--text-xs); color: var(--color-accent); }
-.ficha[data-en-ticket="true"] .ficha__codigo { color: var(--color-ink-2); } /* acento sobre acento-suave no llega a 4.5:1 */
-.ficha__nombre { font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
-.ficha__meta { font-size: var(--text-xs); color: var(--color-muted); }
-.ficha__cant { display: none; position: absolute; top: -2px; right: -2px; min-width: 32px; padding: 2px var(--space-xs); text-align: center; background: var(--color-ink); color: var(--color-paper); font: 500 var(--text-sm)/1.4 var(--font-outlier); }
+/* ---------- Selector de artículos (vender / producir): filas de una tabla ---------- */
+.selector { min-width: 0; background: var(--color-card); color: var(--color-card-ink); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: clip; }
+.tabla-art { width: 100%; border-collapse: collapse; }
+.tabla-art caption { text-align: left; }
+.tabla-art th, .tabla-art td { padding: var(--space-xs) var(--space-sm); text-align: left; vertical-align: middle; border-bottom: var(--rule-hair) solid var(--color-rule); font-weight: 400; }
+.tabla-art thead th { position: sticky; top: 0; z-index: 1; background: var(--color-card); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-card-muted); border-bottom: var(--rule-bar) solid var(--color-card-ink); }
+.tabla-art thead th.c-cod { color: var(--color-card-muted); font-size: var(--text-xs); }
+.tabla-art tbody tr { height: 3.75rem; } /* todas las filas miden lo mismo (el alto es un mínimo: un nombre de dos líneas cabe) */
+.tabla-art tbody tr.art-color { height: 3.25rem; }
+.tabla-art .c-num { text-align: right; white-space: nowrap; }
+.tabla-art .c-cod { width: 6rem; white-space: nowrap; font-size: var(--text-sm); color: var(--color-card-accent); }
+.tabla-art .c-stock { width: 5.5rem; }
+.tabla-art .c-precio { width: 6.5rem; }
+.tabla-art .c-cant { width: 9.5rem; }
+.tabla-art .c-nom { font-weight: 700; line-height: 1.2; overflow-wrap: break-word; min-width: 0; }
+.tabla-art .art-meta, .tabla-art .art-hint { display: none; }
+.tabla-art .art-hint { display: table-cell; font-size: var(--text-sm); font-weight: 400; color: var(--color-card-muted); }
+.tabla-art tbody tr[data-en-ticket="true"] { background: var(--color-tint-1); }
+.tabla-art tbody tr[data-sin-stock="true"] { color: var(--color-card-muted); }
+.tabla-art tr.art-cab th, .tabla-art tr.art-cab td { border-bottom: 0; padding-bottom: 0; }
+.tabla-art tr.art-color .c-nom { padding-left: var(--space-lg); font-weight: 600; }
+.tabla-art tr.art-color td, .tabla-art tr.art-color th { padding-top: var(--space-2xs); padding-bottom: var(--space-2xs); }
+.tabla-art tr.art-fila:not([data-sin-stock="true"]) { cursor: pointer; }
+@media (hover: hover) { .tabla-art tr.art-fila:not([data-sin-stock="true"]):hover { background: color-mix(in oklab, var(--color-tint-1) 55%, var(--color-card)); } }
+.art-muestra { display: inline-block; vertical-align: -3px; margin-right: var(--space-xs); flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--color-paper-3); box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--color-ink) 30%, transparent); }
+@media (pointer: fine) { .tabla-art .paso { grid-template-columns: 34px minmax(30px, auto) 34px; } .tabla-art .paso__btn { min-height: 34px; } }
+
+/* Móvil: cada fila pasa a dos líneas (nombre y datos a la izquierda, contador a la derecha). */
+@media (max-width: 47.9375rem) {
+  .tabla-art, .tabla-art tbody { display: block; }
+  .tabla-art thead { display: none; } /* las filas llevan sus propios datos (.art-meta) */
+  .tabla-art tbody tr, .tabla-art tbody tr.art-color { height: auto; }
+  .tabla-art tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .tabla-art th, .tabla-art td { display: block; padding: 0; border: 0; }
+  .tabla-art .c-cod, .tabla-art .c-stock, .tabla-art .c-precio, .tabla-art .art-hint { display: none; }
+  .tabla-art .c-nom { grid-column: 1; }
+  .tabla-art .c-cant { grid-column: 2; grid-row: 1 / span 2; width: auto; }
+  .tabla-art .art-meta { display: block; font-size: var(--text-xs); font-weight: 400; color: var(--color-card-muted); }
+  .tabla-art tr.art-color .c-nom { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: var(--space-xs); align-items: center; padding-left: var(--space-sm); }
+  .tabla-art tr.art-color .art-muestra { margin: 0; grid-row: 1 / span 2; }
+  .tabla-art tr.art-color .art-meta { grid-column: 2; }
+  .tabla-art tr.art-cab { border-bottom: 0; padding-bottom: 0; }
+}
 
 /* Selector + panel del ticket. Debajo de 75 rem se apilan (el ticket va después de las fichas, con la barra
    «Revisar» para saltar a él); desde 75 rem el ticket es una columna lateral fija que no se sale de la pantalla. */
@@ -274,24 +304,13 @@ button.fila:hover { background: var(--color-paper-2); }
 .control-fila__campo input[type="range"] { width: 100%; accent-color: var(--color-accent); min-height: 32px; }
 .control-fila__ahora { flex: 1 1 9rem; align-self: center; font-size: var(--text-sm); color: var(--color-muted); }
 
-/* Fichas con contador: «+» a la vista, contador al elegir y filas por color. */
-.ficha-caja { display: grid; gap: var(--space-2xs); align-content: start; min-width: 0; }
-.ficha-caja--colores { grid-column: span 2; }
-.ficha__mas { position: absolute; top: var(--space-xs); right: var(--space-xs); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--color-ink); color: var(--color-paper); font: 800 1.1rem/1 var(--font-display); }
-.ficha--colores { cursor: default; }
-.ficha__colores { list-style: none; margin: var(--space-xs) 0 0; padding: 0; display: grid; gap: var(--space-xs); }
-.ficha__color { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: var(--space-xs); padding-top: var(--space-xs); border-top: var(--rule-hair) solid var(--color-rule); }
-.ficha__muestra { width: 18px; height: 18px; border-radius: 50%; background: var(--color-paper-3); box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--color-ink) 30%, transparent); }
-.ficha__color-nombre { display: grid; min-width: 0; font-weight: 700; line-height: 1.15; }
-.ficha__color-stock { font-size: var(--text-xs); font-weight: 400; color: var(--color-muted); }
+/* Contador − n + (lo usa la tabla de artículos). */
 .paso { display: inline-grid; grid-template-columns: 40px minmax(32px, auto) 40px; align-items: stretch; border: var(--rule-bar) solid var(--color-ink); border-radius: var(--radius-pill); background: var(--color-plate); overflow: hidden; }
 .paso__btn { min-height: 40px; border: 0; background: transparent; color: inherit; font-size: var(--text-lg); line-height: 1; cursor: pointer; display: grid; place-items: center; }
 .paso__btn:hover:not(:disabled) { background: var(--color-paper-2); }
 .paso__btn:disabled { color: var(--color-muted); cursor: not-allowed; }
 .paso__btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; }
 .paso__n { display: grid; place-items: center; padding: 0 var(--space-2xs); font-weight: 700; }
-.ficha__paso { display: flex; justify-content: center; }
-.ficha__paso[data-vacio="true"] { display: none; } /* móvil: el contador aparece al elegir; en escritorio siempre se ve (panel-escritorio.css) */
 @media (pointer: coarse) { .paso { grid-template-columns: 44px minmax(36px, auto) 44px; } .paso__btn { min-height: 44px; } }
 
 /* Color de una línea de venta o de producción. */

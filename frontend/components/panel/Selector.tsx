@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { dinero } from "@/lib/format";
 import { clave, stockDe, tieneColores } from "@/lib/lineas";
 import type { Articulo } from "@/lib/types";
@@ -37,8 +37,10 @@ function Paso({ n, etiqueta, onMenos, onMas, masDeshabilitado }: { n: number; et
   );
 }
 
-/** Rejilla de fichas. Un artículo sin colores es una ficha: un toque suma una unidad y aparece su contador.
- *  Un artículo CON colores es una ficha con una fila por color, cada una con su propio contador (en escritorio todas las tarjetas miden lo mismo de ancho; ver panel-escritorio.css). */
+/** Los artículos como las filas de una tabla: todas miden lo mismo y las columnas se alinean (código, artículo,
+ *  stock, precio y cantidad). Un artículo con colores lleva su fila de cabecera y, debajo, una fila por color con su
+ *  propio contador. En un artículo sin colores, tocar la fila suma una unidad. En móvil cada fila pasa a dos líneas
+ *  (nombre y datos a la izquierda, contador a la derecha). Estilos en panel.css («.tabla-art»). */
 export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostrarPrecio, incluirSinColor }: Props) {
   const [q, setQ] = useState("");
   const visibles = useMemo(() => {
@@ -47,7 +49,7 @@ export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostra
   }, [articulos, q]);
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-md)" }}>
+    <div style={{ display: "grid", gap: "var(--space-md)", alignContent: "start" }}>
       {articulos.length > 8 && (
         <div className="buscador-panel">
           <label className="visually-hidden" htmlFor="filtro-articulos">
@@ -57,67 +59,79 @@ export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostra
         </div>
       )}
       <div className="selector">
-        {visibles.map((a) => {
-          if (tieneColores(a)) {
-            const filas = [
-              ...a.colores.map((c) => ({ id: c.id as string | null, nombre: c.nombre, hex: c.hex as string | null })),
-              ...(incluirSinColor && stockDe(a, null) > 0 ? [{ id: null, nombre: "Sin color asignado", hex: null }] : []),
-            ];
-            const total = filas.reduce((s, f) => s + (cantidades[clave(a.id, f.id)] ?? 0), 0);
-            return (
-              <div key={a.id} className="ficha-caja ficha-caja--colores">
-                <div className="ficha ficha--colores" data-en-ticket={total > 0} role="group" aria-label={`${a.nombre}, por color`}>
-                  <span className="code ficha__codigo">{a.codigo}</span>
-                  <span className="ficha__nombre">{a.nombre}</span>
-                  <span className="ficha__meta num">
-                    {mostrarPrecio ? `${dinero(a.precio_venta)} · ` : ""}
-                    {exigirStock ? `Stock ${a.stock}` : "Elige el color"}
-                  </span>
-                  <ul className="ficha__colores">
+        <table className="tabla-art">
+          <caption className="visually-hidden">Artículos{exigirStock ? " con su stock" : ""}</caption>
+          <thead>
+            <tr>
+              <th scope="col" className="c-cod">Código</th>
+              <th scope="col" className="c-nom">Artículo</th>
+              <th scope="col" className="c-num c-stock">Stock</th>
+              {mostrarPrecio && <th scope="col" className="c-num c-precio">Precio</th>}
+              <th scope="col" className="c-num c-cant">Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.map((a) => {
+              if (tieneColores(a)) {
+                const filas = [
+                  ...a.colores.map((c) => ({ id: c.id as string | null, nombre: c.nombre, hex: c.hex as string | null })),
+                  ...(incluirSinColor && stockDe(a, null) > 0 ? [{ id: null, nombre: "Sin color asignado", hex: null }] : []),
+                ];
+                return (
+                  <Fragment key={a.id}>
+                    <tr className="art-cab">
+                      <td className="c-cod code">{a.codigo}</td>
+                      <th scope="row" className="c-nom">
+                        {a.nombre}
+                        <span className="art-meta num">{`${a.codigo}${mostrarPrecio ? ` · ${dinero(a.precio_venta)}` : ""} · Stock ${a.stock} · elige el color`}</span>
+                      </th>
+                      <td className="c-num c-stock num">{a.stock}</td>
+                      {mostrarPrecio && <td className="c-num c-precio num">{dinero(a.precio_venta)}</td>}
+                      <td className="c-num c-cant art-hint">Elige el color</td>
+                    </tr>
                     {filas.map((f) => {
                       const n = cantidades[clave(a.id, f.id)] ?? 0;
                       const hay = stockDe(a, f.id);
                       return (
-                        <li key={f.id ?? "sin-color"} className="ficha__color">
-                          <span className="ficha__muestra" style={f.hex ? { background: f.hex } : undefined} aria-hidden="true" />
-                          <span className="ficha__color-nombre">
+                        <tr key={f.id ?? "sin-color"} className="art-color" data-en-ticket={n > 0} data-sin-stock={Boolean(exigirStock) && hay <= 0}>
+                          <td className="c-cod" />
+                          <th scope="row" className="c-nom">
+                            <span className="art-muestra" style={f.hex ? { background: f.hex } : undefined} aria-hidden="true" />
                             {f.nombre}
-                            <span className="ficha__color-stock num">{exigirStock ? (hay > 0 ? `${hay} en stock` : "Sin stock") : `Stock ${hay}`}</span>
-                          </span>
-                          <Paso n={n} etiqueta={`${a.nombre}, ${f.nombre}`} onMenos={() => onCambiar(a, f.id, -1)} onMas={() => onCambiar(a, f.id, 1)} masDeshabilitado={Boolean(exigirStock) && n >= hay} />
-                        </li>
+                            <span className="art-meta num">{exigirStock ? (hay > 0 ? `${hay} en stock` : "Sin stock") : `Stock ${hay}`}</span>
+                          </th>
+                          <td className="c-num c-stock num">{hay}</td>
+                          {mostrarPrecio && <td className="c-precio" />}
+                          <td className="c-num c-cant">
+                            <Paso n={n} etiqueta={`${a.nombre}, ${f.nombre}`} onMenos={() => onCambiar(a, f.id, -1)} onMas={() => onCambiar(a, f.id, 1)} masDeshabilitado={Boolean(exigirStock) && n >= hay} />
+                          </td>
+                        </tr>
                       );
                     })}
-                  </ul>
-                </div>
-              </div>
-            );
-          }
-          const n = cantidades[clave(a.id, null)] ?? 0;
-          const sinStock = Boolean(exigirStock) && a.stock <= 0;
-          return (
-            <div key={a.id} className="ficha-caja">
-              <button type="button" className="ficha" data-en-ticket={n > 0} disabled={sinStock} onClick={() => onCambiar(a, null, 1)} aria-label={`${a.nombre}${n ? `, ${n} en la lista` : ""}. Toca para sumar una unidad`}>
-                {!sinStock && (
-                  <span className="ficha__mas" aria-hidden="true">
-                    +
-                  </span>
-                )}
-                <span className="code ficha__codigo">{a.codigo}</span>
-                <span className="ficha__nombre">{a.nombre}</span>
-                <span className="ficha__meta num">
-                  {mostrarPrecio ? `${dinero(a.precio_venta)} · ` : ""}
-                  {sinStock ? "Sin stock" : `Stock ${a.stock}`}
-                </span>
-              </button>
-              {/* Siempre presente: en escritorio todas las tarjetas tienen la misma estructura (y no saltan al elegir). En móvil solo aparece al elegir. */}
-              <div className="ficha__paso" data-vacio={n === 0}>
-                <Paso n={n} etiqueta={a.nombre} onMenos={() => onCambiar(a, null, -1)} onMas={() => onCambiar(a, null, 1)} masDeshabilitado={Boolean(exigirStock) && n >= a.stock} />
-              </div>
-            </div>
-          );
-        })}
-        {visibles.length === 0 && <p className="muted">No hay artículos que coincidan.</p>}
+                  </Fragment>
+                );
+              }
+              const n = cantidades[clave(a.id, null)] ?? 0;
+              const sinStock = Boolean(exigirStock) && a.stock <= 0;
+              return (
+                <tr key={a.id} className="art-fila" data-en-ticket={n > 0} data-sin-stock={sinStock} onClick={sinStock ? undefined : () => onCambiar(a, null, 1)}>
+                  <td className="c-cod code">{a.codigo}</td>
+                  <th scope="row" className="c-nom">
+                    {a.nombre}
+                    <span className="art-meta num">{`${a.codigo}${mostrarPrecio ? ` · ${dinero(a.precio_venta)}` : ""} · ${sinStock ? "Sin stock" : `Stock ${a.stock}`}`}</span>
+                  </th>
+                  <td className="c-num c-stock num">{a.stock}</td>
+                  {mostrarPrecio && <td className="c-num c-precio num">{dinero(a.precio_venta)}</td>}
+                  {/* El contador no debe sumar además la unidad del toque en la fila. */}
+                  <td className="c-num c-cant" onClick={(e) => e.stopPropagation()}>
+                    <Paso n={n} etiqueta={a.nombre} onMenos={() => onCambiar(a, null, -1)} onMas={() => onCambiar(a, null, 1)} masDeshabilitado={Boolean(exigirStock) && n >= a.stock} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {visibles.length === 0 && <p className="muted" style={{ padding: "var(--space-md)" }}>No hay artículos que coincidan.</p>}
       </div>
     </div>
   );
