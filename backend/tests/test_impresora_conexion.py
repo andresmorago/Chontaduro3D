@@ -268,3 +268,42 @@ async def test_la_nube_exige_sesion_y_cabecera(publico, admin):
         assert (await admin.delete(f"{URL}/nube")).status_code == 403
     finally:
         admin.headers["X-Requested-With"] = sin
+
+
+# ----------------------------------------------------------------------------- probar
+async def test_probar_pide_antes_guardar_la_impresora(admin):
+    assert (await admin.post(f"{URL}/probar")).status_code == 409
+
+
+async def test_probar_fuerza_una_reconexion_sin_cambiar_los_datos(admin, db):
+    await admin.put(URL, json=BUENA)
+    v1 = (await fila(db)).version
+    r = await admin.post(f"{URL}/probar")
+    assert r.status_code == 202, r.text
+    f = await fila(db)
+    assert f.version == v1 + 1 and f.ip == "10.0.4.244"
+    assert secretos.descifrar(f.codigo_acceso) == "12345678"
+    assert r.json()["pendiente"] is True  # hasta que el servicio reconecte
+    auditoria = (await db.execute(select(RegistroAuditoria))).scalars().all()
+    assert any(a.accion == "impresora_probar" for a in auditoria)
+
+
+async def test_si_esta_conectada_dice_cuando_respondio_y_que_hace(admin, db):
+    await admin.put(URL, json=BUENA)
+    f = await fila(db)
+    db.add(EstadoImpresora(id=1, conectada=True, config_version=f.version, actualizado_en=ahora(),
+                           ultimo_mensaje_en=ahora() - timedelta(seconds=3),
+                           datos={"estado": "imprimiendo"}))  # fmt: skip
+    await db.commit()
+    j = (await admin.get(URL)).json()
+    assert j["conectada"] is True and j["maquina"] == "imprimiendo" and j["ultimo_mensaje_en"]
+    # sin conexión no se afirma nada
+    estado = await db.get(EstadoImpresora, 1)
+    estado.conectada = False
+    await db.commit()
+    j = (await admin.get(URL)).json()
+    assert j["ultimo_mensaje_en"] is None and j["maquina"] is None
+
+
+async def test_probar_exige_sesion_y_cabecera(publico):
+    assert (await publico.post(f"{URL}/probar")).status_code == 401

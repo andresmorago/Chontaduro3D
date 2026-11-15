@@ -54,6 +54,8 @@ def _salida(cfg: ConfigImpresora | None, estado: EstadoImpresora | None) -> Cone
             completa and (estado is None or estado.config_version != (cfg.version if cfg else None))
         ),
         error=estado.conexion_error if estado and not conectada else None,
+        ultimo_mensaje_en=estado.ultimo_mensaje_en if estado and conectada else None,
+        maquina=(estado.datos or {}).get("estado") if estado and conectada else None,
         nube=NubeConexionOut(
             vinculada=sesion is not None,
             correo=cfg.nube_correo if cfg and sesion else None,
@@ -94,6 +96,23 @@ async def guardar(datos: ConexionIn, db: DB, usuario: Admin) -> ConexionOut:
         db, "impresora_conexion", usuario_id=usuario.id,
         detalle={"ip": datos.ip, "serial": datos.serial},
     )  # fmt: skip
+    await db.commit()
+    return await _vista(db)
+
+
+@router.post("/probar", response_model=ConexionOut, status_code=status.HTTP_202_ACCEPTED)
+async def probar(db: DB, usuario: Admin) -> ConexionOut:
+    """Prueba de punta a punta: el servicio descarta la conexión actual y abre una nueva con lo
+    guardado (IP, serial y código), así que «Conectada» después de esto es una prueba real."""
+    cfg = await ajustes.obtener(db)
+    if ajustes.conexion_de(cfg) is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Primero guarda la IP, el serial y el código de la impresora."
+        )
+    assert cfg is not None
+    cfg.version += 1
+    cfg.actualizado_en = ahora()
+    auditoria.registrar(db, "impresora_probar", usuario_id=usuario.id)
     await db.commit()
     return await _vista(db)
 

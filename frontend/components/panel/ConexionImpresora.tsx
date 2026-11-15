@@ -6,8 +6,10 @@ import { Boton } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Campo";
 import { CampoClave } from "@/components/panel/CampoClave";
 import { api } from "@/lib/api";
+import { hace } from "@/lib/format";
+import { ETIQUETA_ESTADO } from "@/lib/impresora";
 import { mensajeDe } from "@/lib/hooks";
-import type { ConexionImpresora as Conexion } from "@/lib/types";
+import type { ConexionImpresora as Conexion, EstadoMaquina } from "@/lib/types";
 
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -16,7 +18,7 @@ export function estadoConexion(c: Conexion, esperando: boolean): { texto: string
   if (!c.ip) return { texto: "Sin configurar", clase: "etiqueta--tenue" };
   if (c.ilegible) return { texto: "Hay que escribir el código otra vez", clase: "etiqueta--aviso" };
   if (!c.servicio_activo) return { texto: "Servicio detenido", clase: "etiqueta--aviso" };
-  if (c.conectada) return { texto: "Conectada", clase: "etiqueta--ok" };
+  if (c.conectada) return { texto: "En línea", clase: "etiqueta--ok" };
   if (c.pendiente || (esperando && !c.error)) return { texto: "Conectando…", clase: "etiqueta--tenue" };
   if (c.error === "credenciales") return { texto: "Código de acceso rechazado", clase: "etiqueta--aviso" };
   if (c.error === "red") return { texto: "No se alcanza la impresora", clase: "etiqueta--aviso" };
@@ -48,6 +50,25 @@ export function ConexionImpresora({ conexion, recargar }: Props) {
   const estado = estadoConexion(conexion, esperando);
   const faltaCodigo = !conexion.codigo_guardado || conexion.ilegible;
 
+  /** Espera a que el servicio reconecte con lo guardado y devuelve cómo quedó. */
+  async function esperarResultado(): Promise<Conexion> {
+    setEsperando(true);
+    let c = await api.impresora.conexion.ver();
+    for (let i = 0; i < 20 && montado.current && !((c.servicio_activo && !c.pendiente && (c.conectada || c.error)) || (!c.servicio_activo && i >= 2)); i++) {
+      await pausa(1000);
+      c = await api.impresora.conexion.ver();
+    }
+    await recargar();
+    return c;
+  }
+
+  function avisarResultado(c: Conexion) {
+    if (!montado.current) return;
+    if (c.conectada) mostrar(`Impresora en línea: respondió ${c.ultimo_mensaje_en ? hace(c.ultimo_mensaje_en) : "ahora"}${c.maquina ? ` (${ETIQUETA_ESTADO[c.maquina as EstadoMaquina] ?? c.maquina})` : ""}.`);
+    else if (!c.servicio_activo) mostrar("El servicio de la impresora no está corriendo: no se puede probar. En cuanto arranque se conecta.", { tipo: "error" });
+    else mostrar((c.error && EXPLICACION[c.error]) || "La impresora no respondió. Revisa que esté encendida y en la red.", { tipo: "error" });
+  }
+
   async function guardar(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -56,18 +77,7 @@ export function ConexionImpresora({ conexion, recargar }: Props) {
       await api.impresora.conexion.guardar({ ip: ip.trim(), serial: serial.trim(), codigo_acceso: codigo.trim() || null });
       setCodigo("");
       setGuardando(false);
-      setEsperando(true);
-      // El servicio reconecta con lo nuevo en unos segundos: se espera su resultado.
-      let c = await api.impresora.conexion.ver();
-      for (let i = 0; i < 20 && montado.current && !((c.servicio_activo && !c.pendiente && (c.conectada || c.error)) || (!c.servicio_activo && i >= 2)); i++) {
-        await pausa(1000);
-        c = await api.impresora.conexion.ver();
-      }
-      await recargar();
-      if (!montado.current) return;
-      if (c.conectada) mostrar("Conectada con la impresora.");
-      else if (!c.servicio_activo) mostrar("Guardado. El servicio de la impresora no está corriendo: en cuanto arranque se conecta.", { tipo: "error" });
-      else mostrar((c.error && EXPLICACION[c.error]) || "Guardado, pero la impresora aún no responde.", { tipo: "error" });
+      avisarResultado(await esperarResultado());
     } catch (err) {
       setError(mensajeDe(err));
     } finally {
@@ -75,6 +85,19 @@ export function ConexionImpresora({ conexion, recargar }: Props) {
         setGuardando(false);
         setEsperando(false);
       }
+    }
+  }
+
+  async function probar() {
+    setError(null);
+    setEsperando(true);
+    try {
+      await api.impresora.conexion.probar();
+      avisarResultado(await esperarResultado());
+    } catch (err) {
+      setError(mensajeDe(err));
+    } finally {
+      if (montado.current) setEsperando(false);
     }
   }
 
@@ -86,6 +109,12 @@ export function ConexionImpresora({ conexion, recargar }: Props) {
       </div>
       <p className="muted">Se conecta por la red local (o la VPN). Los datos se guardan cifrados y el servicio los toma solo: no hay que tocar archivos ni reiniciar nada.</p>
       {error && <p className="alerta" role="alert">{error}</p>}
+      {conexion.conectada && (
+        <p className="muted" role="status">
+          La impresora respondió {conexion.ultimo_mensaje_en ? hace(conexion.ultimo_mensaje_en) : "hace un momento"}
+          {conexion.maquina ? ` · ahora está ${(ETIQUETA_ESTADO[conexion.maquina as EstadoMaquina] ?? conexion.maquina).toLowerCase()}` : ""}.
+        </p>
+      )}
       {!esperando && !conexion.conectada && conexion.servicio_activo && conexion.error && !conexion.pendiente && (
         <p className="alerta" role="alert">{EXPLICACION[conexion.error]}</p>
       )}
@@ -101,6 +130,9 @@ export function ConexionImpresora({ conexion, recargar }: Props) {
       <Boton variante="accent" type="submit" cargando={guardando || esperando} disabled={!ip.trim() || !serial.trim() || (faltaCodigo && !codigo.trim())}>
         {esperando ? "Conectando…" : "Guardar y conectar"}
       </Boton>
+      {conexion.codigo_guardado && !conexion.ilegible && conexion.ip && (
+        <Boton variante="secondary" cargando={esperando} disabled={guardando} onClick={() => void probar()}>Probar conexión</Boton>
+      )}
     </form>
   );
 }

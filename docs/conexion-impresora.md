@@ -24,6 +24,16 @@ Se configura en **Administración → Conexión**. Esta nota explica cómo funci
    marca `nube_atendida_en`. Mientras `atendida < solicitada` el panel muestra «Sincronizando…».
 4. **Desvincular**: `DELETE /nube` borra el token y el correo; los trabajos ya traídos se conservan.
 
+## Probar que están en línea
+
+- **Impresora**: «En línea» sale de un latido del servicio (< 40 s) y de un mensaje reciente de la impresora (< 90 s);
+  el panel muestra cuándo respondió y qué hace. *Probar conexión* (`POST /api/impresora/conexion/probar`) sube la
+  `version` sin cambiar los datos: el servicio cierra la conexión MQTT y abre otra desde cero, así que el resultado
+  (en línea, código rechazado o sin red) es una prueba real de IP, serial y código.
+- **Cuenta de Bambu**: «Vinculada» solo indica que hay un token guardado. La prueba es *Probar y sincronizar*: el
+  servicio consulta Bambu Cloud con ese token y deja el resultado (`ok` con «N trabajos…», `error`, `requiere_login`).
+  «En línea» exige una respuesta de menos de 25 minutos (el servicio consulta cada 10).
+
 ## Seguridad
 
 - Cifrado en reposo con Fernet; la clave sale de `SECRET_KEY` (HKDF-SHA256). Backend y servicio deben compartirla

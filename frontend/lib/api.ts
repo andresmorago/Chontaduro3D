@@ -158,6 +158,7 @@ export const api = {
       ver: () => pedir<ConexionImpresora>("/impresora/conexion"),
       guardar: (d: { ip: string; serial: string; codigo_acceso: string | null }) =>
         pedir<ConexionImpresora>("/impresora/conexion", { metodo: "PUT", cuerpo: d }),
+      probar: () => pedir<ConexionImpresora>("/impresora/conexion/probar", { metodo: "POST" }),
       nubeEntrar: (correo: string, clave: string) =>
         pedir<PasoNube>("/impresora/conexion/nube/entrar", { metodo: "POST", cuerpo: { correo, clave } }),
       nubeVerificar: (d: { codigo: string; correo?: string; tfa_key?: string }) =>

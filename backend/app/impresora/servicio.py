@@ -301,7 +301,11 @@ class Servicio:
                 await db.commit()
             log.info("Historial de la nube: %d tareas, %s", len(tareas), r)
             await self._devolver_token_renovado(cifrado)
-            await self._guardar_nube("ok", None, ok=True)
+            await self._guardar_nube(
+                "ok",
+                f"{len(tareas)} trabajos en los últimos {settings.bambu_nube_dias} días",
+                ok=True,
+            )
             self._nube_proxima = _ahora() + timedelta(seconds=NUBE_CADA_S)
         except nube.RequiereLogin as e:
             await self._guardar_nube("requiere_login", str(e)[:200])

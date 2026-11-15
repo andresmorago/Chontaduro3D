@@ -356,6 +356,9 @@ export interface ConexionImpresora {
   /** Se guardó un cambio y el servicio aún no reconectó con él. */
   pendiente: boolean;
   error: "credenciales" | "red" | null;
+  /** Cuándo respondió la impresora por última vez y qué hace: la prueba de que está en línea. */
+  ultimo_mensaje_en: string | null;
+  maquina: string | null;
   nube: NubeConexion;
 }
 

@@ -134,6 +134,10 @@ class ConexionOut(Salida):
     pendiente: bool = False
     # Si no conecta: «credenciales» (código de acceso rechazado) o «red» (no se alcanza la IP).
     error: Literal["credenciales", "red"] | None = None
+    # Cuándo respondió la impresora por última vez y qué está haciendo («lista», «imprimiendo»…):
+    # es lo que demuestra que la conexión está viva (no solo que haya datos guardados).
+    ultimo_mensaje_en: datetime | None = None
+    maquina: str | None = None
     nube: NubeConexionOut = NubeConexionOut(vinculada=False)
 
 

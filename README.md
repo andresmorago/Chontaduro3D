@@ -103,9 +103,9 @@ Un servicio aparte (`impresora`) se conecta a la A1 por la red local (MQTT en el
 
 No hace falta `.env` ni ningún script: todo se hace en la pestaña **Conexión**.
 
-**Impresora.** Escribe la IP (Ajustes → WLAN en la pantalla de la impresora), el número de serie y el código de acceso, y pulsa *Guardar y conectar*. El servicio toma los datos de la base, reconecta solo y el panel te dice si quedó **Conectada**, si el **código de acceso fue rechazado** o si **no se alcanza la IP** (impresora apagada, IP errónea o VPN caída). Para cambiar solo la IP, deja el código vacío: se conserva el guardado.
+**Impresora.** Escribe la IP (Ajustes → WLAN en la pantalla de la impresora), el número de serie y el código de acceso, y pulsa *Guardar y conectar*. El servicio toma los datos de la base, reconecta solo y el panel te dice si quedó **En línea** (con cuándo respondió la impresora y qué está haciendo), si el **código de acceso fue rechazado** o si **no se alcanza la IP** (impresora apagada, IP errónea o VPN caída). *Probar conexión* descarta la conexión actual y abre una nueva con lo guardado: es una prueba de punta a punta. Para cambiar solo la IP, deja el código vacío: se conserva el guardado.
 
-**Cuenta de Bambu Lab** (historial de Studio y Handy): *Vincular cuenta* con tu correo y contraseña; si Bambu pide verificación, escribes el código que llega al correo (o el de tu app 2FA). Si Bambu bloquea el inicio de sesión desde el servidor, *Pegar el token* (cookie `token` de bambulab.com). Después puedes **Sincronizar ahora** o **Desvincular**.
+**Cuenta de Bambu Lab** (historial de Studio y Handy): *Vincular cuenta* con tu correo y contraseña; si Bambu pide verificación, escribes el código que llega al correo (o el de tu app 2FA). Si Bambu bloquea el inicio de sesión desde el servidor, *Pegar el token* (cookie `token` de bambulab.com). *Vinculada* solo significa que hay un acceso guardado; lo que prueba que Bambu responde es **Probar y sincronizar** (consulta la nube de verdad y dice cuántos trabajos trajo). La etiqueta pasa a **En línea** si Bambu respondió en los últimos 25 minutos, y a «Sin respuesta», «Sin verificar» o «Hay que volver a vincular» si no. También puedes **Desvincular**.
 
 Cómo se protege (detalle en [docs/conexion-impresora.md](docs/conexion-impresora.md)):
 

@@ -8,9 +8,24 @@ import { CampoClave } from "@/components/panel/CampoClave";
 import { api } from "@/lib/api";
 import { hace } from "@/lib/format";
 import { mensajeDe } from "@/lib/hooks";
-import type { ConexionImpresora } from "@/lib/types";
+import type { ConexionImpresora, NubeConexion } from "@/lib/types";
 
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+const VENCE_MS = 25 * 60 * 1000; // el servicio consulta cada 10 min: más que esto sin respuesta ya no es «en línea»
+
+/** «Vinculada» solo dice que hay un acceso guardado; lo que prueba que Bambu responde es la última consulta. */
+function estadoNube(n: NubeConexion): { texto: string; clase: string } {
+  if (!n.vinculada) return { texto: "Sin vincular", clase: "etiqueta--tenue" };
+  if (n.pendiente) return { texto: "Probando…", clase: "etiqueta--tenue" };
+  if (n.estado === "requiere_login") return { texto: "Hay que volver a vincular", clase: "etiqueta--aviso" };
+  if (n.estado === "error") return { texto: "Sin respuesta de Bambu", clase: "etiqueta--aviso" };
+  if (n.estado === "ok") {
+    const reciente = n.sincronizada_en != null && Date.now() - new Date(n.sincronizada_en).getTime() < VENCE_MS;
+    return reciente ? { texto: "En línea", clase: "etiqueta--ok" } : { texto: "Sin verificar hace un rato", clase: "etiqueta--aviso" };
+  }
+  return { texto: "Vinculada · sin probar", clase: "etiqueta--tenue" };
+}
 
 type Paso = { tipo: "inicio" } | { tipo: "codigo" } | { tipo: "tfa"; llave: string } | { tipo: "token" };
 
@@ -44,7 +59,7 @@ export function ConexionNube({ conexion, recargar }: Props) {
     await recargar();
     if (!montado.current) return;
     if (c.nube.pendiente) mostrar("El servicio de la impresora aún no responde; sincronizará en cuanto arranque.", { tipo: "error" });
-    else if (c.nube.estado === "ok") mostrar("Historial sincronizado.");
+    else if (c.nube.estado === "ok") mostrar(`Bambu Cloud en línea${c.nube.detalle ? `: ${c.nube.detalle}` : ""}.`);
     else if (c.nube.estado === "requiere_login") mostrar("Bambu no aceptó el acceso guardado: vincula la cuenta de nuevo.", { tipo: "error" });
     else mostrar(c.nube.detalle ?? "No se pudo consultar Bambu Cloud.", { tipo: "error" });
   }
@@ -113,15 +128,13 @@ export function ConexionNube({ conexion, recargar }: Props) {
       mostrar("Cuenta desvinculada. Los trabajos ya traídos se conservan.");
     });
 
-  const problema = nube.estado === "requiere_login" || nube.estado === "error";
+  const estado = estadoNube(nube);
 
   return (
     <div className="tarjeta bloque-clave">
       <div className="impresora-estado__cab">
         <h3>Cuenta de Bambu Lab</h3>
-        <span className={`etiqueta ${nube.vinculada ? (problema ? "etiqueta--aviso" : "etiqueta--ok") : "etiqueta--tenue"}`} role="status">
-          {nube.vinculada ? (nube.estado === "requiere_login" ? "Hay que volver a vincular" : "Vinculada") : "Sin vincular"}
-        </span>
+        <span className={`etiqueta ${estado.clase}`} role="status">{estado.texto}</span>
       </div>
       <p className="muted">Trae a Producción los trabajos que ya hiciste con Bambu Studio o Handy (últimos días). La contraseña solo se usa para entrar: no se guarda, solo el acceso que Bambu entrega, cifrado.</p>
       {error && <p className="alerta" role="alert">{error}</p>}
@@ -133,7 +146,7 @@ export function ConexionNube({ conexion, recargar }: Props) {
             {nube.pendiente
               ? "Sincronizando…"
               : nube.estado === "ok" && nube.sincronizada_en
-                ? `Última sincronización ${hace(nube.sincronizada_en)}; se repite cada 10 minutos.`
+                ? `Bambu Cloud respondió ${hace(nube.sincronizada_en)}${nube.detalle ? ` (${nube.detalle})` : ""}; se vuelve a consultar cada 10 minutos.`
                 : nube.estado === "error"
                   ? `No se pudo consultar (${nube.detalle ?? "error"}). Se reintenta solo.`
                   : nube.estado === "requiere_login"
@@ -141,7 +154,7 @@ export function ConexionNube({ conexion, recargar }: Props) {
                     : "Aún no se ha sincronizado."}
           </p>
           <div className="impresora-controles__fila">
-            <Boton variante="accent" cargando={ocupado || nube.pendiente} onClick={sincronizar}>Sincronizar ahora</Boton>
+            <Boton variante="accent" cargando={ocupado || nube.pendiente} onClick={sincronizar}>Probar y sincronizar</Boton>
             {confirmar ? (
               <>
                 <Boton variante="danger" disabled={ocupado} onClick={desvincular}>Sí, desvincular</Boton>
