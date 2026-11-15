@@ -305,5 +305,9 @@ button.fila:hover { background: var(--color-paper-2); }
 
 /* Renglones de un pedido (panel). */
 .pedido__items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2xs); }
-.pedido__items li { display: flex; justify-content: space-between; gap: var(--space-sm); align-items: baseline; padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+.pedido__items li { display: grid; grid-template-columns: minmax(0, 1fr) auto; justify-content: space-between; gap: var(--space-sm); align-items: baseline; padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+/* El nombre es el que se envuelve; el precio y el código ocupan su ancho y no se parten (body trae overflow-wrap: anywhere). */
+.pedido__nombre { min-width: 0; }
+.pedido__precio, .sin-corte { white-space: nowrap; overflow-wrap: normal; }
+.pedido__precio { text-align: right; }
 .pedido__items li:last-child { border-bottom: 0; }

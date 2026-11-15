@@ -59,15 +59,15 @@ export default function Pedidos() {
               <div className="pedido__cab">
                 <div>
                   <h3 style={{ fontSize: "var(--text-lg)" }}>{p.nombre}</h3>
-                  <p className="muted num">{p.piezas === 1 ? "1 pieza" : `${p.piezas} piezas`} · {dinero(p.total_estimado)} <span className="muted">(a precios de hoy)</span></p>
+                  <p className="muted num"><span className="sin-corte">{p.piezas === 1 ? "1 pieza" : `${p.piezas} piezas`}</span> · <span className="sin-corte">{dinero(p.total_estimado)}</span> <span className="muted">(a precios de hoy)</span></p>
                 </div>
                 <p className="muted num">{hace(p.creado_en)}</p>
               </div>
               <ul className="pedido__items">
                 {p.items.map((i) => (
                   <li key={`${i.articulo_id}|${i.color ?? ""}`}>
-                    <span><strong className="num">{i.cantidad} ×</strong> {i.articulo}{i.color ? ` · ${i.color}` : ""} <span className="code muted">({i.codigo})</span></span>
-                    <span className="num muted">{dinero(i.subtotal)}</span>
+                    <span className="pedido__nombre"><strong className="num sin-corte">{i.cantidad} ×</strong> {i.articulo}{i.color ? ` · ${i.color}` : ""} <span className="code muted sin-corte">({i.codigo})</span></span>
+                    <span className="num muted pedido__precio">{dinero(i.subtotal)}</span>
                   </li>
                 ))}
               </ul>
