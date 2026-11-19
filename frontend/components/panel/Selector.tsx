@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { dinero } from "@/lib/format";
 import { clave, stockDe, tieneColores } from "@/lib/lineas";
 import type { Articulo } from "@/lib/types";
@@ -18,19 +18,48 @@ interface Props {
   incluirSinColor?: boolean;
 }
 
+/** Tope de unidades por línea cuando no hay que respetar el stock (producción). */
+const TOPE = 10000;
+
 const sinTildes = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-/** Menos / cantidad / más: la forma explícita de cambiar cuántas piezas son. */
-function Paso({ n, etiqueta, onMenos, onMas, masDeshabilitado }: { n: number; etiqueta: string; onMenos: () => void; onMas: () => void; masDeshabilitado?: boolean }) {
+/** Menos / cantidad / más. La cantidad es un campo: se puede escribir directamente (útil con muchas piezas) y los
+ *  botones siguen sirviendo para ajustar de a una. `onFijar` recibe la cantidad final, ya acotada a [0, max]. */
+function Paso({ n, etiqueta, max, onFijar }: { n: number; etiqueta: string; max: number; onFijar: (cantidad: number) => void }) {
+  const [texto, setTexto] = useState(String(n));
+  useEffect(() => setTexto(String(n)), [n]);
+  const acotar = (v: number) => Math.min(max, Math.max(0, v));
   return (
     <span className="paso" role="group" aria-label={`Cantidad de ${etiqueta}`}>
-      <button type="button" className="paso__btn" aria-label={`Quitar una unidad de ${etiqueta}`} disabled={n <= 0} onClick={onMenos}>
+      <button type="button" className="paso__btn" aria-label={`Quitar una unidad de ${etiqueta}`} disabled={n <= 0} onClick={() => onFijar(n - 1)}>
         −
       </button>
-      <span className="paso__n num" aria-live="polite">
-        {n}
-      </span>
-      <button type="button" className="paso__btn" aria-label={`Agregar una unidad de ${etiqueta}`} disabled={masDeshabilitado} onClick={onMas}>
+      <input
+        className="paso__n paso__n--campo num"
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
+        value={texto}
+        aria-label={`Cantidad de ${etiqueta}`}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          const limpio = e.target.value.replace(/\D/g, "").slice(0, 5);
+          setTexto(limpio);
+          if (limpio === "") return; // mientras escribe, vacío no cambia nada (al salir vuelve al valor actual)
+          const v = acotar(parseInt(limpio, 10));
+          if (v !== n) onFijar(v);
+          else setTexto(String(v)); // pasó del tope: muestra el máximo real
+        }}
+        onBlur={() => setTexto(String(n))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      <button type="button" className="paso__btn" aria-label={`Agregar una unidad de ${etiqueta}`} disabled={n >= max} onClick={() => onFijar(n + 1)}>
         +
       </button>
     </span>
@@ -103,7 +132,7 @@ export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostra
                           <td className="c-num c-stock num">{hay}</td>
                           {mostrarPrecio && <td className="c-precio" />}
                           <td className="c-num c-cant">
-                            <Paso n={n} etiqueta={`${a.nombre}, ${f.nombre}`} onMenos={() => onCambiar(a, f.id, -1)} onMas={() => onCambiar(a, f.id, 1)} masDeshabilitado={Boolean(exigirStock) && n >= hay} />
+                            <Paso n={n} etiqueta={`${a.nombre}, ${f.nombre}`} max={exigirStock ? hay : TOPE} onFijar={(v) => onCambiar(a, f.id, v - n)} />
                           </td>
                         </tr>
                       );
@@ -124,7 +153,7 @@ export function Selector({ articulos, cantidades, onCambiar, exigirStock, mostra
                   {mostrarPrecio && <td className="c-num c-precio num">{dinero(a.precio_venta)}</td>}
                   {/* El contador no debe sumar además la unidad del toque en la fila. */}
                   <td className="c-num c-cant" onClick={(e) => e.stopPropagation()}>
-                    <Paso n={n} etiqueta={a.nombre} onMenos={() => onCambiar(a, null, -1)} onMas={() => onCambiar(a, null, 1)} masDeshabilitado={Boolean(exigirStock) && n >= a.stock} />
+                    <Paso n={n} etiqueta={a.nombre} max={exigirStock ? a.stock : TOPE} onFijar={(v) => onCambiar(a, null, v - n)} />
                   </td>
                 </tr>
               );

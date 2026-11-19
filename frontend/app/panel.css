@@ -312,6 +312,8 @@ button.fila:hover { background: var(--color-paper-2); }
 .paso__btn:disabled { color: var(--color-muted); cursor: not-allowed; }
 .paso__btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; }
 .paso__n { display: grid; place-items: center; padding: 0 var(--space-2xs); font-weight: 700; }
+.paso__n--campo { width: 4.5ch; min-width: 0; border: 0; border-inline: var(--rule-hair) solid var(--color-rule); border-radius: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; text-align: center; }
+.paso__n--campo:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; background: var(--color-paper-2); }
 @media (pointer: coarse) { .paso { grid-template-columns: 44px minmax(36px, auto) 44px; } .paso__btn { min-height: 44px; } }
 
 /* Color de una línea de venta o de producción. */
