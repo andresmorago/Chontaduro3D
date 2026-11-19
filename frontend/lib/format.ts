@@ -53,10 +53,17 @@ export function hace(iso: string): string {
   return dias === 1 ? "ayer" : `hace ${dias} días`;
 }
 
+/** «11:31 p. m.» con espacios duros: la hora nunca se parte en dos líneas. */
 export function hora(iso: string): string {
-  return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA, hour: "numeric", minute: "2-digit" }).format(
-    new Date(iso),
-  );
+  return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA, hour: "numeric", minute: "2-digit" })
+    .format(new Date(iso))
+    .replace(/[\s\u202f]+/g, "\u00a0");
+}
+
+const PAGOS: Record<string, string> = { efectivo: "Efectivo", transferencia: "Transferencia", otro: "Otro" };
+/** Nombre de un método de pago para mostrarlo («efectivo» → «Efectivo»). */
+export function etiquetaPago(metodo: string): string {
+  return PAGOS[metodo] ?? metodo;
 }
 
 export function fechaHora(iso: string): string {

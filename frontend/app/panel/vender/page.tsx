@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Contador } from "@/components/ui/Contador";
@@ -9,7 +9,7 @@ import { Segmentado } from "@/components/ui/Segmentado";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
 import { clave, hexColor, nombreColor, partirClave, stockDe } from "@/lib/lineas";
-import { dinero, hora } from "@/lib/format";
+import { dinero, etiquetaPago, hora } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import { lineasDePedido, type LineaVenta as Linea } from "@/lib/pedidoAVenta";
 import type { Articulo, MetodoPago, Venta } from "@/lib/types";
@@ -253,39 +253,58 @@ export default function Vender() {
               <caption className="visually-hidden">Ventas de hoy</caption>
               <thead>
                 <tr>
-                  <th scope="col" className="c-mov-no">Hora</th>
-                  <th scope="col">Venta</th>
-                  <th scope="col" className="c-mov-no">Cliente</th>
+                  <th scope="col">Hora y artículos</th>
                   <th scope="col" className="c-mov-no">Pago</th>
+                  <th scope="col" className="c-num c-mov-no">Precio</th>
                   <th scope="col" className="c-num">Total</th>
                   <th scope="col" className="c-acc"><span className="visually-hidden">Acciones</span></th>
                 </tr>
               </thead>
               <tbody>
-                {(ventas.datos ?? []).map((v) => (
-                  <tr key={v.id} data-cero={v.anulada} className={v.anulada ? "t-anulada" : undefined}>
-                    <td className="c-mov-no num">{hora(v.creado_en)}</td>
-                    <th scope="row" className="t-nombre">
-                      {v.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}
-                      {v.pedido_nombre && <span className="t-sec">Pedido de {v.pedido_nombre}</span>}
-                      <span className="t-meta num">{hora(v.creado_en)} · {v.metodo_pago}{v.cliente ? ` · ${v.cliente}` : ""}{v.anulada ? " · anulada" : ""}</span>
-                    </th>
-                    <td className="c-mov-no">{v.cliente ?? "—"}</td>
-                    <td className="c-mov-no">{v.metodo_pago}{v.anulada && <span className="etiqueta etiqueta--tenue" style={{ marginLeft: "var(--space-xs)" }}>Anulada</span>}</td>
-                    <td className="c-num c-fin num"><strong>{dinero(v.total)}</strong></td>
-                    <td className="c-acc c-ancho">
-                      {!v.anulada &&
-                        (aAnular === v.id ? (
-                          <span className="t-acciones">
-                            <Boton pequeno variante="danger" onClick={() => anular(v)}>Sí, anular</Boton>
-                            <Boton pequeno variante="ghost" onClick={() => setAAnular(null)}>No</Boton>
-                          </span>
-                        ) : (
-                          <Boton pequeno variante="ghost" onClick={() => setAAnular(v.id)}>Anular</Boton>
-                        ))}
-                    </td>
-                  </tr>
-                ))}
+                {(ventas.datos ?? []).map((v) => {
+                  const piezas = v.items.reduce((n, i) => n + i.cantidad, 0);
+                  const unidades = piezas === 1 ? "1 pieza" : `${piezas} piezas`;
+                  return (
+                    <Fragment key={v.id}>
+                      <tr className={`t-cab t-con-sub${v.anulada ? " t-anulada" : ""}`}>
+                        <th scope="row" className="t-nombre">
+                          <span className="v-hora num">{hora(v.creado_en)}</span>
+                          {v.anulada && <span className="etiqueta etiqueta--tenue v-anulada">Anulada</span>}
+                          <span className="t-sec">{[v.cliente, v.pedido_nombre ? `Pedido de ${v.pedido_nombre}` : null, unidades].filter(Boolean).join(" · ")}</span>
+                          <span className="t-meta">{etiquetaPago(v.metodo_pago)}</span>
+                        </th>
+                        <td className="c-mov-no c-nw">{etiquetaPago(v.metodo_pago)}</td>
+                        <td className="c-mov-no" />
+                        <td className="c-num c-fin num"><strong className="t-importe">{dinero(v.total)}</strong></td>
+                        <td className="c-acc c-nw">
+                          {!v.anulada &&
+                            (aAnular === v.id ? (
+                              <span className="t-acciones">
+                                <Boton pequeno variante="danger" onClick={() => anular(v)}>Sí, anular</Boton>
+                                <Boton pequeno variante="ghost" onClick={() => setAAnular(null)}>No</Boton>
+                              </span>
+                            ) : (
+                              <Boton pequeno variante="ghost" onClick={() => setAAnular(v.id)}>Anular</Boton>
+                            ))}
+                        </td>
+                      </tr>
+                      {v.items.map((i, n) => (
+                        <tr key={`${v.id}|${i.articulo_id}|${i.color_id ?? ""}|${n}`} className={`t-sub${v.anulada ? " t-anulada" : ""}`}>
+                          <th scope="row" className="t-nombre">
+                            <span className="v-cant num">{i.cantidad} ×</span>
+                            {i.nombre}
+                            {i.color && <span className="v-color"><span className="muestra-mini" style={i.color_hex ? { background: i.color_hex } : undefined} aria-hidden="true" />{i.color}</span>}
+                            <span className="t-meta num">{dinero(i.precio_unitario)} c/u</span>
+                          </th>
+                          <td className="c-mov-no" />
+                          <td className="c-num c-mov-no c-nw muted num">{dinero(i.precio_unitario)}</td>
+                          <td className="c-num c-fin num t-importe">{dinero(i.cantidad * i.precio_unitario)}</td>
+                          <td className="c-mov-no" />
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

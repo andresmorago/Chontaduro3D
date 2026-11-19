@@ -169,7 +169,7 @@ button.fila:hover { background: var(--color-paper-2); }
 .barra-cobro { display: none; }
 @media (max-width: 74.99rem) {
   .barra-cobro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); position: fixed; z-index: var(--z-sticky); left: 0; right: 0; bottom: 0; padding: var(--space-xs) var(--gutter); border-top: var(--rule-bar) solid var(--color-ink); background: var(--color-accent-soft); }
-  .barra-cobro strong { font: 700 var(--text-xl)/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .barra-cobro strong { flex: none; white-space: nowrap; font: 700 var(--text-xl)/1 var(--font-display); font-variant-numeric: tabular-nums; }
 }
 @media (min-width: 60.0625rem) and (max-width: 74.99rem) { .barra-cobro { left: var(--rail); } } /* con el rail visible la barra empieza a su derecha */
 @media (max-width: 60rem) { .barra-cobro { bottom: calc(60px + env(safe-area-inset-bottom)); } } /* sobre las pestañas inferiores */
@@ -405,6 +405,10 @@ button.fila:hover { background: var(--color-paper-2); }
   .tabla-datos .c-ancho .t-acciones { justify-content: flex-start; flex-wrap: wrap; }
   .tabla-datos tr.t-cab.t-con-sub { border-bottom: 0; padding-bottom: 0; }
   .tabla-datos tr.t-sub .t-nombre { padding-left: var(--space-sm); }
+  .tabla-datos .c-acc.c-nw { white-space: normal; text-align: left; }
+  .tabla-datos .c-acc.c-nw .btn--ghost { margin-left: -1rem; }
+  .tabla-datos .c-acc .t-acciones { justify-content: flex-start; }
+  .tabla-datos .v-cant { min-width: 0; }
 }
 
 /* Barra sobre una tabla: filtros con conteo y buscador. */
@@ -419,5 +423,11 @@ button.fila:hover { background: var(--color-paper-2); }
 .tabla-datos .t-select--cerrado, .tabla-datos .t-select--descartado { color: var(--color-card-muted); font-weight: 600; }
 .tabla-datos .t-solo-movil { display: none; }
 @media (max-width: 64rem) { .tabla-datos .t-solo-movil { display: block; } }
+/* Historial de ventas: cabecera de la venta (hora, cliente, pago, total) y una fila por artículo. */
+.v-hora { font-size: var(--text-base, 1rem); font-weight: 800; white-space: nowrap; }
+.v-anulada { margin-left: var(--space-xs); vertical-align: 1px; }
+.v-cant { display: inline-block; min-width: 2.25rem; margin-right: var(--space-2xs); color: var(--color-card-muted); font-weight: 800; white-space: nowrap; }
+.v-color { display: inline-flex; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); font-weight: 500; color: var(--color-card-muted); white-space: nowrap; }
+.tabla-datos .t-importe { white-space: nowrap; }
 .tabla-datos tr.t-anulada { color: var(--color-card-muted); }
-.tabla-datos tr.t-anulada .t-nombre { text-decoration: line-through; }
+.tabla-datos tr.t-anulada.t-sub .t-nombre, .tabla-datos tr.t-anulada .t-importe { text-decoration: line-through; }

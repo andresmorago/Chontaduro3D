@@ -40,6 +40,26 @@ const revisar = () => {
     }
     if (e.scrollWidth > e.clientWidth + 1 && e.clientWidth > 0 && e.textContent.trim() && !e.matches("html, body")) out.push({ tipo: "contenido desborda su elemento", donde: camino(e), texto: e.textContent.trim().slice(0, 48), sobra: e.scrollWidth - e.clientWidth });
   }
+  // Palabras partidas a mitad («efectiv/o»): una palabra cuyo rectángulo ocupa dos o más líneas.
+  const lineas = (r) => new Set([...r.getClientRects()].filter((f) => f.width > 0.5).map((f) => Math.round(f.top / 4))).size;
+  const rec2 = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t = rec2.nextNode(); t; t = rec2.nextNode()) {
+    const el = t.parentElement;
+    if (!el || !visible(el) || el.closest(".visually-hidden, .trampa, script, style, noscript, [hidden]")) continue;
+    for (const m of t.textContent.matchAll(/\S{4,}/g)) {
+      if (/[-\/—–·_.,:;+()]/.test(m[0])) continue; // ahí el navegador puede cortar a propósito (nombres de archivo, guiones)
+      const r = document.createRange(); r.setStart(t, m.index); r.setEnd(t, m.index + m[0].length);
+      if (lineas(r) > 1) { out.push({ tipo: "palabra partida a mitad", donde: camino(el), texto: m[0], sobra: 0 }); break; }
+    }
+  }
+  // Celdas, números, etiquetas y botones con texto corto: nunca deben partirse en varias líneas.
+  for (const e of document.querySelectorAll("td, th, .num, strong, .etiqueta, .chip, .btn")) {
+    if (!visible(e) || e.closest(".visually-hidden, .trampa") || e.children.length > 0) continue;
+    const texto = e.textContent.trim();
+    if (!texto || texto.length > 24 || texto.split(/\s+/).length > 3 || e.matches("th.t-nombre, [class*='nombre']")) continue; // los nombres y frases largas pueden bajar de línea
+    const r = document.createRange(); r.selectNodeContents(e);
+    if (lineas(r) > 1) out.push({ tipo: "texto corto partido en varias líneas", donde: camino(e), texto, sobra: 0 });
+  }
   return out;
 };
 
