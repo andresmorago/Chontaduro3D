@@ -384,6 +384,28 @@ class PedidoOut(Salida):
     total_vendido: DineroSalida = Decimal(0)
 
 
+class DemandaColorOut(Salida):
+    """Lo pendiente de un color (o del artículo sin color) en los pedidos abiertos."""
+
+    color: str | None
+    pendiente: int
+    stock: int
+    faltan: int
+
+
+class DemandaArticuloOut(Salida):
+    """Cuánto de un artículo piden los pedidos por atender y cuánto falta producir."""
+
+    articulo_id: UUID
+    codigo: str
+    articulo: str
+    pedidos: int  # cuántos pedidos abiertos lo piden
+    pendiente: int  # piezas pedidas que aún no se han vendido
+    stock: int
+    faltan: int  # lo que hay que producir para cubrirlo
+    colores: list[DemandaColorOut] = []
+
+
 class PedidoCreado(Salida):
     ok: bool = True
     mensaje: str

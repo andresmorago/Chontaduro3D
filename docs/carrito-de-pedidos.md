@@ -61,3 +61,16 @@ Una venta puede asociarse (opcionalmente) a un pedido, y así el pedido se cierr
 - Datos: `ventas.pedido_id` (FK, `ON DELETE SET NULL`); `PedidoOut.ventas` y `total_vendido`; `VentaOut.pedido_id`
   y `pedido_nombre`.
 
+
+## Por producir (demanda agrupada por artículo)
+
+En **Pedidos → Por producir** se ve, por artículo (y por color), cuánto piden los pedidos *por
+atender* (nuevos y contactados), cuánto hay en stock y **cuánto falta producir**
+(`GET /api/pedidos/demanda`).
+
+- Lo ya vendido a un pedido (ventas asociadas no anuladas) no cuenta como pendiente: esas piezas ya
+  salieron del inventario. Anular la venta lo devuelve al pendiente.
+- Los pedidos cerrados o descartados no cuentan.
+- El stock «sin color asignado» de un artículo con colores cubre lo que falte de cualquiera de sus
+  colores; por eso «Producir» del artículo puede ser menor que la suma de sus colores.
+- No reserva inventario ni crea lotes: es solo una guía para planear la producción.

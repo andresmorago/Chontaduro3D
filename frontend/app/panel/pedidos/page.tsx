@@ -8,7 +8,7 @@ import { usePanel } from "@/components/panel/PanelShell";
 import { api } from "@/lib/api";
 import { dinero, enlaceWhatsapp, hace } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
-import type { EstadoPedido, Pedido } from "@/lib/types";
+import type { DemandaArticulo, EstadoPedido, Pedido } from "@/lib/types";
 
 const ESTADOS: { valor: EstadoPedido; etiqueta: string }[] = [
   { valor: "nuevo", etiqueta: "Nuevo" },
@@ -21,7 +21,9 @@ export default function Pedidos() {
   const { mostrar } = useAvisos();
   const { refrescarNuevos } = usePanel();
   const [filtro, setFiltro] = useState<"abiertos" | "todos">("abiertos");
+  const [vista, setVista] = useState<"pedidos" | "producir">("pedidos");
   const { datos, error, cargando, recargar } = useCargar(() => api.pedidos.listar());
+  const demanda = useCargar(() => api.pedidos.demanda());
   const todos = datos ?? [];
   const [q, setQ] = useState("");
   const abiertos = todos.filter((p) => p.estado === "nuevo" || p.estado === "contactado");
@@ -31,7 +33,7 @@ export default function Pedidos() {
   async function cambiar(p: Pedido, estado: EstadoPedido) {
     try {
       await api.pedidos.cambiarEstado(p.id, estado);
-      await recargar();
+      await Promise.all([recargar(), demanda.recargar()]);
       refrescarNuevos();
     } catch (e) {
       mostrar(mensajeDe(e), { tipo: "error" });
@@ -44,6 +46,16 @@ export default function Pedidos() {
         <h1>Pedidos</h1>
         <p className="lead">Solicitudes del catálogo. No descuentan inventario: cuando concretes la venta, atiéndela desde aquí o en Vender, y el pedido se cierra con ella.</p>
       </div>
+      <div className="barra-tabla">
+        <div className="filtros" role="group" aria-label="Vista">
+          <button type="button" className="chip" aria-pressed={vista === "pedidos"} onClick={() => setVista("pedidos")}>Por pedido</button>
+          <button type="button" className="chip" aria-pressed={vista === "producir"} onClick={() => setVista("producir")}>Por producir <span className="chip__n num">{(demanda.datos ?? []).filter((d) => d.faltan > 0).length}</span></button>
+        </div>
+      </div>
+      {vista === "producir" ? (
+        <PorProducir lista={demanda.datos ?? []} cargando={demanda.cargando} error={demanda.error} />
+      ) : (
+      <>
       <div className="barra-tabla">
         <div className="filtros" role="group" aria-label="Filtrar pedidos">
           <button type="button" className="chip" aria-pressed={filtro === "abiertos"} onClick={() => setFiltro("abiertos")}>Por atender <span className="chip__n num">{abiertos.length}</span></button>
@@ -130,6 +142,76 @@ export default function Pedidos() {
           </table>
         </div>
       )}
+      </>
+      )}
+    </>
+  );
+}
+
+/** Lo que piden los pedidos por atender, agrupado por artículo: cuánto falta producir. */
+function PorProducir({ lista, cargando, error }: { lista: DemandaArticulo[]; cargando: boolean; error: string | null }) {
+  const piezas = lista.reduce((n, d) => n + d.faltan, 0);
+  const porProducir = lista.filter((d) => d.faltan > 0).length;
+  if (error) return <p className="alerta" role="alert">{error}</p>;
+  if (cargando) return <p className="muted" role="status">Cargando…</p>;
+  if (lista.length === 0) {
+    return (
+      <div className="vacio">
+        <h2 style={{ fontSize: "var(--text-title)" }}>No hay pedidos por atender</h2>
+        <p>Cuando haya pedidos nuevos o contactados, aquí verás cuánto producir de cada artículo.</p>
+      </div>
+    );
+  }
+  return (
+    <>
+      <p className="lead" role="status">
+        {piezas === 0
+          ? "El inventario cubre todos los pedidos por atender."
+          : `Faltan ${piezas} ${piezas === 1 ? "pieza" : "piezas"} de ${porProducir} ${porProducir === 1 ? "artículo" : "artículos"} para cubrir los pedidos por atender.`}{" "}
+        Lo ya vendido a un pedido no cuenta.{piezas > 0 && <> <Link href="/panel/produccion">Ir a Producción</Link></>}
+      </p>
+      <div className="tabla-caja">
+        <table className="tabla-datos tabla-ped">
+          <caption className="visually-hidden">Demanda de los pedidos por atender, por artículo</caption>
+          <thead>
+            <tr>
+              <th scope="col">Artículo</th>
+              <th scope="col" className="c-num c-mov-no">Pedidos</th>
+              <th scope="col" className="c-num c-mov-no">Piden</th>
+              <th scope="col" className="c-num c-mov-no">En stock</th>
+              <th scope="col" className="c-num">Producir</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((d) => (
+              <Fragment key={d.articulo_id}>
+                <tr className={`t-cab${d.colores.length > 0 ? " t-con-sub" : ""}`} data-aviso={d.faltan > 0}>
+                  <th scope="row" className="t-nombre">
+                    {d.articulo} <span className="code muted sin-corte">({d.codigo})</span>
+                    <span className="t-meta num">{d.pedidos === 1 ? "1 pedido" : `${d.pedidos} pedidos`} · piden {d.pendiente} · stock {d.stock}</span>
+                  </th>
+                  <td className="c-num c-mov-no num">{d.pedidos}</td>
+                  <td className="c-num c-mov-no num">{d.pendiente}</td>
+                  <td className="c-num c-mov-no num">{d.stock}</td>
+                  <td className="c-num num"><strong>{d.faltan > 0 ? d.faltan : "Cubierto"}</strong></td>
+                </tr>
+                {d.colores.map((c) => (
+                  <tr key={`${d.articulo_id}|${c.color ?? ""}`} className="t-sub" data-cero={c.faltan === 0}>
+                    <th scope="row" className="t-nombre">{c.color ?? "Sin color asignado"}</th>
+                    <td className="c-mov-no" />
+                    <td className="c-num c-mov-no num">{c.pendiente}</td>
+                    <td className="c-num c-mov-no num">{c.stock}</td>
+                    <td className="c-num num">
+                      {c.faltan > 0 ? c.faltan : "Cubierto"}
+                      <span className="t-solo-movil t-sec">piden {c.pendiente} · stock {c.stock}</span>
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

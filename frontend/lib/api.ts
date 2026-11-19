@@ -9,6 +9,7 @@ import type {
   ComandoImpresora,
   ConexionImpresora,
   ConfigPublica,
+  DemandaArticulo,
   EstadoPedido,
   ExtraProduccion,
   Impresora,
@@ -226,6 +227,7 @@ export const api = {
   },
   pedidos: {
     listar: (estado?: EstadoPedido) => pedir<Pedido[]>(`/pedidos${q({ estado })}`),
+    demanda: () => pedir<DemandaArticulo[]>("/pedidos/demanda"),
     cambiarEstado: (id: string, estado: EstadoPedido) =>
       pedir<Pedido>(`/pedidos/${id}`, { metodo: "PATCH", cuerpo: { estado } }),
   },

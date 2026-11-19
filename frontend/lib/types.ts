@@ -209,6 +209,29 @@ export interface PedidoVenta {
   anulada: boolean;
 }
 
+/** Lo pendiente de un color de un artículo en los pedidos por atender. */
+export interface DemandaColor {
+  color: string | null;
+  pendiente: number;
+  stock: number;
+  faltan: number;
+}
+
+/** Lo que piden los pedidos por atender de un artículo, contra el stock. */
+export interface DemandaArticulo {
+  articulo_id: string;
+  codigo: string;
+  articulo: string;
+  /** Pedidos abiertos que lo piden. */
+  pedidos: number;
+  /** Piezas pedidas que aún no se han vendido. */
+  pendiente: number;
+  stock: number;
+  /** Lo que hay que producir para cubrirlo. */
+  faltan: number;
+  colores: DemandaColor[];
+}
+
 export interface Pedido {
   id: string;
   nombre: string;
