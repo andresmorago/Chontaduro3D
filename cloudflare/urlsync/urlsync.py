@@ -42,6 +42,8 @@ def entorno(nombre: str) -> str:
 
 
 def hostname_actual() -> str | None:
+    if not METRICAS.startswith(("http://", "https://")):  # urlopen aceptaría también file://
+        return None
     try:
         with urllib.request.urlopen(METRICAS, timeout=5) as r:
             host = json.load(r).get("hostname", "")

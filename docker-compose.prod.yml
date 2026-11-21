@@ -54,8 +54,13 @@ services:
       SPOOLMAN_URL: ${SPOOLMAN_URL:-http://spoolman:8000}
       SPOOLMAN_WEB: ${SPOOLMAN_WEB:-}
       SPOOLMAN_AUTOCREAR: ${SPOOLMAN_AUTOCREAR:-1}
+      # Redes permitidas para la IP de la impresora (CIDR separados por coma). Vacío = cualquier red
+      # privada salvo 172.16.0.0/12 (las redes internas de Docker).
+      BAMBU_REDES_PERMITIDAS: ${BAMBU_REDES_PERMITIDAS:-}
     # El usuario del anfitrión: respaldos e imágenes quedan legibles por quien administra.
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     volumes:
       - ./data/respaldos:/respaldos
       - ./data/imagenes:/media
@@ -100,6 +105,8 @@ services:
       # Solo lectura de una vez: importa el token viejo de `make bambu-login` (ya retirado), si existe.
       - ./data/nube:/nube
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       backend:
         condition: service_healthy
@@ -146,6 +153,8 @@ services:
       backend:
         condition: service_healthy
     command: npm run start
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -175,6 +184,10 @@ services:
       WORKER_NOMBRE: ${WORKER_NOMBRE:-misimpresiones}
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:-}
       WORKER_CODIGO: /cloudflare/worker/index.js
+    # Sin root: recibe el token de Cloudflare y solo necesita leer /cloudflare.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     volumes:
       - ./cloudflare:/cloudflare:ro
     depends_on:

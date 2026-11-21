@@ -32,6 +32,10 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname === "/healthz") return NextResponse.next();
 
+  // En producción sin secreto compartido la URL directa del túnel serviría la app: falla cerrado.
+  if (!SECRETO && !DESARROLLO) {
+    return new NextResponse("Servicio mal configurado.", { status: 503 });
+  }
   if (SECRETO && !iguales(req.headers.get("x-proxy-secret") ?? "", SECRETO)) {
     return new NextResponse("Acceso no permitido.", { status: 403 });
   }

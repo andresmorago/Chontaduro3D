@@ -7,8 +7,9 @@ WORKDIR /app
 
 RUN apk add --no-cache tzdata
 
-COPY package.json package-lock.json* ./
-RUN npm install
+# `npm ci` instala EXACTAMENTE lo que fija package-lock.json (builds reproducibles y auditables).
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 
