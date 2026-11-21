@@ -504,10 +504,22 @@ button.fila:hover { background: var(--color-paper-2); }
 .spool-historial__lista li { display: flex; align-items: center; gap: var(--space-sm); }
 .spool-historial .bandeja__color, .spool-pendiente .bandeja__color { width: 28px; height: 28px; }
 .aviso-linea { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); color: var(--color-accent); font-weight: 700; }
-.spool-crear { align-items: end; }
-.spool-crear .spool-gramos { flex-direction: column; align-items: flex-start; gap: var(--space-2xs); font-size: var(--text-sm); }
-.spool-crear .spool-gramos .input { width: 8rem; }
-.spool-crear .field__hint { flex-basis: 100%; }
+
+/* Formulario de un rollo (ajustar, crear): campos alineados en una rejilla, acciones en su propia fila. */
+.rollo-form { display: grid; grid-template-columns: repeat(2, minmax(0, 10rem)) minmax(0, 1fr); gap: var(--space-sm) var(--space-md); align-items: end; padding-top: var(--space-2xs); }
+.rollo-form--tres { grid-template-columns: repeat(3, minmax(0, 10rem)) minmax(0, 1fr); }
+.rollo-form__acciones, .rollo-form__confirmar, .rollo-form__nota { grid-column: 1 / -1; }
+.rollo-form__acciones, .rollo-form__confirmar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.rollo-form__confirmar { color: var(--color-accent); font-weight: 700; font-size: var(--text-sm); }
+.rollo-form__nota { margin: 0; max-width: 72ch; }
+.campo-num { display: grid; gap: var(--space-2xs); min-width: 0; }
+.campo-num__etq { font-size: var(--text-xs); font-weight: 700; line-height: 1.2; }
+.campo-num__caja { position: relative; display: block; }
+.campo-num__caja .input { width: 100%; min-height: 40px; padding-right: 2rem; text-align: right; }
+.campo-num__unidad { position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%); font-size: var(--text-sm); color: var(--color-card-ink); opacity: 0.6; pointer-events: none; }
+@media (max-width: 480px) {
+  .rollo-form, .rollo-form--tres { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* Filamento de un lote: una línea por bobina (o texto libre), con su gramaje. */
 .tabla-datos .lote-filamentos { display: flex; flex-wrap: wrap; gap: 0 var(--space-sm); }

@@ -7,7 +7,7 @@ import { api, ErrorApi } from "@/lib/api";
 import { fechaCorta, hace } from "@/lib/format";
 import { ETIQUETA_CONSUMO, colorParecido, distanciaColor, gramosTexto, muestra, normTipo } from "@/lib/impresora";
 import { mensajeDe, useCargar } from "@/lib/hooks";
-import { Actividad, AvisoAlcance, DetalleAlcance, EditarRollo, MenuMas, Repuestos, Restante } from "@/components/panel/RollosSpoolman";
+import { Actividad, AvisoAlcance, CampoNumero, DetalleAlcance, EditarRollo, MenuMas, Repuestos, Restante } from "@/components/panel/RollosSpoolman";
 import type { BobinaSpoolman, ConsumoFilamento, RanuraSpoolman } from "@/lib/types";
 
 const textoBobina = (b: BobinaSpoolman) => `${b.nombre} · ${b.restante_g != null ? gramosTexto(b.restante_g) : "sin peso"} · n.º ${b.id}`;
@@ -275,25 +275,16 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
                       </span>
                     )}
                     {creando === r.ranura && (
-                      <span className="spool-edicion spool-crear">
-                        <label className="spool-gramos">
-                          <span>Peso del rollo nuevo</span>
-                          <input className="input num" inputMode="decimal" value={form.peso} onChange={(e) => setForm({ ...form, peso: e.target.value })} />
-                          <span aria-hidden="true">g</span>
-                        </label>
-                        <label className="spool-gramos">
-                          <span>Cuánto queda</span>
-                          <input className="input num" inputMode="decimal" placeholder="lleno" value={form.restante} onChange={(e) => setForm({ ...form, restante: e.target.value })} />
-                          <span aria-hidden="true">g</span>
-                        </label>
-                        <label className="spool-gramos">
-                          <span>Precio</span>
-                          <input className="input num" inputMode="decimal" placeholder="opcional" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
-                        </label>
-                        <Boton variante="accent" pequeno cargando={ocupado === r.ranura} onClick={() => void crear(r)}>Crear y asociar</Boton>
-                        <Boton variante="ghost" pequeno onClick={() => setCreando(null)}>Cancelar</Boton>
-                        <span className="field__hint">Se crea con la marca, el material y el color que informa la impresora. El precio va en la moneda que tenga Spoolman.</span>
-                      </span>
+                      <div className="rollo-form rollo-form--tres">
+                        <CampoNumero etiqueta="Peso del rollo nuevo" valor={form.peso} alCambiar={(v) => setForm({ ...form, peso: v })} unidad="g" />
+                        <CampoNumero etiqueta="Cuánto queda" valor={form.restante} alCambiar={(v) => setForm({ ...form, restante: v })} unidad="g" placeholder="lleno" />
+                        <CampoNumero etiqueta="Precio" valor={form.precio} alCambiar={(v) => setForm({ ...form, precio: v })} placeholder="opcional" />
+                        <div className="rollo-form__acciones">
+                          <Boton variante="accent" pequeno cargando={ocupado === r.ranura} onClick={() => void crear(r)}>Crear y asociar</Boton>
+                          <Boton variante="ghost" pequeno onClick={() => setCreando(null)}>Cancelar</Boton>
+                        </div>
+                        <p className="field__hint rollo-form__nota">Se crea con la marca, el material y el color que informa la impresora. El precio va en la moneda que tenga Spoolman.</p>
+                      </div>
                     )}
                     {abierto && (
                       <span className="spool-edicion">

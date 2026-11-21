@@ -41,6 +41,19 @@ export function MenuMas({ children }: { children: ReactNode }) {
   );
 }
 
+/** Campo numérico del formulario de un rollo: etiqueta arriba, entrada con su unidad dentro y todo del mismo alto. */
+export function CampoNumero({ etiqueta, valor, alCambiar, unidad, placeholder }: { etiqueta: string; valor: string; alCambiar: (v: string) => void; unidad?: string; placeholder?: string }) {
+  return (
+    <label className="campo-num">
+      <span className="campo-num__etq">{etiqueta}</span>
+      <span className="campo-num__caja">
+        <input className="input num" inputMode="decimal" placeholder={placeholder} value={valor} onChange={(e) => alCambiar(e.target.value)} />
+        {unidad && <span className="campo-num__unidad" aria-hidden="true">{unidad}</span>}
+      </span>
+    </label>
+  );
+}
+
 const num = (t: string) => (t.trim() === "" ? undefined : Number(t.replace(",", ".")));
 
 /** Corregir un rollo sin entrar a Spoolman: cuánto queda (pesado), su precio, o archivarlo cuando se terminó. */
@@ -92,29 +105,23 @@ export function EditarRollo({ b, alTerminar, alCerrar }: { b: BobinaSpoolman; al
   }
 
   return (
-    <span className="spool-edicion spool-crear">
-      <label className="spool-gramos">
-        <span>Cuánto queda</span>
-        <input className="input num" inputMode="decimal" value={restante} onChange={(e) => setRestante(e.target.value)} />
-        <span aria-hidden="true">g</span>
-      </label>
-      <label className="spool-gramos">
-        <span>Precio del rollo</span>
-        <input className="input num" inputMode="decimal" placeholder="opcional" value={precio} onChange={(e) => setPrecio(e.target.value)} />
-      </label>
-      <Boton variante="accent" pequeno cargando={ocupado} onClick={() => void guardar()}>Guardar</Boton>
-      <Boton variante="ghost" pequeno onClick={alCerrar}>Cancelar</Boton>
-      {confirmar ? (
-        <>
-          <span className="aviso-linea">¿Rollo terminado? Sale de las listas; su chip se sigue reconociendo.</span>
+    <div className="rollo-form">
+      <CampoNumero etiqueta="Cuánto queda" valor={restante} alCambiar={setRestante} unidad="g" />
+      <CampoNumero etiqueta="Precio del rollo" valor={precio} alCambiar={setPrecio} placeholder="opcional" />
+      <div className="rollo-form__acciones">
+        <Boton variante="accent" pequeno cargando={ocupado} onClick={() => void guardar()}>Guardar</Boton>
+        <Boton variante="ghost" pequeno onClick={alCerrar}>Cancelar</Boton>
+        {!confirmar && <Boton variante="secondary" pequeno onClick={() => setConfirmar(true)}>Archivar (se terminó)…</Boton>}
+      </div>
+      {confirmar && (
+        <div className="rollo-form__confirmar" role="alert">
+          <span>¿Rollo terminado? Sale de las listas; su chip se sigue reconociendo.</span>
           <Boton variante="danger" pequeno cargando={ocupado} onClick={() => void archivar()}>Sí, archivar</Boton>
           <Boton variante="ghost" pequeno onClick={() => setConfirmar(false)}>No</Boton>
-        </>
-      ) : (
-        <Boton variante="secondary" pequeno onClick={() => setConfirmar(true)}>Archivar (se terminó)…</Boton>
+        </div>
       )}
-      <span className="field__hint">«Cuánto queda» es el filamento sin el carrete (si pesas el rollo, réstale el carrete vacío). El precio sirve para el costo de cada lote.</span>
-    </span>
+      <p className="field__hint rollo-form__nota">«Cuánto queda» es el filamento sin el carrete (si pesas el rollo, réstale el carrete vacío). El precio sirve para el costo de cada lote.</p>
+    </div>
   );
 }
 
