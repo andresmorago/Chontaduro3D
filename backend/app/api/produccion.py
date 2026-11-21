@@ -121,6 +121,15 @@ def validar_fecha(fecha: date | None, max_dias: int = DIAS_ATRAS_VENTAS) -> date
     return f
 
 
+def costo_de_linea(gramos: Decimal, bobina: Bobina | None) -> Decimal | None:
+    """Gramos × precio del rollo ÷ gramos del rollo. None si no se puede saber."""
+    if bobina is None or bobina.precio is None or not bobina.inicial_g:
+        return None
+    return (gramos * Decimal(str(bobina.precio)) / Decimal(str(bobina.inicial_g))).quantize(
+        Decimal("0.01")
+    )
+
+
 async def _salida(
     db, produccion: Produccion, bobinas: dict[int, Bobina] | None = None
 ) -> ProduccionOut:
@@ -146,6 +155,7 @@ async def _salida(
             spool_id=f.spool_id,
             bobina=bobinas[f.spool_id].nombre if f.spool_id in bobinas else None,
             color=bobinas[f.spool_id].color if f.spool_id in bobinas else None,
+            costo=f.costo,
         )  # fmt: skip
         for f in (
             await db.execute(
@@ -155,6 +165,7 @@ async def _salida(
             )
         ).scalars()
     ]
+    con_costo = [f.costo for f in filamentos if f.costo is not None]
     desde = (
         await db.execute(
             select(TrabajoImpresora.nombre).where(TrabajoImpresora.produccion_id == produccion.id)
@@ -168,6 +179,8 @@ async def _salida(
         filamentos=filamentos, minutos_impresion=produccion.minutos_impresion,
         potencia_w=produccion.potencia_w, precio_kwh=produccion.precio_kwh,
         kwh=produccion.kwh, costo_energia=produccion.costo_energia,
+        costo_filamento=sum(con_costo, Decimal(0)) if con_costo else None,
+        costo_filamento_parcial=bool(con_costo) and len(con_costo) < len(filamentos),
     )  # fmt: skip
 
 
@@ -201,8 +214,9 @@ def _poner_detalle(
     cantidades: dict[Clave, int],
     bobinas: dict[int, Bobina] | None = None,
     copias: dict[int, str] | None = None,
+    costos_previos: dict[int, tuple[Decimal, Decimal | None]] | None = None,
 ) -> None:
-    bobinas, copias = bobinas or {}, copias or {}
+    bobinas, copias, costos_previos = bobinas or {}, copias or {}, costos_previos or {}
     for n, f in enumerate(datos.filamentos):
         # Con bobina elegida, el texto es el nombre que tiene en Spoolman ahora (queda de copia).
         # Si la bobina ya no existe, se conserva la copia que el lote ya tenía.
@@ -211,10 +225,17 @@ def _poner_detalle(
             nombre = bobinas[f.spool_id].nombre[:60]
         elif not nombre and f.spool_id in copias:
             nombre = copias[f.spool_id]
+        # El costo se congela con el precio de hoy. Al corregir un lote, una línea que no cambió
+        # (misma bobina y mismos gramos) conserva el costo que ya tenía: no se reescribe el pasado.
+        previo = costos_previos.get(f.spool_id) if f.spool_id is not None else None
+        if previo is not None and previo[0] == f.gramos and previo[1] is not None:
+            costo = previo[1]
+        else:
+            costo = costo_de_linea(f.gramos, bobinas.get(f.spool_id))
         db.add(
             ProduccionFilamento(
                 produccion_id=p.id, orden=n, descripcion=nombre, gramos=f.gramos,
-                spool_id=f.spool_id,
+                spool_id=f.spool_id, costo=costo,
             )
         )  # fmt: skip
     for (articulo_id, color_id), cantidad in cantidades.items():
@@ -424,19 +445,24 @@ async def modificar(
     p.precio_kwh = precio if datos.minutos_impresion else None
     p.kwh, p.costo_energia = kwh, costo
 
-    copias = dict(
-        (
-            await db.execute(
-                select(ProduccionFilamento.spool_id, ProduccionFilamento.descripcion).where(
-                    ProduccionFilamento.produccion_id == p.id,
-                    ProduccionFilamento.spool_id.is_not(None),
-                )
+    previas = (
+        await db.execute(
+            select(
+                ProduccionFilamento.spool_id,
+                ProduccionFilamento.descripcion,
+                ProduccionFilamento.gramos,
+                ProduccionFilamento.costo,
+            ).where(
+                ProduccionFilamento.produccion_id == p.id,
+                ProduccionFilamento.spool_id.is_not(None),
             )
-        ).all()
-    )
+        )
+    ).all()
+    copias = {spool: descripcion for spool, descripcion, _, _ in previas}
+    costos_previos = {spool: (gramos, costo) for spool, _, gramos, costo in previas}
     await db.execute(delete(ProduccionItem).where(ProduccionItem.produccion_id == p.id))
     await db.execute(delete(ProduccionFilamento).where(ProduccionFilamento.produccion_id == p.id))
-    _poner_detalle(db, p, datos, cantidades, bobinas, copias)
+    _poner_detalle(db, p, datos, cantidades, bobinas, copias, costos_previos)
     for (articulo_id, color_id), d in sorted(
         delta.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))
     ):

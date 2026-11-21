@@ -6,7 +6,9 @@ import type {
   AccionConsumo,
   Articulo,
   ArticuloEntrada,
+  AlcanceTrabajo,
   BobinaSpoolman,
+  RepuestosSpoolman,
   CatalogoPublico,
   ComandoImpresora,
   ConexionImpresora,
@@ -181,6 +183,10 @@ export const api = {
   spoolman: {
     estado: () => pedir<EstadoSpoolman>("/spoolman"),
     bobinas: () => pedir<BobinaSpoolman[]>("/spoolman/bobinas"),
+    editarBobina: (id: number, d: { restante_g?: number; precio?: number; archivar?: boolean }) =>
+      pedir<BobinaSpoolman>(`/spoolman/bobinas/${id}`, { metodo: "PATCH", cuerpo: d }),
+    repuestos: () => pedir<RepuestosSpoolman>("/spoolman/repuestos"),
+    alcance: () => pedir<AlcanceTrabajo>("/spoolman/alcance"),
     ranuras: () => pedir<RanuraSpoolman[]>("/spoolman/ranuras"),
     vincular: (ranura: string, spoolId: number | null, mover = false) =>
       pedir<VinculoRanura>(`/spoolman/ranuras/${ranura}`, { metodo: "PUT", cuerpo: { spool_id: spoolId, mover } }),

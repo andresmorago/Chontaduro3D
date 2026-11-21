@@ -29,7 +29,7 @@ ESTADOS_TRABAJO = ("en_curso", "terminado", "interrumpido")
 GESTION_TRABAJO = ("pendiente", "importado", "ignorado")
 COMANDOS = (
     "pausar", "reanudar", "cancelar", "luz", "velocidad",
-    "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux",
+    "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux", "leer_rfid",
 )  # fmt: skip
 ESTADOS_COMANDO = ("pendiente", "enviado", "fallido", "vencido")
 

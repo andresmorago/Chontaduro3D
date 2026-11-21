@@ -224,6 +224,25 @@ class ClienteSpoolman:
         """Cambia (o quita, con None) la ubicación de una bobina."""
         await self._pedir("PATCH", f"/spool/{spool_id}", json={"location": ubicacion or ""})
 
+    async def editar(
+        self,
+        spool_id: int,
+        *,
+        restante: float | None = None,
+        precio: float | None = None,
+        archivada: bool | None = None,
+    ) -> Bobina:
+        """Corrige lo que queda del rollo (peso en gramos), su precio, o la archiva / desarchiva.
+        Solo se manda lo que se pide cambiar."""
+        cuerpo: dict[str, Any] = {}
+        if restante is not None:
+            cuerpo["remaining_weight"] = restante
+        if precio is not None:
+            cuerpo["price"] = precio
+        if archivada is not None:
+            cuerpo["archived"] = archivada
+        return bobina_de(await self._pedir("PATCH", f"/spool/{spool_id}", json=cuerpo))
+
     async def borrar_bobina(self, spool_id: int) -> None:
         try:
             await self._pedir("DELETE", f"/spool/{spool_id}")

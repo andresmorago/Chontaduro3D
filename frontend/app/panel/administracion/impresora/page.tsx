@@ -172,19 +172,19 @@ export default function Impresora() {
         </div>
       </section>
 
-      <section className="seccion" aria-labelledby="t-ams">
-        <h2 id="t-ams">Filamento</h2>
-        {d && conectada && (d.ams.length > 0 || d.externa) ? (
-          <ul className="bandejas">
-            {d.ams.map((b, i) => <Bandeja key={b.id} b={b} titulo={`Ranura ${i + 1}`} />)}
-            {d.externa && <Bandeja b={d.externa} titulo="Externa" />}
-          </ul>
-        ) : (
-          <p className="muted">Sin datos de filamento por ahora.</p>
-        )}
-      </section>
-
-      <SpoolmanSeccion />
+      <SpoolmanSeccion
+        impresora={{ estado: maquina, conectada, enExtrusor: d?.en_extrusor ?? null }}
+        respaldo={
+          d && conectada && (d.ams.length > 0 || d.externa) ? (
+            <ul className="bandejas">
+              {d.ams.map((b, i) => <Bandeja key={b.id} b={b} titulo={`Ranura ${i + 1}`} />)}
+              {d.externa && <Bandeja b={d.externa} titulo="Externa" />}
+            </ul>
+          ) : (
+            <p className="muted">Sin datos de filamento por ahora.</p>
+          )
+        }
+      />
 
       <section className="seccion" aria-labelledby="t-trabajos">
         <h2 id="t-trabajos">Trabajos</h2>

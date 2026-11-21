@@ -23,11 +23,15 @@ from app.models import (
 )
 from app.schemas.spoolman import (
     BobinaOut,
+    AlcanceLineaOut,
+    AlcanceOut,
     ConsumoAccionIn,
     ConsumoOut,
     CrearBobinaIn,
+    EditarBobinaIn,
     EstadoSpoolmanOut,
     RanuraOut,
+    RepuestosOut,
     VincularIn,
     VinculoOut,
 )
@@ -41,7 +45,7 @@ from app.spoolman.cliente import (
 )
 from app.spoolman.consumo import titulo_ranura
 from app.spoolman.dependencia import cliente_spoolman
-from app.spoolman.registro import crear_desde_bandeja
+from app.spoolman.registro import PREFIJO_UBICACION, crear_desde_bandeja
 from app.spoolman.salida import consumo_out
 
 router = APIRouter(prefix="/spoolman", tags=["spoolman"], dependencies=PROTEGIDO)
@@ -49,12 +53,17 @@ router = APIRouter(prefix="/spoolman", tags=["spoolman"], dependencies=PROTEGIDO
 Cliente = Annotated[ClienteSpoolman, Depends(cliente_spoolman)]
 LATIDO_MAX_S = 40
 POR_RESOLVER = ("sin_bobina", "revisar")
+# Por debajo de esto un rollo «queda poco»; y un trabajo «va justo» si le sobran menos gramos que esto
+# (los gramos del .3mf son estimados del slicer y el peso de Spoolman no es una medición exacta).
+BAJO_G = 150
+JUSTO_G = 15
 
 
 def _bobina_out(b: Bobina) -> BobinaOut:
     return BobinaOut(
         id=b.id, nombre=b.nombre, material=b.material, color=b.color,
-        restante_g=b.restante_g, inicial_g=b.inicial_g, ubicacion=b.ubicacion,
+        restante_g=b.restante_g, inicial_g=b.inicial_g, ubicacion=b.ubicacion, precio=b.precio,
+        bajo=b.restante_g is not None and b.restante_g < BAJO_G,
     )  # fmt: skip
 
 
@@ -102,6 +111,113 @@ async def estado(db: DB) -> EstadoSpoolmanOut:
 @router.get("/bobinas", response_model=list[BobinaOut])
 async def bobinas(cliente: Cliente) -> list[BobinaOut]:
     return [_bobina_out(b) for b in await _llamar(cliente.bobinas())]
+
+
+@router.patch("/bobinas/{spool_id}", response_model=BobinaOut)
+async def editar_bobina(
+    spool_id: int, datos: EditarBobinaIn, db: DB, cliente: Cliente, usuario: Admin
+) -> BobinaOut:
+    """Corrige un rollo sin entrar a Spoolman: cuánto queda (pesado o estimado), su precio, o lo
+    archiva cuando se terminó. Solo cambia lo que se manda."""
+    if datos.restante_g is None and datos.precio is None and datos.archivar is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No hay nada que cambiar.")
+    b = await _llamar(
+        cliente.editar(
+            spool_id,
+            restante=float(datos.restante_g) if datos.restante_g is not None else None,
+            precio=float(datos.precio) if datos.precio is not None else None,
+            archivada=datos.archivar,
+        )
+    )
+    auditoria.registrar(
+        db, "spoolman_bobina_editada", usuario_id=usuario.id,
+        detalle={
+            "spool_id": spool_id,
+            "restante_g": float(datos.restante_g) if datos.restante_g is not None else None,
+            "precio": float(datos.precio) if datos.precio is not None else None,
+            "archivar": datos.archivar,
+        },
+    )  # fmt: skip
+    await db.commit()
+    return _bobina_out(b)
+
+
+async def _bobinas_en_el_ams(db, bandejas: list[dict], todas: list[Bobina]) -> set[int]:
+    """Números de las bobinas que están puestas ahora en alguna ranura."""
+    spools = {b.id: b for b in todas}
+    por_tag = {t: b for b in todas for t in b.tags}
+    filas = {r.ranura: r for r in (await db.execute(select(RanuraBobina))).scalars()}
+    vinculos = (_vinculo(b, spools, por_tag, filas.get(b["id"])) for b in bandejas)
+    return {v.bobina.id for v in vinculos if v.bobina is not None}
+
+
+@router.get("/repuestos", response_model=RepuestosOut)
+async def repuestos(db: DB, cliente: Cliente) -> RepuestosOut:
+    """Los rollos que no están en el AMS (los de repuesto), con los más bajos primero."""
+    todas = await _llamar(cliente.bobinas())
+    en_ams = await _bobinas_en_el_ams(db, await _bandejas_actuales(db), todas)
+    sueltas = [
+        b for b in todas
+        if b.id not in en_ams and not (b.ubicacion or "").startswith(PREFIJO_UBICACION)
+    ]  # fmt: skip
+    # Sin peso conocido al final: no se sabe si queda poco.
+    sueltas.sort(key=lambda b: (b.restante_g is None, b.restante_g or 0, b.nombre))
+    return RepuestosOut(umbral_g=BAJO_G, bobinas=[_bobina_out(b) for b in sueltas])
+
+
+@router.get("/alcance", response_model=AlcanceOut)
+async def alcance(db: DB, cliente: Cliente) -> AlcanceOut:
+    """¿Alcanza el filamento de cada ranura para el trabajo que se está imprimiendo?
+
+    Compara los gramos de cada filamento del .3mf con lo que queda en la bobina de la ranura que
+    le corresponde por tipo y color. Spoolman descuenta al terminar, así que lo que queda allí es
+    lo de antes del trabajo: por eso se compara contra los gramos completos. Con duda, no opina."""
+    trabajo = (
+        await db.execute(
+            select(TrabajoImpresora)
+            .where(TrabajoImpresora.estado == "en_curso")
+            .order_by(TrabajoImpresora.inicio_en.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if trabajo is None:
+        return AlcanceOut()
+    filamentos = [f for f in (trabajo.filamentos or []) if float(f.get("gramos") or 0) > 0]
+    if not filamentos:
+        return AlcanceOut(trabajo=trabajo.nombre, leyendo=True)
+
+    bandejas = await _bandejas_actuales(db)
+    todas = await _llamar(cliente.bobinas())
+    spools = {b.id: b for b in todas}
+    por_tag = {t: b for b in todas for t in b.tags}
+    filas = {r.ranura: r for r in (await db.execute(select(RanuraBobina))).scalars()}
+
+    lineas: list[AlcanceLineaOut] = []
+    for f, emp in zip(filamentos, asignacion.emparejar(filamentos, bandejas), strict=True):
+        gramos = float(f["gramos"])
+        base = {"tipo": f.get("tipo"), "color": f.get("color"), "gramos": gramos}
+        if emp.bandeja is None:
+            lineas.append(AlcanceLineaOut(**base, estado="dudoso"))
+            continue
+        b = emp.bandeja
+        bobina = _vinculo(b, spools, por_tag, filas.get(b["id"])).bobina
+        donde = {"ranura": b["id"], "ranura_nombre": titulo_ranura(b["id"])}
+        if bobina is None:
+            lineas.append(AlcanceLineaOut(**base, **donde, estado="sin_bobina"))
+        elif bobina.restante_g is None:
+            lineas.append(AlcanceLineaOut(**base, **donde, bobina=bobina.nombre, estado="sin_peso"))
+        else:
+            sobra = bobina.restante_g - gramos
+            estado = "no_alcanza" if sobra < 0 else "justo" if sobra < JUSTO_G else "alcanza"
+            lineas.append(
+                AlcanceLineaOut(
+                    **base, **donde, bobina=bobina.nombre, restante_g=bobina.restante_g,
+                    estado=estado,
+                )
+            )  # fmt: skip
+    return AlcanceOut(
+        trabajo=trabajo.nombre, lineas=lineas, alerta=any(x.estado == "no_alcanza" for x in lineas)
+    )
 
 
 # --------------------------------------------------------------------------- ranuras

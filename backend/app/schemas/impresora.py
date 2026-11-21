@@ -40,6 +40,8 @@ class DatosImpresoraOut(Salida):
     ventilador_pieza: int | None = None
     ventilador_aux: int | None = None
     luz: Literal["on", "off"] | None = None
+    # Filamento cargado en el cabezal (impide releer el chip de una bobina); None = no lo informa.
+    en_extrusor: bool | None = None
     wifi: str | None = None
     error: int = 0
     alertas: int = 0
@@ -69,7 +71,7 @@ class ImpresoraOut(Salida):
 class ComandoIn(Entrada):
     comando: Literal[
         "pausar", "reanudar", "cancelar", "luz", "velocidad",
-        "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux",
+        "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux", "leer_rfid",
     ]  # fmt: skip
     valor: str | None = Field(default=None, max_length=3)
 

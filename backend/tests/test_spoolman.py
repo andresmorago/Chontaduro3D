@@ -54,10 +54,10 @@ class FalsoSpoolman:
         self._siguiente = 100
 
     def agregar(self, id_, nombre="Bambu Lab · PLA Basic", color=ROJO, restante=800.0, tags=(),
-                proveedor="Bambu Lab", ubicacion=None):  # fmt: skip
+                proveedor="Bambu Lab", ubicacion=None, precio=60000.0):  # fmt: skip
         self.bobinas_[id_] = Bobina(
             id=id_, nombre=nombre, material="PLA", color=color, restante_g=restante,
-            inicial_g=1000.0, precio=60000.0, ubicacion=ubicacion, archivada=False,
+            inicial_g=1000.0, precio=precio, ubicacion=ubicacion, archivada=False,
             tags=tuple(t.upper() for t in tags), proveedor=proveedor,
         )  # fmt: skip
         return self
@@ -138,6 +138,21 @@ class FalsoSpoolman:
 
     async def borrar_bobina(self, spool_id):
         self.bobinas_.pop(spool_id, None)
+
+    async def editar(self, spool_id, *, restante=None, precio=None, archivada=None):
+        self._vivo()
+        b = await self.bobina(spool_id)
+        cambios = {}
+        if restante is not None:
+            cambios["restante_g"] = restante
+        if precio is not None:
+            cambios["precio"] = precio
+        nueva = Bobina(**{**b.__dict__, **cambios, "archivada": bool(archivada)})
+        if archivada:
+            self.bobinas_.pop(spool_id)  # una archivada deja de salir en la lista normal
+        else:
+            self.bobinas_[spool_id] = nueva
+        return nueva
 
     async def ubicar(self, spool_id, ubicacion):
         self._vivo()
@@ -1152,3 +1167,102 @@ async def test_una_bobina_sin_chip_vinculada_a_mano_tambien_tiene_su_ubicacion(s
     await ciclo_ubicaciones(s)
     await ciclo_ubicaciones(s)
     assert spool.bobinas_[5].ubicacion == "AMS · Ranura 3"
+
+
+# ============================================== corregir rollos, repuestos y «¿alcanza?»
+async def test_corregir_un_rollo_desde_el_panel(admin, con_spoolman):
+    con_spoolman.agregar(7, restante=800.0, precio=60000.0)
+    r = await admin.patch("/api/spoolman/bobinas/7", json={"restante_g": 612.5, "precio": 55000})
+    assert r.status_code == 200, r.text
+    assert (r.json()["restante_g"], r.json()["precio"]) == (612.5, 55000.0)
+    assert con_spoolman.bobinas_[7].restante_g == 612.5
+    # Solo cambia lo que se manda.
+    r = await admin.patch("/api/spoolman/bobinas/7", json={"restante_g": 100})
+    assert r.json()["precio"] == 55000.0 and r.json()["bajo"] is True
+
+
+async def test_archivar_un_rollo_terminado_lo_saca_de_las_listas(admin, con_spoolman):
+    con_spoolman.agregar(7).agregar(8)
+    r = await admin.patch("/api/spoolman/bobinas/7", json={"archivar": True})
+    assert r.status_code == 200, r.text
+    assert [b["id"] for b in (await admin.get("/api/spoolman/bobinas")).json()] == [8]
+
+
+async def test_corregir_un_rollo_valida_y_avisa(admin, con_spoolman):
+    con_spoolman.agregar(7)
+    assert (await admin.patch("/api/spoolman/bobinas/7", json={})).status_code == 422
+    assert (await admin.patch("/api/spoolman/bobinas/7", json={"restante_g": -1})).status_code == 422
+    assert (await admin.patch("/api/spoolman/bobinas/99", json={"restante_g": 5})).status_code == 404
+    con_spoolman.caido = True
+    assert (await admin.patch("/api/spoolman/bobinas/7", json={"restante_g": 5})).status_code == 502
+
+
+async def test_corregir_un_rollo_exige_sesion(publico, con_spoolman):
+    con_spoolman.agregar(7)
+    r = await publico.patch("/api/spoolman/bobinas/7", json={"restante_g": 5})
+    assert r.status_code in (401, 403)
+
+
+async def test_repuestos_son_los_rollos_fuera_del_ams_con_los_bajos_primero(admin, con_spoolman, db):
+    con_spoolman.agregar(7, tags=[TAG], restante=900)  # en la ranura 1 (chip)
+    con_spoolman.agregar(8, ubicacion="AMS · Ranura 2", restante=700)  # el servicio lo ubicó allí
+    con_spoolman.agregar(9, nombre="Repuesto gastado", restante=90)
+    con_spoolman.agregar(10, nombre="Repuesto nuevo", restante=1000)
+    con_spoolman.agregar(11, nombre="Sin peso", restante=None)
+    await poner_ams(db, bandeja("1", tag=TAG))
+    r = (await admin.get("/api/spoolman/repuestos")).json()
+    assert r["umbral_g"] == 150
+    assert [b["id"] for b in r["bobinas"]] == [9, 10, 11]
+    assert [b["bajo"] for b in r["bobinas"]] == [True, False, False]
+
+
+async def test_alcance_sin_trabajo_o_sin_gramos_no_opina(admin, con_spoolman, db):
+    assert (await admin.get("/api/spoolman/alcance")).json() == {
+        "trabajo": None, "leyendo": False, "lineas": [], "alerta": False,
+    }  # fmt: skip
+    t = await crear_trabajo(db, nombre="Recién empezado", estado="en_curso")
+    t.filamentos = None  # el archivo aún no se leyó
+    await db.commit()
+    r = (await admin.get("/api/spoolman/alcance")).json()
+    assert r["trabajo"] == "Recién empezado" and r["leyendo"] is True and r["lineas"] == []
+
+
+async def test_alcance_avisa_si_el_rollo_no_alcanza(admin, con_spoolman, db):
+    con_spoolman.agregar(7, tags=[TAG], restante=80.0).agregar(8, restante=500.0)
+    db.add(RanuraBobina(ranura="2", spool_id=8, tipo="PLA", color=AZUL))
+    await db.commit()
+    await poner_ams(db, bandeja("1", color=ROJO, tag=TAG), bandeja("2", color=AZUL))
+    await crear_trabajo(
+        db, nombre="Maceta", estado="en_curso",
+        filamentos=[{"tipo": "PLA", "color": ROJO, "gramos": 100.0},
+                    {"tipo": "PLA", "color": AZUL, "gramos": 40.0}],
+    )  # fmt: skip
+    r = (await admin.get("/api/spoolman/alcance")).json()
+    assert r["alerta"] is True
+    rojo, azul = r["lineas"]
+    assert (rojo["estado"], rojo["ranura"], rojo["restante_g"]) == ("no_alcanza", "1", 80.0)
+    assert rojo["gramos"] == 100.0 and rojo["ranura_nombre"] == "Ranura 2"
+    assert azul["estado"] == "alcanza" and azul["ranura"] == "2"
+
+
+async def test_alcance_distingue_justo_sin_bobina_y_dudoso(admin, con_spoolman, db):
+    con_spoolman.agregar(7, tags=[TAG], restante=105.0)
+    await poner_ams(db, bandeja("1", color=ROJO, tag=TAG), bandeja("2", color=AZUL, tag="1111222233334444"))
+    await crear_trabajo(db, estado="en_curso", filamentos=[{"tipo": "PLA", "color": ROJO, "gramos": 100.0}])
+    (linea,) = (await admin.get("/api/spoolman/alcance")).json()["lineas"]
+    assert linea["estado"] == "justo"  # sobran 5 g: menos del margen
+
+    # La ranura azul tiene chip pero aún no está en Spoolman: no se sabe cuánto queda.
+    await db.execute(text("DELETE FROM trabajos_impresora"))
+    await db.commit()
+    await crear_trabajo(db, estado="en_curso", filamentos=[{"tipo": "PLA", "color": AZUL, "gramos": 30.0}])
+    (linea,) = (await admin.get("/api/spoolman/alcance")).json()["lineas"]
+    assert linea["estado"] == "sin_bobina" and linea["ranura"] == "2"
+
+    # Dos ranuras igual de parecidas: no adivina, y no da alerta.
+    await db.execute(text("DELETE FROM trabajos_impresora"))
+    await db.commit()
+    await poner_ams(db, bandeja("1", color=ROJO), bandeja("2", color=ROJO))
+    await crear_trabajo(db, estado="en_curso", filamentos=[{"tipo": "PLA", "color": ROJO, "gramos": 30.0}])
+    r = (await admin.get("/api/spoolman/alcance")).json()
+    assert r["lineas"][0]["estado"] == "dudoso" and r["alerta"] is False

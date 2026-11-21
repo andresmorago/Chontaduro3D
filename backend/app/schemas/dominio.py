@@ -191,6 +191,8 @@ class FilamentoOut(Salida):
     # respondió: entonces vale `descripcion`, el nombre que tenía al guardarse).
     bobina: str | None = None
     color: str | None = None
+    # Costo de esta línea, congelado al guardar el lote (None si no hay bobina con precio).
+    costo: Numero | None = None
 
 
 class ProduccionOut(Salida):
@@ -208,6 +210,10 @@ class ProduccionOut(Salida):
     precio_kwh: Numero | None = None
     kwh: Numero | None = None
     costo_energia: Numero | None = None
+    # Filamento del lote: suma de las líneas con costo. «Parcial» = alguna línea no tiene precio
+    # (texto libre o bobina sin precio), así que el costo real es mayor.
+    costo_filamento: Numero | None = None
+    costo_filamento_parcial: bool = False
     # Nombre del trabajo de la impresora de donde salió este lote (si se importó).
     desde_impresora: str | None = None
 

@@ -230,6 +230,7 @@ export default function Produccion() {
                     p.minutos_impresion != null ? tiempoLargo(p.minutos_impresion) : null,
                     p.kwh != null ? kwhTexto(p.kwh) : null,
                     p.costo_energia != null ? dinero(p.costo_energia) : null,
+                    p.costo_filamento != null ? `filamento ${p.costo_filamento_parcial ? "≥ " : ""}${dinero(p.costo_filamento)}` : null,
                   ].filter(Boolean).join(" · ");
                   const notas = [p.nota, !p.afecta_inventario ? "solo historial" : null, p.desde_impresora ? "de la impresora" : null].filter(Boolean).join(" · ");
                   return (
@@ -250,7 +251,14 @@ export default function Produccion() {
                         {notas && <span className="t-sec">{notas}</span>}
                         <span className="t-meta num">{resumen}</span>
                       </th>
-                      <td className="c-num c-mov-no num">{p.gramos_total != null ? gramos(p.gramos_total) : "—"}</td>
+                      <td className="c-num c-mov-no num">
+                        {p.gramos_total != null ? gramos(p.gramos_total) : "—"}
+                        {p.costo_filamento != null && (
+                          <span className="t-sec" title={p.costo_filamento_parcial ? "A alguna línea le falta el precio del rollo: el costo real es mayor." : "Costo del filamento, con el precio del rollo al guardar el lote."}>
+                            {p.costo_filamento_parcial ? "≥ " : ""}{dinero(p.costo_filamento)}
+                          </span>
+                        )}
+                      </td>
                       <td className="c-num c-mov-no num">{p.minutos_impresion != null ? tiempoLargo(p.minutos_impresion) : "—"}</td>
                       <td className="c-num c-mov-no num">
                         {p.kwh != null ? kwhTexto(p.kwh) : "—"}

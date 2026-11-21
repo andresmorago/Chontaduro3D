@@ -106,6 +106,8 @@ export interface Filamento {
   spool_id?: number | null;
   /** Nombre y color ACTUALES de esa bobina en Spoolman; si faltan, vale `descripcion`. */
   bobina?: string | null;
+  /** Costo de la línea, congelado al guardar el lote (null si no hay bobina con precio). */
+  costo?: number | null;
   color?: string | null;
 }
 
@@ -130,6 +132,9 @@ export interface Produccion {
   precio_kwh: number | null;
   kwh: number | null;
   costo_energia: number | null;
+  /** Filamento del lote: suma de las líneas con costo; «parcial» = a alguna línea le falta el precio. */
+  costo_filamento: number | null;
+  costo_filamento_parcial: boolean;
   desde_impresora: string | null;
 }
 
@@ -354,6 +359,8 @@ export interface DatosImpresora {
   ventilador_pieza: number | null;
   ventilador_aux: number | null;
   luz: "on" | "off" | null;
+  /** Filamento cargado en el cabezal (impide releer un chip); null si la impresora no lo informa. */
+  en_extrusor: boolean | null;
   wifi: string | null;
   error: number;
   alertas: number;
@@ -409,7 +416,7 @@ export interface PasoNube {
   tfa_key: string | null;
 }
 
-export type ComandoImpresora = "pausar" | "reanudar" | "cancelar" | "luz" | "velocidad" | "temp_boquilla" | "temp_cama" | "ventilador_pieza" | "ventilador_aux";
+export type ComandoImpresora = "pausar" | "reanudar" | "cancelar" | "luz" | "velocidad" | "temp_boquilla" | "temp_cama" | "ventilador_pieza" | "ventilador_aux" | "leer_rfid";
 
 export interface OrdenImpresora {
   id: number;
@@ -470,6 +477,34 @@ export interface BobinaSpoolman {
   restante_g: number | null;
   inicial_g: number | null;
   ubicacion: string | null;
+  precio: number | null;
+  /** Queda menos del umbral: hay que ir pensando en otro rollo. */
+  bajo: boolean;
+}
+
+export interface RepuestosSpoolman {
+  umbral_g: number;
+  bobinas: BobinaSpoolman[];
+}
+
+export type EstadoAlcance = "alcanza" | "justo" | "no_alcanza" | "dudoso" | "sin_bobina" | "sin_peso";
+
+export interface LineaAlcance {
+  tipo: string | null;
+  color: string | null;
+  gramos: number;
+  ranura: string | null;
+  ranura_nombre: string | null;
+  bobina: string | null;
+  restante_g: number | null;
+  estado: EstadoAlcance;
+}
+
+export interface AlcanceTrabajo {
+  trabajo: string | null;
+  leyendo: boolean;
+  lineas: LineaAlcance[];
+  alerta: boolean;
 }
 
 export interface VinculoRanura {

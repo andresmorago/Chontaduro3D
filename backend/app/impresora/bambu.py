@@ -32,6 +32,8 @@ LIMITES = {
 }
 BOQUILLA_MIN = 150
 SIN_RESPUESTA_S = 10  # tras esto sin conectar, se informa «red» aunque el sistema siga esperando
+# Ranuras del AMS que se pueden releer: 4 por unidad (el id de la ranura ya es unidad × 4 + posición).
+RANURA_RFID_MAX = 15
 NOMBRES_NUMERICOS = {
     "temp_boquilla": "La temperatura de la boquilla",
     "temp_cama": "La temperatura de la cama",
@@ -55,6 +57,17 @@ def validar_numero(comando: str, valor: str | None) -> int:
 
 
 def _entero(v: Any) -> int | None:
+def validar_ranura_rfid(valor: str | None) -> int:
+    """El número de ranura (0–15) cuyo chip se va a releer, o ValueError con un mensaje claro."""
+    try:
+        n = int(str(valor).strip())
+    except (TypeError, ValueError):
+        raise ValueError("La ranura debe ser un número entero.") from None
+    if not 0 <= n <= RANURA_RFID_MAX:
+        raise ValueError(f"La ranura va de 0 a {RANURA_RFID_MAX}.")
+    return n
+
+
     try:
         return int(float(v))
     except (TypeError, ValueError):
@@ -159,6 +172,9 @@ def construir_orden(
         if valor not in ("on", "off"):
             raise ValueError("La luz admite «on» u «off».")
         return {
+        # ¿Hay filamento cargado en el cabezal? (hw_switch_state: 1 sí, 0 no). Con filamento puesto el
+        # AMS no puede releer un chip. None = la impresora no lo informa.
+        "en_extrusor": {1: True, 0: False}.get(_entero(raw.get("hw_switch_state"))),
             "system": {
                 "sequence_id": sec, "command": "ledctrl", "led_node": nodo_luz,
                 "led_mode": valor, "led_on_time": 500, "led_off_time": 500,
@@ -198,6 +214,13 @@ def mezclar_estado(base: Any, nuevo: Any) -> Any:
             salida[k] = mezclar_estado(base[k], v) if k in base else v
         return salida
     if (
+    if comando == "leer_rfid":
+        # Lo mismo que el botón «actualizar» de Bambu Studio en cada ranura del AMS (impresoras A1/P1/X1):
+        # M620 R<unidad × 4 + ranura> hace que el AMS vuelva a leer el chip de esa bobina.
+        return {
+            "print": {"sequence_id": sec, "command": "gcode_line",
+                      "param": f"M620 R{validar_ranura_rfid(valor)}\n"}
+        }  # fmt: skip
         isinstance(base, list) and isinstance(nuevo, list) and base and nuevo
         and all(isinstance(x, dict) and "id" in x for x in (*base, *nuevo))
     ):  # fmt: skip

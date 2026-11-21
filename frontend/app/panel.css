@@ -439,10 +439,55 @@ button.fila:hover { background: var(--color-paper-2); }
 .spool-bloque { display: grid; gap: var(--space-sm); }
 .spool-sub { margin: 0; font-size: var(--text-md); display: flex; align-items: center; gap: var(--space-xs); }
 .spool-ranuras, .spool-pendientes, .spool-historial__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-sm); }
-.spool-ranura, .spool-pendiente { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm) var(--space-md); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); background: var(--color-paper-3); }
-.spool-ranura--uso { box-shadow: 0 0 0 3px var(--color-focus); }
-.spool-ranura__texto { display: grid; gap: var(--space-2xs); min-width: 0; flex: 1 1 260px; }
-.spool-ranura__bobina { overflow-wrap: anywhere; }
+.spool-pendiente { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm) var(--space-md); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); background: var(--color-paper-3); }
+
+/* Fila de una ranura o de un repuesto: muestra · nombre · cuánto queda · acciones. Una sola línea en escritorio. */
+.spool-ranura { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 11rem) auto; align-items: center; gap: var(--space-2xs) var(--space-sm); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-control); background: var(--color-paper-3); }
+.spool-ranura--uso { box-shadow: 0 0 0 2px var(--color-focus); }
+.spool-ranura--falta { box-shadow: 0 0 0 2px var(--color-error); }
+.spool-ranura .bandeja__color { width: 20px; height: 20px; }
+.spool-ranura__texto { display: grid; gap: 1px; min-width: 0; }
+.spool-ranura__titulo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); font-size: var(--text-sm); line-height: 1.25; }
+.spool-ranura__sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); font-size: var(--text-xs); line-height: 1.3; overflow-wrap: anywhere; }
+.spool-ranura__consumo { min-width: 0; }
+.spool-ranura__acciones { display: flex; align-items: center; gap: var(--space-2xs); justify-self: end; }
+.spool-ranura__extra { grid-column: 1 / -1; display: grid; gap: var(--space-xs); padding: var(--space-2xs) 0 var(--space-2xs) calc(20px + var(--space-sm)); }
+.spool-ranura .btn--small { min-height: 32px; padding: 0 var(--space-sm); font-size: var(--text-xs); }
+@media (pointer: coarse) { .spool-ranura .btn--small { min-height: 40px; } }
+@media (max-width: 720px) {
+  .spool-ranura { grid-template-columns: 20px minmax(0, 1fr); }
+  .spool-ranura__consumo { grid-column: 2; }
+  .spool-ranura__acciones { grid-column: 2; justify-self: start; }
+  .spool-ranura__extra { padding-left: 0; }
+}
+
+/* Cuánto queda: cifra y una barra fina de un solo color (verde menta; roja si queda poco). */
+.restante { display: grid; grid-template-columns: 1fr; gap: 3px; font-size: var(--text-xs); line-height: 1.25; }
+.restante__cifra { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2xs); }
+.restante__cifra strong { font-size: var(--text-sm); }
+.restante__barra { display: block; height: 4px; border-radius: var(--radius-pill); background: color-mix(in oklab, var(--color-ink) 22%, transparent); overflow: hidden; }
+.restante__barra > span { display: block; height: 100%; border-radius: inherit; background: var(--color-tint-3); }
+.restante--bajo .restante__barra > span { background: var(--color-error); }
+.restante .pildora { justify-self: start; }
+
+/* Etiqueta pequeña en línea (no se estira aunque su contenedor sea una rejilla). */
+.pildora { display: inline-flex; align-items: center; width: fit-content; padding: 0 var(--space-xs); border-radius: var(--radius-pill); font-size: 0.75rem; font-weight: 700; line-height: 1.5; white-space: nowrap; background: color-mix(in oklab, var(--color-ink) 16%, transparent); color: var(--color-ink); }
+.pildora--ok { background: var(--color-tint-3); color: var(--color-card-ink); }
+.pildora--aviso { background: var(--color-tint-1); color: var(--color-card-ink); }
+
+.menu-mas { position: relative; }
+.menu-mas > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; }
+.menu-mas > summary::-webkit-details-marker { display: none; }
+.menu-mas__lista { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; display: grid; gap: 2px; min-width: 12rem; padding: var(--space-2xs); border-radius: var(--radius-control); background: var(--color-paper-2); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
+.menu-mas__lista .btn { justify-content: flex-start; width: 100%; }
+
+.spool-ayuda { font-size: var(--text-xs); color: var(--color-muted); }
+.spool-ayuda summary { cursor: pointer; width: fit-content; }
+.spool-ayuda p { margin: var(--space-2xs) 0 0; max-width: 60ch; }
+
+.spool-trabajo { display: grid; gap: var(--space-2xs); font-size: var(--text-sm); }
+.spool-trabajo p { margin: 0; }
+.spool-alcance-linea { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); font-size: var(--text-xs); }
 .spool-ranura__acciones, .spool-edicion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
 .spool-edicion .select { flex: 1 1 240px; min-width: 0; }
 .spool-pendiente { display: grid; }
@@ -454,7 +499,7 @@ button.fila:hover { background: var(--color-paper-2); }
 .spool-historial summary { cursor: pointer; font-weight: 700; }
 .spool-historial__lista { margin-top: var(--space-sm); }
 .spool-historial__lista li { display: flex; align-items: center; gap: var(--space-sm); }
-.spool-historial .bandeja__color, .spool-ranura .bandeja__color, .spool-pendiente .bandeja__color { width: 28px; height: 28px; }
+.spool-historial .bandeja__color, .spool-pendiente .bandeja__color { width: 28px; height: 28px; }
 .aviso-linea { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); color: var(--color-accent); font-weight: 700; }
 .spool-crear { align-items: end; }
 .spool-crear .spool-gramos { flex-direction: column; align-items: flex-start; gap: var(--space-2xs); font-size: var(--text-sm); }

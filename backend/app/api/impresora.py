@@ -15,7 +15,7 @@ from app.config import settings
 from app.core import auditoria
 from app.core.deps import DB, PROTEGIDO, Admin
 from app.core.tokens import ahora
-from app.impresora.bambu import LIMITES, VELOCIDADES, validar_numero
+from app.impresora.bambu import LIMITES, VELOCIDADES, validar_numero, validar_ranura_rfid
 from app.models import ComandoImpresora, ConsumoFilamento, EstadoImpresora, TrabajoImpresora
 from app.schemas.impresora import (
     ComandoIn,
@@ -79,6 +79,8 @@ _REQUIERE = {
     "reanudar": ("pausada",),
     "cancelar": ("imprimiendo", "pausada", "preparando"),
     "velocidad": ("imprimiendo", "pausada"),
+    # Releer un chip mueve el AMS: solo con la impresora quieta.
+    "leer_rfid": ("lista", "terminada", "fallida"),
 }
 _NOMBRE = {
     "pausar": "Pausar",
@@ -86,6 +88,7 @@ _NOMBRE = {
     "cancelar": "Cancelar impresión",
     "luz": "Luz",
     "velocidad": "Velocidad",
+    "leer_rfid": "Releer el chip",
     "temp_boquilla": "La temperatura de la boquilla",
     "temp_cama": "La temperatura de la cama",
     "ventilador_pieza": "El ventilador de la pieza",
@@ -106,6 +109,11 @@ async def ordenar(datos: ComandoIn, db: DB, usuario: Admin) -> ComandoOut:
             validar_numero(datos.comando, datos.valor)
         except ValueError as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    elif datos.comando == "leer_rfid":
+        try:
+            validar_ranura_rfid(datos.valor)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
     elif datos.comando not in ("luz", "velocidad") and datos.valor is not None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Esa orden no lleva valor.")
 
@@ -122,6 +130,20 @@ async def ordenar(datos: ComandoIn, db: DB, usuario: Admin) -> ComandoOut:
             status.HTTP_409_CONFLICT,
             f"{_NOMBRE[datos.comando]} no aplica ahora: la impresora está «{estado}».",
         )
+
+    if datos.comando == "leer_rfid":
+        d = fila.datos or {}
+        ranura = str(validar_ranura_rfid(datos.valor))
+        if ranura not in {str(b.get("id")) for b in d.get("ams") or []}:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Esa ranura no existe en el AMS que informa la impresora."
+            )
+        if d.get("en_extrusor") is True:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede releer el chip: hay filamento cargado en el cabezal. Descárgalo "
+                "(retráelo al AMS) y vuelve a intentarlo.",
+            )
 
     # Dos clics seguidos no mandan dos órdenes iguales.
     reciente = (

@@ -136,3 +136,46 @@ async def test_el_listado_pide_los_nombres_a_spoolman_una_sola_vez(admin, spool,
     monkeypatch.setattr(spool, "bobinas", contada)
     assert len(await listado(admin)) == 3
     assert len(llamadas) == 1
+
+
+# ----------------------------------------------------------------- costo del filamento
+async def test_el_costo_del_filamento_sale_del_precio_del_rollo(admin, spool):
+    spool.agregar(7, precio=60000.0).agregar(8, nombre="Sunlu", precio=40000.0)  # 60 y 40 por g
+    r = await lote(admin, [{"spool_id": 7, "gramos": 24.5}, {"spool_id": 8, "gramos": 10}])
+    assert r.status_code == 201, r.text
+    cuerpo = r.json()
+    assert [f["costo"] for f in cuerpo["filamentos"]] == [1470.0, 400.0]
+    assert cuerpo["costo_filamento"] == 1870.0 and cuerpo["costo_filamento_parcial"] is False
+
+
+async def test_si_una_linea_no_tiene_precio_el_costo_es_parcial(admin, spool):
+    spool.agregar(7, precio=60000.0).agregar(8, precio=None)
+    r = await lote(
+        admin,
+        [{"spool_id": 7, "gramos": 10}, {"spool_id": 8, "gramos": 10}, {"descripcion": "PLA", "gramos": 5}],
+    )
+    cuerpo = r.json()
+    assert [f["costo"] for f in cuerpo["filamentos"]] == [600.0, None, None]
+    assert cuerpo["costo_filamento"] == 600.0 and cuerpo["costo_filamento_parcial"] is True
+    sin = await lote(admin, [{"descripcion": "PLA Fucsia", "gramos": 10}])
+    assert sin.json()["costo_filamento"] is None and sin.json()["costo_filamento_parcial"] is False
+
+
+async def test_el_costo_se_congela_aunque_el_precio_cambie_despues(admin, spool):
+    from app.spoolman.cliente import Bobina
+
+    spool.agregar(7, precio=60000.0)
+    a = await crear_articulo(admin, nombre="Maceta")
+    creado = (await lote(admin, [{"spool_id": 7, "gramos": 10}], articulo=a)).json()
+    viejo = spool.bobinas_[7]
+    spool.bobinas_[7] = Bobina(**{**viejo.__dict__, "precio": 90000.0})  # subió el rollo
+    (p,) = await listado(admin)
+    assert p["costo_filamento"] == 600.0  # el lote conserva el precio de cuando se hizo
+    # Corregir otra cosa del lote no lo recalcula; cambiar los gramos sí, con el precio de hoy.
+    cuerpo = {"items": [{"articulo_id": a["id"], "cantidad": 2}], "filamentos": [{"spool_id": 7, "gramos": 10}],
+              "nota": "x"}  # fmt: skip
+    r = await admin.put(f"/api/produccion/{creado['id']}", json=cuerpo)
+    assert r.json()["costo_filamento"] == 600.0
+    cuerpo["filamentos"] = [{"spool_id": 7, "gramos": 20}]
+    r = await admin.put(f"/api/produccion/{creado['id']}", json=cuerpo)
+    assert r.json()["costo_filamento"] == 1800.0

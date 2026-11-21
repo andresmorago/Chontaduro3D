@@ -82,3 +82,7 @@ class ProduccionFilamento(Base):
     # Bobina de Spoolman de la que salió (opcional; sin clave foránea: Spoolman es otro sistema).
     # `descripcion` guarda el nombre al momento de guardar, por si Spoolman no responde.
     spool_id: Mapped[int | None] = mapped_column(Integer)
+    # Costo del filamento de esta línea, CONGELADO al guardar (gramos × precio del rollo ÷ gramos del
+    # rollo, con el precio de Spoolman de ese momento). Cambiar el precio después no reescribe el
+    # pasado. None si no hay bobina o la bobina no tenía precio.
+    costo: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))

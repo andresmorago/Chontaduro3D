@@ -18,6 +18,49 @@ class BobinaOut(Salida):
     restante_g: float | None = None
     inicial_g: float | None = None
     ubicacion: str | None = None
+    # Precio del rollo (en la moneda de Spoolman); sin él no hay costo de filamento.
+    precio: float | None = None
+    # Queda menos del umbral (`BAJO_G`): hay que ir pensando en otro rollo.
+    bajo: bool = False
+
+
+class EditarBobinaIn(Entrada):
+    # Cuánto filamento queda en el rollo, pesado o estimado (g).
+    restante_g: Annotated[Decimal, Field(ge=0, le=Decimal("20000"), decimal_places=1)] | None = None
+    precio: Annotated[Decimal, Field(ge=0, le=Decimal("99999999"), decimal_places=2)] | None = None
+    # True = rollo terminado: sale de las listas (su chip se sigue reconociendo).
+    archivar: bool | None = None
+
+
+class RepuestosOut(Salida):
+    umbral_g: int
+    # Rollos activos que NO están puestos en el AMS, los más bajos primero.
+    bobinas: list[BobinaOut]
+
+
+EstadoAlcance = Literal["alcanza", "justo", "no_alcanza", "dudoso", "sin_bobina", "sin_peso"]
+
+
+class AlcanceLineaOut(Salida):
+    tipo: str | None = None
+    color: str | None = None
+    gramos: float
+    # La ranura en la que, según el tipo y color, va este filamento (None si no es inequívoco).
+    ranura: str | None = None
+    ranura_nombre: str | None = None
+    bobina: str | None = None
+    restante_g: float | None = None
+    estado: EstadoAlcance
+
+
+class AlcanceOut(Salida):
+    # Trabajo que se está imprimiendo ahora (None si la impresora está libre).
+    trabajo: str | None = None
+    # El archivo aún no se leyó (o no trae gramos): no hay nada que comparar todavía.
+    leyendo: bool = False
+    lineas: list[AlcanceLineaOut] = []
+    # Alguna línea no alcanza: hay que cambiar de rollo antes de que se acabe.
+    alerta: bool = False
 
 
 class EstadoSpoolmanOut(Salida):
