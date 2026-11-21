@@ -236,3 +236,91 @@ def test_un_nombre_exacto_en_cache_gana_a_uno_parecido_en_la_raiz():
         "/", "X_plate_1.gcode.3mf",
     )  # fmt: skip
     assert elegir(listados, "nada.3mf", "nada") is None
+
+
+# ----------------------------------------------- el estado se completa, no se reemplaza (MQTT)
+def _ams(n):
+    return [(b["id"], b["tipo"], b["color"], b["tag"], b["restante"]) for b in n["ams"]]
+
+
+def test_un_mensaje_parcial_no_borra_las_bandejas_del_ams():
+    estado = bambu.mezclar_estado({}, CRUDO)
+    antes = _ams(bambu.normalizar(estado))
+    estado = bambu.mezclar_estado(
+        estado, {"ams": {"tray_now": "2"}}
+    )  # solo cambia la bandeja en uso
+    assert _ams(bambu.normalizar(estado)) == antes
+    assert estado["ams"]["tray_now"] == "2"  # y lo nuevo sí se actualizó
+
+
+def test_una_bandeja_sola_cambia_solo_esos_campos():
+    estado = bambu.mezclar_estado({}, CRUDO)
+    msg = {"ams": {"ams": [{"id": "0", "tray": [{"id": "0", "remain": 55}]}]}}
+    n = bambu.normalizar(bambu.mezclar_estado(estado, msg))
+    assert _ams(n)[0] == (
+        "0",
+        "PLA",
+        "#000000",
+        "B9656CFE00000100",
+        55,
+    )  # tipo, color y chip intactos
+    assert len(n["ams"]) == 3 and n["ams"][1]["tipo"] == "PLA"  # las otras no se tocan
+
+
+def test_una_bandeja_que_se_vacia_si_se_refleja():
+    estado = bambu.mezclar_estado({}, CRUDO)
+    vacia = {
+        "ams": {
+            "ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "", "tray_color": "00000000"}]}]
+        }
+    }
+    b0 = bambu.normalizar(bambu.mezclar_estado(estado, vacia))["ams"][0]
+    assert b0["vacia"] and b0["tipo"] is None
+
+
+def test_una_bandeja_nueva_se_agrega_y_las_listas_sin_id_se_reemplazan():
+    estado = bambu.mezclar_estado({}, CRUDO)
+    nueva = {
+        "ams": {
+            "ams": [
+                {"id": "0", "tray": [{"id": "3", "tray_type": "PETG", "tray_color": "FF0000FF"}]}
+            ]
+        }
+    }
+    assert len(bambu.normalizar(bambu.mezclar_estado(estado, nueva))["ams"]) == 4
+    luz = bambu.mezclar_estado(
+        estado, {"lights_report": [{"node": "work_light", "mode": "off"}], "hms": []}
+    )
+    assert luz["lights_report"] == [{"node": "work_light", "mode": "off"}] and luz["hms"] == []
+
+
+def test_mezclar_no_modifica_lo_recibido():
+    base = {"ams": {"tray_now": "1", "ams": [{"id": "0", "tray": [{"id": "0", "remain": 10}]}]}}
+    copia = {"ams": {"tray_now": "1", "ams": [{"id": "0", "tray": [{"id": "0", "remain": 10}]}]}}
+    bambu.mezclar_estado(
+        base, {"ams": {"tray_now": "2", "ams": [{"id": "0", "tray": [{"id": "0", "remain": 5}]}]}}
+    )
+    assert base == copia
+
+
+def test_el_cliente_acumula_los_mensajes_sin_perder_las_bandejas():
+    import json
+    import threading
+
+    c = object.__new__(bambu.ClienteBambu)  # sin conectar: solo se prueba cómo recibe mensajes
+    c._lock, c._estado, c._ultimo = threading.Lock(), {}, None
+
+    class Msg:
+        def __init__(self, datos):
+            self.payload = json.dumps({"print": datos}).encode()
+
+    c._al_mensaje(None, None, Msg(CRUDO))
+    for parcial in (
+        {"ams": {"tray_now": "0"}},
+        {"mc_percent": 86},
+        {"ams": {"ams": [{"id": "0", "tray": [{"id": "1", "remain": 90}]}]}},
+    ):
+        c._al_mensaje(None, None, Msg(parcial))
+        llenas = [b for b in bambu.normalizar(c.crudo())["ams"] if not b["vacia"]]
+        assert len(llenas) == 2, "las ranuras no deben desaparecer entre mensajes"
+    assert c.crudo()["mc_percent"] == 86 and c.ultimo_mensaje is not None

@@ -182,6 +182,38 @@ def construir_orden(
     raise ValueError(f"Orden desconocida: {comando}")
 
 
+def mezclar_estado(base: Any, nuevo: Any) -> Any:
+    """Combina un mensaje de la impresora con el estado ya conocido SIN borrar lo que el mensaje no
+    trae. La A1 manda solo lo que cambió (p. ej. `ams: {"tray_now": "2"}`, o una sola bandeja con su
+    `remain`): reemplazar el bloque entero dejaba las ranuras sin tipo, color ni chip hasta el
+    siguiente «pushall», y las bobinas aparecían y desaparecían del panel.
+
+    · diccionarios: se mezclan clave por clave, a cualquier profundidad;
+    · listas de diccionarios con `id` (unidades del AMS y sus bandejas): se mezclan por `id`;
+    · todo lo demás (números, textos, listas sin `id` como `hms`): el valor nuevo reemplaza.
+    Devuelve estructuras nuevas y no modifica las recibidas (se pueden compartir entre hilos)."""
+    if isinstance(base, dict) and isinstance(nuevo, dict):
+        salida = dict(base)
+        for k, v in nuevo.items():
+            salida[k] = mezclar_estado(base[k], v) if k in base else v
+        return salida
+    if (
+        isinstance(base, list) and isinstance(nuevo, list) and base and nuevo
+        and all(isinstance(x, dict) and "id" in x for x in (*base, *nuevo))
+    ):  # fmt: skip
+        salida = list(base)
+        pos = {str(x["id"]): i for i, x in enumerate(salida)}
+        for x in nuevo:
+            i = pos.get(str(x["id"]))
+            if i is None:
+                pos[str(x["id"])] = len(salida)
+                salida.append(x)
+            else:
+                salida[i] = mezclar_estado(salida[i], x)
+        return salida
+    return nuevo
+
+
 class ClienteBambu:
     """Conexión MQTT con reconexión automática. El estado se va completando con cada mensaje
     (la A1 manda solo lo que cambió) y se refresca con un «pushall» periódico."""
@@ -252,7 +284,7 @@ class ClienteBambu:
             return
         if isinstance(datos, dict):
             with self._lock:
-                self._estado.update(datos)
+                self._estado = mezclar_estado(self._estado, datos)
                 self._ultimo = datetime.now(UTC)
 
     # --- uso desde el servicio ---
