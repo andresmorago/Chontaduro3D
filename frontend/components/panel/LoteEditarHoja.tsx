@@ -12,13 +12,15 @@ import { clave, partirClave } from "@/lib/lineas";
 import { fechaCorta, hoyISO, restarDias } from "@/lib/format";
 import { mensajeDe } from "@/lib/hooks";
 import { aExtra, loteDesde, type EstadoLote } from "@/lib/produccion";
-import type { Articulo, Parametros, Produccion } from "@/lib/types";
+import type { Articulo, BobinaSpoolman, Parametros, Produccion } from "@/lib/types";
 
 interface Props {
   /** El lote a corregir; `null` = cerrada. */
   lote: Produccion | null;
   articulos: Articulo[];
   parametros: Parametros | null;
+  /** Bobinas de Spoolman (`null` = Spoolman no conectado). */
+  bobinas?: BobinaSpoolman[] | null;
   onCerrar: () => void;
   onGuardado: () => void;
   onAbrirParametros: () => void;
@@ -26,7 +28,7 @@ interface Props {
 
 /** Corrige un lote ya guardado: piezas, fecha, filamento, tiempo y nota. El inventario se ajusta
  *  solo por la diferencia. */
-export function LoteEditarHoja({ lote, articulos, parametros, onCerrar, onGuardado, onAbrirParametros }: Props) {
+export function LoteEditarHoja({ lote, articulos, parametros, bobinas = null, onCerrar, onGuardado, onAbrirParametros }: Props) {
   const { mostrar } = useAvisos();
   const [estado, setEstado] = useState<EstadoLote | null>(null);
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
@@ -131,7 +133,7 @@ export function LoteEditarHoja({ lote, articulos, parametros, onCerrar, onGuarda
           )}
         </div>
 
-        <FilamentoTiempo valor={estado} onCambio={setEstado} parametros={parametros} onAbrirParametros={onAbrirParametros} />
+        <FilamentoTiempo valor={estado} onCambio={setEstado} parametros={parametros} onAbrirParametros={onAbrirParametros} bobinas={bobinas} />
         <Entrada etiqueta="Nota (opcional)" value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} />
       </div>
     </Hoja>

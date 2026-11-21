@@ -8,7 +8,8 @@ export type ModoFilamento = "total" | "por_filamento";
 export interface EstadoLote {
   modo: ModoFilamento;
   total: string;
-  filamentos: { descripcion: string; gramos: string }[];
+  /** `spool_id`: bobina de Spoolman elegida (null = texto libre). */
+  filamentos: { descripcion: string; gramos: string; spool_id: number | null }[];
   horas: string;
   minutos: string;
   /** Fecha de producción (YYYY-MM-DD): hoy, o una pasada para cargar lotes viejos. */
@@ -23,7 +24,7 @@ export interface EstadoLote {
 export const loteVacio = (fecha: string = hoyISO()): EstadoLote => ({
   modo: "total",
   total: "",
-  filamentos: [{ descripcion: "", gramos: "" }],
+  filamentos: [{ descripcion: "", gramos: "", spool_id: null }],
   horas: "",
   minutos: "",
   fecha,
@@ -39,7 +40,7 @@ export const loteDesde = (p: Produccion): EstadoLote => {
   return {
     modo: p.filamentos.length > 0 ? "por_filamento" : "total",
     total: p.filamentos.length === 0 && p.gramos_total != null ? String(p.gramos_total) : "",
-    filamentos: p.filamentos.length > 0 ? p.filamentos.map((f) => ({ descripcion: f.descripcion, gramos: String(f.gramos) })) : [{ descripcion: "", gramos: "" }],
+    filamentos: p.filamentos.length > 0 ? p.filamentos.map((f) => ({ descripcion: f.bobina ?? f.descripcion, gramos: String(f.gramos), spool_id: f.spool_id ?? null })) : [{ descripcion: "", gramos: "", spool_id: null }],
     horas: min != null && Math.floor(min / 60) > 0 ? String(Math.floor(min / 60)) : "",
     minutos: min != null && min % 60 > 0 ? String(min % 60) : "",
     fecha: p.fecha,
@@ -49,10 +50,25 @@ export const loteDesde = (p: Produccion): EstadoLote => {
   };
 };
 
+/** Las líneas de filamento de un trabajo. Los descuentos de Spoolman numeran (`orden`) solo los
+ *  filamentos con gramos, así que se emparejan con esa misma lista. */
+function filamentosDeTrabajo(t: TrabajoImpresora): EstadoLote["filamentos"] {
+  const conGramos = t.filamentos.filter((f) => f.gramos > 0);
+  return (conGramos.length > 0 ? conGramos : t.filamentos).map((f, i) => {
+    const c = t.consumos.find((x) => x.orden === i && x.spool_id != null && x.estado !== "omitido");
+    return {
+      descripcion: [f.tipo, nombreDeColor(f.color)].filter(Boolean).join(" "),
+      gramos: String(c ? c.gramos : f.gramos),
+      spool_id: c?.spool_id ?? null,
+    };
+  });
+}
+
 /** Un trabajo de la impresora como borrador de lote: fecha, tiempo y filamento ya puestos. Las piezas y
  *  la nota las completa la persona. Si el trabajo trae los gramos de cada filamento (uno o varios), se
  *  elige «Por filamento» y se rellena cada uno con su peso («PLA Rojo» 24,5 g); si solo trae el total,
- *  se usa «Gramos totales». */
+ *  se usa «Gramos totales». Si Spoolman ya descontó ese filamento de una bobina, la línea apunta a ESA
+ *  bobina y trae los gramos descontados: así el lote y Spoolman dicen lo mismo. */
 export const loteDesdeTrabajo = (t: TrabajoImpresora): EstadoLote => {
   const base = loteVacio(t.fecha);
   const min = t.minutos;
@@ -65,7 +81,7 @@ export const loteDesdeTrabajo = (t: TrabajoImpresora): EstadoLote => {
       ...base,
       ...tiempo,
       modo: "por_filamento",
-      filamentos: t.filamentos.map((f) => ({ descripcion: [f.tipo, nombreDeColor(f.color)].filter(Boolean).join(" "), gramos: String(f.gramos) })),
+      filamentos: filamentosDeTrabajo(t),
     };
   }
   return { ...base, ...tiempo, total: t.gramos_total != null ? String(t.gramos_total) : "" };
@@ -117,7 +133,7 @@ export function aExtra(e: EstadoLote): { extra: ExtraProduccion } | { error: str
       const g = num(f.gramos);
       if (!Number.isFinite(g) || g <= 0) return { error: `Pon los gramos de «${f.descripcion.trim() || "cada filamento"}» (mayor que 0).` };
     }
-    if (llenas.length > 0) extra.filamentos = llenas.map((f) => ({ descripcion: f.descripcion.trim(), gramos: num(f.gramos) }));
+    if (llenas.length > 0) extra.filamentos = llenas.map((f) => ({ descripcion: f.descripcion.trim(), gramos: num(f.gramos), ...(f.spool_id != null ? { spool_id: f.spool_id } : {}) }));
   }
   if (e.horas.trim() !== "" || e.minutos.trim() !== "") {
     const h = e.horas.trim() === "" ? 0 : num(e.horas);

@@ -79,3 +79,6 @@ class ProduccionFilamento(Base):
     orden: Mapped[int] = mapped_column(SmallInteger, server_default="0", nullable=False)
     descripcion: Mapped[str] = mapped_column(String(60), server_default="", nullable=False)
     gramos: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    # Bobina de Spoolman de la que salió (opcional; sin clave foránea: Spoolman es otro sistema).
+    # `descripcion` guarda el nombre al momento de guardar, por si Spoolman no responde.
+    spool_id: Mapped[int | None] = mapped_column(Integer)

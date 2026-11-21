@@ -1,10 +1,11 @@
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, func, select
 
 from app.config import settings
@@ -28,8 +29,71 @@ from app.models import (
     TrabajoImpresora,
 )
 from app.schemas.dominio import FilamentoOut, ProduccionIn, ProduccionItemOut, ProduccionOut
+from app.spoolman.cliente import Bobina, ClienteSpoolman, ErrorSpoolman
+from app.spoolman.dependencia import cliente_spoolman_opcional
 
 router = APIRouter(prefix="/produccion", tags=["produccion"], dependencies=PROTEGIDO)
+
+# Spoolman es opcional aquí: sin él (o si no responde) los lotes siguen funcionando con texto libre.
+Spoolman = Annotated[ClienteSpoolman | None, Depends(cliente_spoolman_opcional)]
+
+
+async def _bobinas(spoolman: ClienteSpoolman | None) -> dict[int, Bobina]:
+    """Todas las bobinas (también las archivadas: un rollo terminado se archiva) por número.
+    Vacío si no hay Spoolman o no responde: solo sirve para mostrar nombres."""
+    if spoolman is None:
+        return {}
+    try:
+        return {b.id: b for b in await spoolman.bobinas(archivadas=True)}
+    except ErrorSpoolman:
+        return {}
+
+
+async def _validar_bobinas(
+    db, spoolman: ClienteSpoolman | None, datos: ProduccionIn, lote: UUID | None = None
+) -> dict[int, Bobina]:
+    """Las bobinas que el lote cita NUEVAS deben existir en Spoolman. Las que el lote ya citaba no
+    se vuelven a exigir: así un lote viejo se puede corregir aunque su bobina ya se haya borrado."""
+    pedidas = {f.spool_id for f in datos.filamentos if f.spool_id is not None}
+    if not pedidas:
+        return {}
+    previas: set[int] = set()
+    if lote is not None:
+        previas = set(
+            (
+                await db.execute(
+                    select(ProduccionFilamento.spool_id).where(
+                        ProduccionFilamento.produccion_id == lote,
+                        ProduccionFilamento.spool_id.is_not(None),
+                    )
+                )
+            ).scalars()
+        )
+    nuevas = pedidas - previas
+    if spoolman is None:
+        if nuevas:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Spoolman no está conectado: no se puede elegir una bobina.",
+            )
+        return {}
+    try:
+        todas = {b.id: b for b in await spoolman.bobinas(archivadas=True)}
+    except ErrorSpoolman as e:
+        if not nuevas:
+            return {}
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"No se pudo consultar Spoolman: {e}"
+        ) from None
+    inexistentes = sorted(nuevas - todas.keys())
+    if inexistentes:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Esa bobina ya no existe en Spoolman: "
+            + ", ".join(f"n.º {i}" for i in inexistentes)
+            + ".",
+        )
+    return todas
 
 
 def hoy() -> date:
@@ -57,7 +121,9 @@ def validar_fecha(fecha: date | None, max_dias: int = DIAS_ATRAS_VENTAS) -> date
     return f
 
 
-async def _salida(db, produccion: Produccion) -> ProduccionOut:
+async def _salida(
+    db, produccion: Produccion, bobinas: dict[int, Bobina] | None = None
+) -> ProduccionOut:
     filas = await db.execute(
         select(ProduccionItem, Articulo, ArticuloColor)
         .join(Articulo, Articulo.id == ProduccionItem.articulo_id)
@@ -72,8 +138,15 @@ async def _salida(db, produccion: Produccion) -> ProduccionOut:
         )
         for i, a, c in filas
     ]  # fmt: skip
+    bobinas = bobinas or {}
     filamentos = [
-        FilamentoOut(descripcion=f.descripcion, gramos=f.gramos)
+        FilamentoOut(
+            descripcion=f.descripcion,
+            gramos=f.gramos,
+            spool_id=f.spool_id,
+            bobina=bobinas[f.spool_id].nombre if f.spool_id in bobinas else None,
+            color=bobinas[f.spool_id].color if f.spool_id in bobinas else None,
+        )  # fmt: skip
         for f in (
             await db.execute(
                 select(ProduccionFilamento)
@@ -121,13 +194,29 @@ def _gramos_del_lote(datos: ProduccionIn) -> Decimal | None:
     return gramos_total
 
 
-def _poner_detalle(db, p: Produccion, datos: ProduccionIn, cantidades: dict[Clave, int]) -> None:
+def _poner_detalle(
+    db,
+    p: Produccion,
+    datos: ProduccionIn,
+    cantidades: dict[Clave, int],
+    bobinas: dict[int, Bobina] | None = None,
+    copias: dict[int, str] | None = None,
+) -> None:
+    bobinas, copias = bobinas or {}, copias or {}
     for n, f in enumerate(datos.filamentos):
+        # Con bobina elegida, el texto es el nombre que tiene en Spoolman ahora (queda de copia).
+        # Si la bobina ya no existe, se conserva la copia que el lote ya tenía.
+        nombre = f.descripcion
+        if f.spool_id in bobinas:
+            nombre = bobinas[f.spool_id].nombre[:60]
+        elif not nombre and f.spool_id in copias:
+            nombre = copias[f.spool_id]
         db.add(
             ProduccionFilamento(
-                produccion_id=p.id, orden=n, descripcion=f.descripcion, gramos=f.gramos
+                produccion_id=p.id, orden=n, descripcion=nombre, gramos=f.gramos,
+                spool_id=f.spool_id,
             )
-        )
+        )  # fmt: skip
     for (articulo_id, color_id), cantidad in cantidades.items():
         db.add(
             ProduccionItem(
@@ -137,7 +226,9 @@ def _poner_detalle(db, p: Produccion, datos: ProduccionIn, cantidades: dict[Clav
 
 
 @router.post("", response_model=ProduccionOut, status_code=status.HTTP_201_CREATED)
-async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOut:
+async def registrar(
+    datos: ProduccionIn, db: DB, usuario: Admin, spoolman: Spoolman
+) -> ProduccionOut:
     cantidades = _cantidades(datos)
     ids = {a for a, _ in cantidades}
     articulos = await bloquear_articulos(db, ids)
@@ -154,6 +245,7 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
     validar_colores(cantidades, articulos, await colores_de_articulos(db, ids))
 
     gramos_total = _gramos_del_lote(datos)
+    bobinas = await _validar_bobinas(db, spoolman, datos)
 
     # Si viene de un trabajo de la impresora: debe existir, haber terminado de imprimirse y no
     # haberse importado ya. Se bloquea la fila para que dos importaciones a la vez no lo dupliquen.
@@ -198,7 +290,7 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
     await db.flush()
     if trabajo is not None:
         trabajo.gestion, trabajo.produccion_id = "importado", p.id
-    _poner_detalle(db, p, datos, cantidades)
+    _poner_detalle(db, p, datos, cantidades, bobinas)
     if datos.afecta_inventario:  # carga histórica: solo historial y métricas, sin tocar el stock
         for (articulo_id, color_id), cantidad in cantidades.items():
             db.add(
@@ -221,12 +313,12 @@ async def registrar(datos: ProduccionIn, db: DB, usuario: Admin) -> ProduccionOu
     )  # fmt: skip
     await db.commit()
     await db.refresh(p)
-    return await _salida(db, p)
+    return await _salida(db, p, bobinas or await _bobinas(spoolman))
 
 
 @router.put("/{produccion_id}", response_model=ProduccionOut)
 async def modificar(
-    produccion_id: UUID, datos: ProduccionIn, db: DB, usuario: Admin
+    produccion_id: UUID, datos: ProduccionIn, db: DB, usuario: Admin, spoolman: Spoolman
 ) -> ProduccionOut:
     """Corrige un lote ya guardado (reemplaza sus datos). El inventario se ajusta SOLO por la
     diferencia, con un movimiento de ajuste: el libro mayor nunca se reescribe."""
@@ -303,6 +395,7 @@ async def modificar(
             )
 
     gramos_total = _gramos_del_lote(datos)
+    bobinas = await _validar_bobinas(db, spoolman, datos, p.id)
     # La energía del lote ya estaba congelada: se conserva salvo que se indiquen otros valores.
     # Si antes no tenía tiempo, se usan los parámetros de hoy.
     param = await energia.parametros(db)
@@ -331,9 +424,19 @@ async def modificar(
     p.precio_kwh = precio if datos.minutos_impresion else None
     p.kwh, p.costo_energia = kwh, costo
 
+    copias = dict(
+        (
+            await db.execute(
+                select(ProduccionFilamento.spool_id, ProduccionFilamento.descripcion).where(
+                    ProduccionFilamento.produccion_id == p.id,
+                    ProduccionFilamento.spool_id.is_not(None),
+                )
+            )
+        ).all()
+    )
     await db.execute(delete(ProduccionItem).where(ProduccionItem.produccion_id == p.id))
     await db.execute(delete(ProduccionFilamento).where(ProduccionFilamento.produccion_id == p.id))
-    _poner_detalle(db, p, datos, cantidades)
+    _poner_detalle(db, p, datos, cantidades, bobinas, copias)
     for (articulo_id, color_id), d in sorted(
         delta.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))
     ):
@@ -355,17 +458,34 @@ async def modificar(
     )  # fmt: skip
     await db.commit()
     await db.refresh(p)
-    return await _salida(db, p)
+    return await _salida(db, p, bobinas or await _bobinas(spoolman))
 
 
 @router.get("", response_model=list[ProduccionOut])
-async def listar(db: DB, limite: int = 30) -> list[ProduccionOut]:
+async def listar(db: DB, spoolman: Spoolman, limite: int = 30) -> list[ProduccionOut]:
     limite = max(1, min(limite, 100))
-    filas = (
-        await db.execute(
-            select(Produccion)
-            .order_by(Produccion.fecha.desc(), Produccion.creado_en.desc())
-            .limit(limite)
-        )
-    ).scalars()
-    return [await _salida(db, p) for p in filas]
+    filas = list(
+        (
+            await db.execute(
+                select(Produccion)
+                .order_by(Produccion.fecha.desc(), Produccion.creado_en.desc())
+                .limit(limite)
+            )
+        ).scalars()
+    )
+    # Los nombres de las bobinas se piden a Spoolman UNA vez (y solo si algún lote cita una).
+    cita = (
+        filas
+        and (
+            await db.execute(
+                select(func.count())
+                .select_from(ProduccionFilamento)
+                .where(
+                    ProduccionFilamento.produccion_id.in_([p.id for p in filas]),
+                    ProduccionFilamento.spool_id.is_not(None),
+                )
+            )
+        ).scalar_one()
+    )
+    bobinas = await _bobinas(spoolman) if cita else {}
+    return [await _salida(db, p, bobinas) for p in filas]

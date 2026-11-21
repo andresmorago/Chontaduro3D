@@ -102,6 +102,18 @@ export interface ProduccionItem {
 export interface Filamento {
   descripcion: string;
   gramos: number;
+  /** Bobina de Spoolman de la que salió (opcional). */
+  spool_id?: number | null;
+  /** Nombre y color ACTUALES de esa bobina en Spoolman; si faltan, vale `descripcion`. */
+  bobina?: string | null;
+  color?: string | null;
+}
+
+/** Lo que se manda al guardar una línea de filamento. Con bobina, el texto puede ir vacío. */
+export interface FilamentoEntrada {
+  descripcion: string;
+  gramos: number;
+  spool_id?: number;
 }
 
 export interface Produccion {
@@ -128,7 +140,7 @@ export interface ExtraProduccion {
   precio_kwh?: number;
   potencia_w?: number;
   gramos_total?: number;
-  filamentos?: Filamento[];
+  filamentos?: FilamentoEntrada[];
   minutos_impresion?: number;
 }
 

@@ -114,6 +114,26 @@ No se usa `netfilter-persistent save`: `rules.v4` guarda también las cadenas di
   cambia el número, `make prod-up`, y revisa las [notas de versión](https://github.com/Donkie/Spoolman/releases).
 - Los gramos descontados viven en Spoolman; en Mis impresiones queda el registro por trabajo (`consumos_filamento`).
 
+## Producción ↔ Spoolman (el filamento de un lote)
+
+Cada línea de filamento de un lote (Producción → *Filamento y tiempo → Por filamento*) puede **apuntar a una bobina**
+de Spoolman en vez de ser texto libre:
+
+- **Elegir la bobina**: el selector lista las bobinas activas (primero las del AMS, con lo que queda de cada una). *Otro
+  (escribir a mano)* deja el texto libre de siempre (los lotes viejos como «PLA Fucsia» siguen funcionando).
+- **El nombre es el de Spoolman, en vivo**: si renombras o archivas una bobina allí, todos los lotes que la usan muestran el
+  nombre nuevo. Al guardar también queda una copia del nombre por si Spoolman no responde (entonces se ve esa copia).
+- **Importar un trabajo de la impresora**: si Spoolman ya descontó ese filamento de una bobina, la línea **viene con esa
+  bobina y con los gramos descontados**, así el lote y Spoolman dicen lo mismo. Las que no tengan descuento (trabajos de
+  antes de conectar Spoolman, o filamentos sin bobina asignada) vienen como texto, para que elijas la bobina si quieres.
+- **Elegir una bobina en un lote NO descuenta nada**: descontar sigue siendo cosa del servicio `impresora` (así no se
+  cuenta dos veces). El vínculo sirve para identificar y para que Producción y Spoolman hablen de la misma bobina. Un lote
+  que no viene de la impresora no mueve Spoolman.
+- **Se puede citar una bobina archivada** (un rollo terminado). Al corregir un lote viejo no se exige que sus bobinas
+  sigan existiendo: solo se valida lo que cambias. Si Spoolman está apagado no hay selector y todo sigue como texto.
+- Datos: `produccion_filamentos.spool_id` (sin clave foránea: Spoolman es otro sistema). API: `filamentos[].spool_id` al
+  guardar; al leer trae además `bobina` y `color` (los actuales de Spoolman).
+
 ## Consumo estimado de lo ya impreso
 
 Lo impreso antes de conectar Spoolman no descuenta solo. Para repartirlo entre las bobinas una vez registradas:

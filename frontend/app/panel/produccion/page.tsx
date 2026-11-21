@@ -28,6 +28,9 @@ export default function Produccion() {
   }, [limite]);
   const hoy = hoyISO();
   const parametros = useCargar(api.parametros.ver);
+  // Bobinas de Spoolman para elegir en cada filamento; sin Spoolman conectado (error) = solo texto libre.
+  const spoolman = useCargar(() => api.spoolman.bobinas());
+  const bobinas = spoolman.error ? null : spoolman.datos;
   const [verParametros, setVerParametros] = useState(false);
   const [lote, setLote] = useState(loteVacio());
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
@@ -171,7 +174,7 @@ export default function Produccion() {
                   </p>
                 )}
               </div>
-              <FilamentoTiempo valor={lote} onCambio={setLote} parametros={parametros.datos} onAbrirParametros={() => setVerParametros(true)} />
+              <FilamentoTiempo valor={lote} onCambio={setLote} parametros={parametros.datos} onAbrirParametros={() => setVerParametros(true)} bobinas={bobinas} />
               <Entrada etiqueta="Nota (opcional)" ayuda="Por ejemplo: PLA negro, tanda del sábado." value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} />
             </div>
             <div className="ticket__pie">
@@ -234,7 +237,16 @@ export default function Produccion() {
                       <td className="c-mov-no c-nw num">{fechaCorta(p.fecha)}</td>
                       <th scope="row" className="t-nombre">
                         {p.items.map((i) => `${i.cantidad} × ${i.nombre}${i.color ? ` (${i.color})` : ""}`).join(", ")}
-                        {p.filamentos.length > 1 && <span className="t-sec">{p.filamentos.map((f) => `${f.descripcion || "Filamento"} ${gramos(f.gramos)}`).join(" · ")}</span>}
+                        {p.filamentos.some((f) => f.bobina || f.descripcion) && (
+                          <span className="t-sec lote-filamentos">
+                            {p.filamentos.map((f, n) => (
+                              <span key={n} className="lote-filamento">
+                                {f.color && <span className="muestra-mini" style={{ background: f.color }} aria-hidden="true" />}
+                                {f.bobina ?? (f.descripcion || "Filamento")} {gramos(f.gramos)}
+                              </span>
+                            ))}
+                          </span>
+                        )}
                         {notas && <span className="t-sec">{notas}</span>}
                         <span className="t-meta num">{resumen}</span>
                       </th>
@@ -261,6 +273,7 @@ export default function Produccion() {
       </section>
       <LoteEditarHoja
         lote={editando}
+        bobinas={bobinas}
         articulos={lista}
         parametros={parametros.datos}
         onCerrar={() => setEditando(null)}

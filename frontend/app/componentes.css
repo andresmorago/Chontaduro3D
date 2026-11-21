@@ -119,9 +119,12 @@
 .filtiempo { display: grid; gap: var(--space-sm); margin: 0; padding: var(--space-md) 0 0; border: 0; border-top: var(--rule-hair) solid var(--color-rule); min-width: 0; }
 .filtiempo legend { padding: 0; float: left; width: 100%; margin-bottom: var(--space-xs); }
 .filtiempo > * { clear: both; }
-.filamentos { display: grid; gap: var(--space-sm); }
-.filamento { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; gap: var(--space-xs); align-items: end; }
-@media (max-width: 30rem) { .filamento { grid-template-columns: minmax(0, 1fr) 84px; } .filamento > .btn { grid-column: 1 / -1; justify-self: start; } }
+/* Filamento de un lote: una tarjeta por filamento (bobina de Spoolman o texto libre) con sus gramos. */
+.filamentos { display: grid; gap: var(--space-sm); min-width: 0; }
+.filamento { display: grid; gap: var(--space-xs); min-width: 0; padding-bottom: var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }
+.filamento .field, .filamento .select, .filamento .input { min-width: 0; width: 100%; }
+.filamento__pie { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-sm); }
+.filamento__pie .filamento__gramos { flex: 0 1 9rem; width: auto; }
 .tiempo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
 .enlace { display: inline; padding: 0; border: 0; background: transparent; color: var(--color-accent); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer; min-height: 0; }
 .enlace:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }

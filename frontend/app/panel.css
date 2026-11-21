@@ -460,3 +460,7 @@ button.fila:hover { background: var(--color-paper-2); }
 .spool-crear .spool-gramos { flex-direction: column; align-items: flex-start; gap: var(--space-2xs); font-size: var(--text-sm); }
 .spool-crear .spool-gramos .input { width: 8rem; }
 .spool-crear .field__hint { flex-basis: 100%; }
+
+/* Filamento de un lote: una línea por bobina (o texto libre), con su gramaje. */
+.tabla-datos .lote-filamentos { display: flex; flex-wrap: wrap; gap: 0 var(--space-sm); }
+.lote-filamento { display: inline-flex; align-items: center; gap: var(--space-2xs); white-space: nowrap; }

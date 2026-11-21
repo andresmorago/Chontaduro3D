@@ -141,8 +141,11 @@ class ItemCantidad(Entrada):
 
 
 class FilamentoIn(Entrada):
-    descripcion: str = Field(default="", max_length=60)  # «PLA negro», «PETG transparente»…
+    # Texto libre («PLA negro»). Con `spool_id` puede ir vacío: se toma el nombre de la bobina.
+    descripcion: str = Field(default="", max_length=60)
     gramos: Decimal = Field(gt=0, le=Decimal("100000"), max_digits=10, decimal_places=2)
+    # Bobina de Spoolman de la que salió el filamento (opcional).
+    spool_id: int | None = Field(default=None, ge=1)
 
 
 class ProduccionIn(Entrada):
@@ -183,6 +186,11 @@ class ProduccionItemOut(Salida):
 class FilamentoOut(Salida):
     descripcion: str
     gramos: Numero
+    spool_id: int | None = None
+    # Nombre y color ACTUALES de la bobina en Spoolman (None si no hay bobina o Spoolman no
+    # respondió: entonces vale `descripcion`, el nombre que tenía al guardarse).
+    bobina: str | None = None
+    color: str | None = None
 
 
 class ProduccionOut(Salida):
