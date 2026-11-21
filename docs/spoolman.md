@@ -10,7 +10,7 @@ correspondiente**, se importe o no como lote de producción.
 | --- | --- |
 | **Spoolman** | Guarda las bobinas y cuánto queda de cada una. Se abre desde la red de casa. |
 | **Servicio `impresora`** | Anota qué ranura del AMS usó cada trabajo; al terminar, resuelve de qué bobina salió el filamento y lo descuenta (`PUT /spool/{id}/use`). Es el **único** que escribe en Spoolman: así un descuento no se manda dos veces. |
-| **Backend + panel** | Muestran el estado, dejan elegir qué bobina hay en cada ranura y resolver los descuentos que no se pudieron decidir solos (Administración → Impresora → *Bobinas (Spoolman)*). |
+| **Backend + panel** | Muestran el estado, dejan elegir qué bobina hay en cada ranura y resolver los descuentos que no se pudieron decidir solos (Administración → Impresora → *Filamento*). |
 
 ## Cómo se sabe de qué bobina salió el filamento
 
@@ -158,14 +158,55 @@ se reescribe solo: si un trabajo se descontó con un peso distinto del definitiv
 `consumos_filamento` (así queda el rastro). El servicio avisa en el registro cuando un trabajo dura mucho más o menos de
 lo que decía su archivo, que es la señal de un archivo equivocado.
 
+## Desde el panel, sin entrar a Spoolman
+
+Todo esto está en **Administración → Impresora → Filamento**, y usa la API de Spoolman por detrás.
+
+- **Ajustar un rollo.** El botón *Ajustar* de una ranura o de un repuesto deja corregir **cuánto queda** (el peso del filamento, sin el
+  carrete: si pesas el rollo, réstale el carrete vacío) y el **precio**. También *Archivar (se terminó)*: sale de las listas pero su chip
+  se sigue reconociendo, así que no se vuelve a registrar. API: `PATCH /api/spoolman/bobinas/{id}` con `restante_g`, `precio`, `archivar`.
+- **Rollos de repuesto.** Los rollos activos de Spoolman que **no** están puestos en el AMS, con los más bajos primero. «Queda poco» es por
+  debajo de **150 g** (`BAJO_G` en `backend/app/api/spoolman.py`). Un rollo cuenta como «en el AMS» si está en una ranura ahora o si su
+  ubicación empieza por «AMS · ». API: `GET /api/spoolman/repuestos`.
+- **¿Alcanza el filamento para este trabajo?** Va dentro de cada ranura de «En la impresora ahora» (no es una sección aparte): mientras se imprime, compara los gramos de cada filamento del `.3mf` con lo que queda en la bobina
+  de la ranura que le corresponde (por tipo y color, con la misma regla conservadora de siempre: con duda no opina). Estados: *alcanza*, *va justo*
+  (sobran menos de 15 g: los gramos del archivo son estimados), *no alcanza* (alerta roja), y *no sé* si la ranura no está unida a una bobina, la
+  bobina no tiene peso o hay dos ranuras parecidas. Spoolman descuenta al terminar, así que lo que queda allí es lo de antes del trabajo y por eso se
+  compara con los gramos completos. API: `GET /api/spoolman/alcance`.
+
+## Releer el chip RFID de una ranura
+
+El botón **Releer chip** de cada ranura del AMS hace lo mismo que el botón de actualizar de Bambu Studio: manda a la impresora el G-code
+`M620 R<ranura>` (`gcode_line`), y el AMS vuelve a leer la etiqueta de esa bobina. La impresora informa el resultado sola (color, tipo y UID del chip);
+en unos segundos se ve en el panel y, si es una bobina nueva, el registro automático la crea en Spoolman.
+
+- **Solo con la impresora quieta** (lista, terminada o con fallo) y **sin filamento cargado en el cabezal** (`hw_switch_state` de la impresora). Con
+  filamento puesto el AMS no puede leer: descárgalo (retráelo al AMS) y repite. Es la misma condición que pone Bambu Studio.
+- Si la impresora no informa si hay filamento en el cabezal, el botón se permite y la orden se manda igual.
+- Sin chip (rollos no Bambu) no hay nada que leer: esas bobinas se asocian a mano.
+- Es una orden más del panel (`leer_rfid`, ver «Controles»): el backend la deja en `impresora_comandos` y el servicio la envía; queda en la auditoría.
+- Fuente del comando: `MachineObject::command_ams_refresh_rfid` y `StatusPanel::on_ams_refresh_rfid` de Bambu Studio (código abierto). Para impresoras
+  de la plataforma nueva (H2D) Studio usa otra orden (`ams_get_rfid`); la A1 usa el G-code.
+
+## Costo del filamento de un lote
+
+Cada línea de filamento de un lote que apunta a una bobina con **precio** guarda su costo: `gramos × precio del rollo ÷ gramos del rollo`.
+
+- **Se congela al guardar** (`produccion_filamentos.costo`), igual que el precio de una venta y la energía: si el rollo sube de precio después,
+  los lotes viejos no cambian. Al corregir un lote, una línea que no cambió (misma bobina y mismos gramos) conserva su costo; si cambias los gramos o la
+  bobina, se recalcula con el precio de hoy.
+- El lote muestra la suma (`costo_filamento`). Si alguna línea no tiene precio (texto libre, o una bobina sin precio) el costo se marca como **parcial**
+  («≥ $…»): el real es mayor. Pon el precio en el rollo (*Ajustar*) o una vez en el filamento de Spoolman y las bobinas nuevas lo heredan.
+- La moneda es la que uses en Spoolman: la app la muestra como pesos.
+
 ## Qué no hace (todavía)
 
 - No sincroniza el «restante» que mide el AMS en las bobinas con chip hacia Spoolman (en tu A1 todas las ranuras informan 100 %, así que no aporta).
-- No lleva el costo del filamento al lote de producción ni avisa de bobinas casi vacías: son los siguientes pasos naturales,
-  ya que Spoolman guarda el precio por bobina.
+- No avisa por fuera del panel (correo, WhatsApp) cuando un rollo queda bajo: el aviso solo se ve en la página.
+- No mezcla el costo del filamento con el de energía en un solo «costo del lote»: se muestran por separado.
 
 ## Pruebas
 
-`backend/tests/test_spoolman.py`: emparejamiento (lógica pura), cliente HTTP con transporte simulado, el flujo completo
+`backend/tests/test_spoolman.py` (incluye ajustar rollos, repuestos y «¿alcanza?») y `backend/tests/test_produccion_bobinas.py` (costo del filamento): emparejamiento (lógica pura), cliente HTTP con transporte simulado, el flujo completo
 del servicio contra Postgres con un Spoolman de mentira (descuento único, caída de Spoolman, respuesta perdida, trabajo
 cortado…) y la API. El cliente también se probó contra un Spoolman real.
