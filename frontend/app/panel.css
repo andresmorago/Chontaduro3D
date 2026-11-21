@@ -548,3 +548,31 @@ button.fila:hover { background: var(--color-paper-2); }
 .cal__hoy { justify-self: center; padding: var(--space-2xs) var(--space-sm); border: 0; background: none; color: var(--color-card-accent); font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .cal__hoy:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
 .v-hora--sin { font-size: var(--text-sm); font-weight: 600; }
+
+/* --- Actividad reciente: línea de tiempo fina, un punto por tipo de evento ---------------------- */
+.actividad { font-size: var(--text-sm); color: var(--color-ink-2); }
+.actividad > summary { cursor: pointer; width: fit-content; max-width: 100%; font-weight: 700; color: var(--color-ink); overflow-wrap: anywhere; }
+.actividad__cuenta { font-weight: 500; color: var(--color-muted); }
+.actividad__vacio { margin: var(--space-xs) 0 0; max-width: 60ch; font-size: var(--text-xs); color: var(--color-muted); }
+.actividad__grupos { display: grid; gap: var(--space-md); margin-top: var(--space-sm); }
+.actividad-dia { display: grid; gap: var(--space-2xs); min-width: 0; }
+.actividad-dia__titulo { margin: 0; font-family: var(--font-body); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+.actividad-lista { list-style: none; margin: 0; padding: 0; }
+
+/* Cada evento: [riel] y, a la derecha, la hora y el texto. Desde 36rem la hora pasa a su propia columna, a la izquierda. */
+.actividad-ev { --punto: var(--color-muted); position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); grid-template-areas: "riel hora" "riel texto"; column-gap: var(--space-sm); padding-bottom: var(--space-sm); min-width: 0; }
+.actividad-ev:last-child { padding-bottom: 0; }
+.actividad-ev--cambio { --punto: var(--color-accent); }
+.actividad-ev--spoolman { --punto: var(--color-tint-3); }
+.actividad-ev--edicion { --punto: var(--color-tint-2); }
+.actividad-ev__riel { grid-area: riel; position: relative; }
+.actividad-ev__riel::before { content: ""; position: absolute; left: 6px; top: 0.7rem; bottom: calc(-1 * var(--space-sm)); width: 2px; border-radius: var(--radius-pill); background: color-mix(in oklab, var(--color-ink) 22%, transparent); }
+.actividad-ev:last-child .actividad-ev__riel::before { display: none; }
+.actividad-ev__riel::after { content: ""; position: absolute; left: 1px; top: 0.3rem; width: 12px; height: 12px; box-sizing: border-box; border-radius: var(--radius-pill); background: var(--punto); border: 2px solid var(--color-paper); }
+.actividad-ev__hora { grid-area: hora; font-size: 0.75rem; line-height: 1.5rem; color: var(--color-muted); white-space: nowrap; }
+.actividad-ev__texto { grid-area: texto; margin: 0; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+.actividad-ev__texto strong { color: var(--color-ink); font-weight: 700; }
+@media (min-width: 36rem) {
+  .actividad-ev { grid-template-columns: 5.5rem 14px minmax(0, 1fr); grid-template-areas: "hora riel texto"; }
+  .actividad-ev__hora { text-align: right; line-height: 1.4; padding-top: 0.1rem; }
+}

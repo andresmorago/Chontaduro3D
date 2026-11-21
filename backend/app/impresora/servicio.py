@@ -10,25 +10,27 @@ Nunca se cae por un error de la impresora o de la red: registra y reintenta."""
 import asyncio
 import contextlib
 import logging
+import re
 import signal
-from datetime import UTC, datetime, timedelta
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from app.config import CLAVE_DESARROLLO, settings
 from app.core import auditoria, secretos
 from app.db import SessionLocal, engine
 from app.impresora import ajustes, bambu, lector3mf, maquina, nube, sincronizacion
-from app.models import (
 from app.impresora.bambu import RESPUESTA_ESPERADA
+from app.models import (
     ChipBobina,
     ComandoImpresora,
     EstadoImpresora,
     RanuraBobina,
     TrabajoImpresora,
 )
+from app.spoolman import asignacion as spoolman_asignacion
 from app.spoolman import cliente as spoolman
 from app.spoolman import consumo as spoolman_consumo
 from app.spoolman import registro as spoolman_registro
@@ -48,6 +50,7 @@ SPOOLMAN_CADA_S = 5  # lo asignado en el panel se descuenta en unos segundos
 AUTOREGISTRO_ESPERA_S = 15  # un chip debe verse estable este tiempo antes de registrar la bobina
 AUTOREGISTRO_REINTENTO_S = 60
 AUTOREGISTRO_DUDA_S = 3600  # una duda (varias bobinas que podrían ser) se vuelve a avisar cada hora
+AUTOVINCULAR_CADA_S = 15  # con qué frecuencia se consulta Spoolman para vincular rollos sin chip
 UBICACIONES_CADA_S = 30  # con qué frecuencia se pone al día la ubicación de las bobinas
 
 
@@ -91,6 +94,14 @@ class Servicio:
         self._tags_vistos: dict[str, datetime] = {}
         self._tags_reintento: dict[str, datetime] = {}
         self._chips_avisados: set[str] = set()
+        # Rollos sin chip: desde cuándo se ve la misma (tipo, color) en cada ranura, y avisos ya dados.
+        self._firmas_ranura: dict[str, tuple[tuple, datetime]] = {}
+        self._autovincular_proximo = datetime.min.replace(tzinfo=UTC)
+        self._autovincular_avisos: set[tuple] = set()
+        # Actividad del AMS: última firma ESTABLE por ranura y lo que se ve ahora (con desde cuándo).
+        self._ams_estable: dict[str, tuple] = {}
+        self._ams_visto: dict[str, tuple[tuple, datetime]] = {}
+        self._ams_inicializado = False
         self._ubicaciones_proximo = datetime.min.replace(tzinfo=UTC)
         self._ubicaciones_vistas: dict[int, str] | None = None
 
@@ -401,6 +412,190 @@ class Servicio:
             await db.commit()
             log.info("Bobina n.º %s (%s) %s en Spoolman", nueva.id, nueva.nombre, texto)
 
+    @staticmethod
+    def _material_base(tipo: str | None) -> str:
+        """Parte alfabética inicial del material: «PLA+» y «PLA Basic» → «pla»."""
+        m = re.match(r"[A-Za-z]+", (tipo or "").strip())
+        return spoolman_asignacion.norm_tipo(m.group()) if m else ""
+
+    async def _autovincular_ranuras(self, db) -> None:
+        """Rollo SIN chip (p. ej. un Sunlu configurado a mano en la impresora) cuya ranura no tiene
+        vínculo vigente: si en Spoolman hay UNA sola bobina activa, sin chip, del mismo material
+        base y de color parecido, que no esté ya en otra ranura, se le vincula. Con 0 o varias no
+        adivina: la persona elige en el panel. Exige ver la misma (tipo, color) un rato. Un vínculo
+        vigente a una bobina que sigue activa en Spoolman no se toca."""
+        if not settings.spoolman_autovincular or self.cliente is None or self._spoolman is None:
+            return
+        crudo = self.cliente.crudo()
+        datos = bambu.normalizar(crudo) if crudo else None
+        if not datos or not datos["ams"]:
+            return
+        ahora = _ahora()
+        bandejas = [b for b in [*datos["ams"], datos["externa"]] if b and not b["vacia"]]
+        sin_chip = [b for b in bandejas if not b["tag"]]
+        firmas: dict[str, tuple[tuple, datetime]] = {}
+        for b in sin_chip:
+            firma = (b["tipo"], b["color"])
+            previa = self._firmas_ranura.get(b["id"])
+            firmas[b["id"]] = previa if previa and previa[0] == firma else (firma, ahora)
+        self._firmas_ranura = firmas
+        estables = [
+            b for b in sin_chip
+            if (ahora - firmas[b["id"]][1]).total_seconds() >= AUTOREGISTRO_ESPERA_S
+        ]  # fmt: skip
+        if not estables or ahora < self._autovincular_proximo:
+            return
+        self._autovincular_proximo = ahora + timedelta(seconds=AUTOVINCULAR_CADA_S)
+        try:
+            activas = [s for s in await self._spoolman.bobinas() if not s.archivada]
+        except spoolman.ErrorSpoolman as e:
+            log.warning("No se pudo buscar bobinas para las ranuras sin chip: %s", e)
+            return
+        activas_por_id = {s.id: s for s in activas}
+        vinculos = {r.ranura: r for r in (await db.execute(select(RanuraBobina))).scalars()}
+        pendientes = []
+        for b in estables:
+            v = vinculos.get(b["id"])
+            vigente = v is not None and spoolman_asignacion.misma_bobina(
+                v.tipo, v.color, b["tipo"], b["color"]
+            )
+            if not (vigente and v.spool_id in activas_por_id):
+                pendientes.append(b)
+        # Un vínculo que quedó «desactualizado» porque se cambió el color de la ranura (p. ej. en Bambu
+        # Studio) pero cuya bobina sigue siendo del mismo material y de un color parecido al nuevo:
+        # es el mismo rollo con otro color en la paleta de la impresora; el vínculo se confirma solo.
+        revalidadas = False
+        for b in list(pendientes):
+            v = vinculos.get(b["id"])
+            bobina = activas_por_id.get(v.spool_id) if v is not None else None
+            base = self._material_base(b["tipo"])
+            if (
+                v is not None and bobina is not None and base
+                and self._material_base(bobina.material) == base
+                and spoolman_asignacion.color_parecido(bobina.color, b["color"])
+            ):  # fmt: skip
+                v.tipo, v.color, v.vinculada_en = b["tipo"], b["color"], ahora
+                auditoria.registrar(
+                    db, "spoolman_ranura_autovinculada",
+                    detalle={"ranura": b["id"], "spool_id": bobina.id, "bobina": bobina.nombre},
+                )  # fmt: skip
+                log.info(
+                    "Ranura %s: el color cambió pero sigue siendo la bobina n.º %s (%s); se confirma el vínculo.",
+                    b["id"], bobina.id, bobina.nombre,
+                )  # fmt: skip
+                pendientes.remove(b)
+                revalidadas = True
+        if revalidadas:
+            await db.commit()
+        if not pendientes:
+            return
+        ids_pendientes = {b["id"] for b in pendientes}
+        ocupadas: set[int] = set()  # bobinas que de verdad siguen en otra ranura
+        for rid, v in vinculos.items():
+            if rid in ids_pendientes:
+                continue
+            actual = next((b for b in bandejas if b["id"] == rid), None)
+            if (
+                actual is not None
+                and not actual["tag"]
+                and spoolman_asignacion.misma_bobina(v.tipo, v.color, actual["tipo"], actual["color"])
+            ):
+                ocupadas.add(v.spool_id)
+        por_ranura: dict[str, list] = {}
+        for b in pendientes:
+            base = self._material_base(b["tipo"])
+            por_ranura[b["id"]] = [
+                s for s in activas
+                if base and not s.tags and s.id not in ocupadas
+                and self._material_base(s.material) == base
+                and spoolman_asignacion.color_parecido(s.color, b["color"])
+            ]  # fmt: skip
+        vinculadas = False
+        for b in pendientes:
+            cands = por_ranura[b["id"]]
+            if len(cands) != 1:
+                if len(cands) > 1:
+                    aviso = (b["id"], b["tipo"], b["color"], tuple(c.id for c in cands))
+                    if aviso not in self._autovincular_avisos:
+                        self._autovincular_avisos.add(aviso)
+                        log.warning(
+                            "La ranura %s (rollo sin chip) podría ser cualquiera de las bobinas "
+                            "%s. No adivino: elige cuál en el panel.",
+                            b["id"], ", ".join(f"n.º {c.id}" for c in cands),
+                        )  # fmt: skip
+                continue
+            s = cands[0]
+            if any(o != b["id"] and s in por_ranura[o] for o in por_ranura):
+                continue  # otra ranura sin vincular también podría ser esta bobina: no se adivina
+            await db.execute(
+                delete(RanuraBobina).where(
+                    RanuraBobina.spool_id == s.id, RanuraBobina.ranura != b["id"]
+                )
+            )
+            fila = vinculos.get(b["id"])
+            if fila is None:
+                fila = RanuraBobina(ranura=b["id"])
+                db.add(fila)
+            fila.spool_id, fila.tipo, fila.color = s.id, b["tipo"], b["color"]
+            fila.vinculada_en = ahora
+            auditoria.registrar(
+                db, "spoolman_ranura_autovinculada",
+                detalle={"ranura": b["id"], "spool_id": s.id, "bobina": s.nombre},
+            )  # fmt: skip
+            vinculadas = True
+            log.info(
+                "Ranura %s (rollo sin chip): vinculada sola a la bobina n.º %s (%s)",
+                b["id"], s.id, s.nombre,
+            )  # fmt: skip
+        if vinculadas:
+            await db.commit()
+
+    async def _vigilar_cambios_ams(self, db) -> None:
+        """Deja en la auditoría (`ams_cambio`) cada cambio ESTABLE de una ranura del AMS (otro
+        tipo, color o chip, o que se vacíe o se llene), para mostrarlo como actividad en el panel.
+        Estable = la misma firma durante AUTOREGISTRO_ESPERA_S. La primera foto tras arrancar el
+        servicio es solo la línea base: no genera eventos."""
+        if self.cliente is None:
+            return
+        crudo = self.cliente.crudo()
+        datos = bambu.normalizar(crudo) if crudo else None
+        if not datos or not datos["ams"]:
+            return
+        ahora = _ahora()
+        primera = not self._ams_inicializado
+        visto: dict[str, tuple[tuple, datetime]] = {}
+        cambios: list[tuple[str, tuple, tuple]] = []
+        for b in [*datos["ams"], datos["externa"]]:
+            if not b:
+                continue
+            firma = (None, None, None) if b["vacia"] else (b["tipo"], b["color"], b["tag"])
+            previa = self._ams_visto.get(b["id"])
+            desde = previa[1] if previa and previa[0] == firma else ahora
+            visto[b["id"]] = (firma, desde)
+            if primera or b["id"] not in self._ams_estable:
+                if primera or (ahora - desde).total_seconds() >= AUTOREGISTRO_ESPERA_S:
+                    self._ams_estable[b["id"]] = firma
+            elif (
+                firma != self._ams_estable[b["id"]]
+                and (ahora - desde).total_seconds() >= AUTOREGISTRO_ESPERA_S
+            ):
+                cambios.append((b["id"], self._ams_estable[b["id"]], firma))
+                self._ams_estable[b["id"]] = firma
+        self._ams_visto = visto
+        self._ams_inicializado = True
+        for rid, antes, despues in cambios:
+            auditoria.registrar(
+                db, "ams_cambio",
+                detalle={
+                    "ranura": rid,
+                    "antes": dict(zip(("tipo", "color", "tag"), antes, strict=True)),
+                    "despues": dict(zip(("tipo", "color", "tag"), despues, strict=True)),
+                },
+            )  # fmt: skip
+            log.info("AMS ranura %s: %s → %s", rid, antes[:2], despues[:2])
+        if cambios:
+            await db.commit()
+
     async def _mantener_bobinas(self, db) -> None:
         """Cada cierto tiempo: (1) recuerda todos los chips que ya tiene Spoolman, y (2) pone la
         ubicación de cada bobina según lo que hay HOY en el AMS (la ranura para la que está puesta,
@@ -484,6 +679,8 @@ class Servicio:
             await db.commit()
             try:
                 await self._autoregistrar_bobinas(db)
+                await self._vigilar_cambios_ams(db)
+                await self._autovincular_ranuras(db)
                 await self._mantener_bobinas(db)
                 creadas = await spoolman_consumo.crear_lineas(db, fila.desde)
                 await db.commit()
@@ -584,10 +781,29 @@ class Servicio:
                     orden.estado, orden.detalle = "fallido", "La impresora no está conectada."
                     continue
                 try:
+                    desde = time.monotonic()
+                    rechazo_previo = _verificacion_rechazada(self.cliente)
                     ok = await asyncio.to_thread(self.cliente.enviar, orden.comando, orden.valor)
                     orden.estado = "enviado" if ok else "fallido"
                     orden.detalle = None if ok else "La impresora no recibió la orden."
                     log.info("Orden %s %s: %s", orden.comando, orden.valor or "", orden.estado)
+                    esperado = RESPUESTA_ESPERADA.get(orden.comando)
+                    if ok and esperado and hasattr(self.cliente, "esperar_respuesta"):
+                        # Estas órdenes pueden ser rechazadas por la impresora: se espera su respuesta.
+                        resp = await asyncio.to_thread(
+                            self.cliente.esperar_respuesta, esperado, desde
+                        )
+                        if resp is None and not rechazo_previo and _verificacion_rechazada(self.cliente):
+                            orden.estado, orden.detalle = "fallido", MENSAJE_VERIFICACION[:200]
+                            log.warning("La impresora rechazó %s: %s", orden.comando, MENSAJE_VERIFICACION)
+                        elif resp is None:
+                            log.warning("Sin respuesta de la impresora a %s.", orden.comando)
+                        elif resp["result"].lower() not in ("success", "ok", ""):
+                            orden.estado = "fallido"
+                            orden.detalle = (
+                                f"La impresora rechazó la orden ({resp['result']}"
+                                f"{': ' + resp['reason'] if resp['reason'] else ''})."
+                            )[:200]
                 except Exception as e:  # noqa: BLE001
                     orden.estado, orden.detalle = "fallido", f"Error: {type(e).__name__}"
             await db.commit()
@@ -629,6 +845,18 @@ class Servicio:
         self._parar.set()
 
 
+# La columna `detalle` admite 200 caracteres.
+MENSAJE_VERIFICACION = (
+    "La impresora rechazó la orden (verificación MQTT): su firmware exige órdenes firmadas por Bambu. "
+    "Activa el Modo LAN y el Modo desarrollador en la impresora."
+)
+
+
+def _verificacion_rechazada(cliente) -> bool:
+    f = getattr(cliente, "verificacion_rechazada", None)
+    return bool(f()) if f else False
+
+
 def exigir_clave_secreta() -> None:
     """Este servicio descifra la configuración con SECRET_KEY, también fuera de producción
     (corre con APP_ENV=development): con una clave corta o la de relleno no puede leerla."""
@@ -655,34 +883,3 @@ async def principal() -> None:
 
 if __name__ == "__main__":
     asyncio.run(principal())
-                    desde = time.monotonic()
-                    rechazo_previo = _verificacion_rechazada(self.cliente)
-                    esperado = RESPUESTA_ESPERADA.get(orden.comando)
-                    if ok and esperado and hasattr(self.cliente, "esperar_respuesta"):
-                        # Estas órdenes pueden ser rechazadas por la impresora: se espera su respuesta.
-                        resp = await asyncio.to_thread(
-                            self.cliente.esperar_respuesta, esperado, desde
-                        )
-                        if resp is None and not rechazo_previo and _verificacion_rechazada(self.cliente):
-                            orden.estado, orden.detalle = "fallido", MENSAJE_VERIFICACION[:200]
-                            log.warning("La impresora rechazó %s: %s", orden.comando, MENSAJE_VERIFICACION)
-                        elif resp is None:
-                            log.warning("Sin respuesta de la impresora a %s.", orden.comando)
-                        elif resp["result"].lower() not in ("success", "ok", ""):
-                            orden.estado = "fallido"
-                            orden.detalle = (
-                                f"La impresora rechazó la orden ({resp['result']}"
-                                f"{': ' + resp['reason'] if resp['reason'] else ''})."
-                            )[:200]
-# La columna `detalle` admite 200 caracteres.
-MENSAJE_VERIFICACION = (
-    "La impresora rechazó la orden (verificación MQTT): su firmware exige órdenes firmadas por Bambu. "
-    "Activa el Modo LAN y el Modo desarrollador en la impresora."
-)
-
-
-def _verificacion_rechazada(cliente) -> bool:
-    f = getattr(cliente, "verificacion_rechazada", None)
-    return bool(f()) if f else False
-
-

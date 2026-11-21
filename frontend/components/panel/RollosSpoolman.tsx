@@ -4,10 +4,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { api } from "@/lib/api";
-import { dinero } from "@/lib/format";
+import { dinero, diaISO, fechaCorta, fechaHora, hace, hoyISO, hora, restarDias } from "@/lib/format";
 import { gramosTexto, muestra } from "@/lib/impresora";
 import { mensajeDe, useCargar } from "@/lib/hooks";
-import type { AlcanceTrabajo, BobinaSpoolman, EstadoAlcance, LineaAlcance } from "@/lib/types";
+import type { ActividadSpoolman, AlcanceTrabajo, BobinaSpoolman, EstadoAlcance, LineaAlcance } from "@/lib/types";
 
 /** Cuánto queda del rollo (lo que informa Spoolman): la cifra, una barra fina y, si queda poco, un aviso. */
 export function Restante({ b }: { b: BobinaSpoolman }) {
@@ -226,5 +226,85 @@ export function AvisoAlcance({ a }: { a: AlcanceTrabajo | null }) {
         </p>
       ))}
     </div>
+  );
+}
+
+/** Punto de la línea de tiempo según el tipo de evento: cambio de rollo, acción de Spoolman o edición. */
+function claseTipo(tipo: string): string {
+  if (tipo === "cambio") return "actividad-ev--cambio";
+  if (tipo === "editada") return "actividad-ev--edicion";
+  if (["autovinculada", "registrada", "adoptada", "vinculo", "creada"].includes(tipo)) return "actividad-ev--spoolman";
+  return "";
+}
+
+/** Separa «Ranura 3» de «Ranura 3: PLA negro → PLA violeta» para ponerlo en negrita; si no hay prefijo corto, todo es texto. */
+function partirTexto(texto: string): { cabeza: string | null; resto: string } {
+  const i = texto.indexOf(": ");
+  if (i > 0 && i <= 24) return { cabeza: texto.slice(0, i), resto: texto.slice(i + 2) };
+  return { cabeza: null, resto: texto };
+}
+
+/** Eventos agrupados por día (en Bogotá), conservando el orden en que llegan. */
+function porDia(eventos: ActividadSpoolman[]): { dia: string; etiqueta: string; eventos: ActividadSpoolman[] }[] {
+  const hoy = hoyISO();
+  const ayer = restarDias(hoy, 1);
+  const grupos: { dia: string; etiqueta: string; eventos: ActividadSpoolman[] }[] = [];
+  for (const e of eventos) {
+    const dia = diaISO(e.en);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.dia === dia) ultimo.eventos.push(e);
+    else grupos.push({ dia, etiqueta: dia === hoy ? "Hoy" : dia === ayer ? "Ayer" : fechaCorta(dia), eventos: [e] });
+  }
+  return grupos;
+}
+
+/** Lo último que vio la app en el AMS y lo que hizo en Spoolman (cambios de rollo, rollos unidos o registrados solos). */
+export function Actividad({ alVer }: { alVer?: () => void }) {
+  const lista = useCargar(() => api.spoolman.actividad(15));
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) void lista.recargar();
+    }, 15000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const eventos = lista.datos ?? [];
+  const hoy = hoyISO();
+  return (
+    <details className="actividad" onToggle={(e) => { if (e.currentTarget.open) alVer?.(); }}>
+      <summary>
+        Actividad reciente
+        {eventos.length > 0 && <span className="actividad__cuenta"> · {eventos.length} {eventos.length === 1 ? "evento" : "eventos"}</span>}
+      </summary>
+      {eventos.length === 0 ? (
+        <p className="actividad__vacio">Aún no hay actividad. Aparece cuando cargas o cambias un rollo.</p>
+      ) : (
+        <div className="actividad__grupos">
+          {porDia(eventos).map((g) => (
+            <section key={g.dia} className="actividad-dia" aria-label={g.etiqueta}>
+              <h4 className="actividad-dia__titulo">{g.etiqueta}</h4>
+              <ul className="actividad-lista">
+                {g.eventos.map((e) => {
+                  const { cabeza, resto } = partirTexto(e.texto);
+                  return (
+                    <li key={e.id} className={`actividad-ev ${claseTipo(e.tipo)}`}>
+                      <span className="actividad-ev__riel" aria-hidden="true" />
+                      <time className="actividad-ev__hora num" dateTime={e.en} title={fechaHora(e.en)}>
+                        {g.dia === hoy ? hace(e.en) : hora(e.en)}
+                      </time>
+                      <p className="actividad-ev__texto">
+                        {cabeza && <strong>{cabeza}</strong>}
+                        {cabeza ? " " : null}
+                        {resto}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </details>
   );
 }

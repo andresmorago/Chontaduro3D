@@ -19,9 +19,11 @@ from app.models import (
     EstadoImpresora,
     EstadoSpoolman,
     RanuraBobina,
+    RegistroAuditoria,
     TrabajoImpresora,
 )
 from app.schemas.spoolman import (
+    ActividadOut,
     BobinaOut,
     AlcanceLineaOut,
     AlcanceOut,
@@ -465,3 +467,102 @@ async def decidir_consumo(
     t = await db.get(TrabajoImpresora, c.trabajo_id)
     await db.commit()
     return consumo_out(c, t)
+
+
+# --------------------------------------------------------------------------------- actividad
+# Acción de la auditoría → tipo que ve el panel.
+ACTIVIDAD = {
+    "ams_cambio": "cambio",
+    "spoolman_ranura_autovinculada": "autovinculada",
+    "spoolman_bobina_autoregistrada": "registrada",
+    "spoolman_bobina_adoptada": "adoptada",
+    "spoolman_vinculo": "vinculo",
+    "spoolman_bobina_creada": "creada",
+    "spoolman_bobina_editada": "editada",
+}
+# Nombres de color (RGB aproximado) para contarle a una persona qué rollo es.
+COLORES = {
+    "negro": (0, 0, 0), "blanco": (255, 255, 255), "gris": (128, 128, 128),
+    "rojo": (220, 20, 20), "naranja": (255, 128, 0), "amarillo": (255, 220, 0),
+    "verde": (30, 160, 50), "turquesa": (0, 170, 170), "celeste": (100, 190, 255),
+    "azul": (20, 40, 220), "violeta": (130, 50, 190), "rosa": (255, 110, 180),
+    "café": (110, 65, 30), "beige": (225, 200, 160),
+}  # fmt: skip
+
+
+def _color_en_palabras(color: str | None) -> str:
+    candidatos = [
+        (d, nombre)
+        for nombre, rgb in COLORES.items()
+        if (d := asignacion.distancia(color, "#%02x%02x%02x" % rgb)) is not None  # noqa: UP031
+    ]
+    return min(candidatos)[1] if candidatos else ""
+
+
+def _rollo(x: dict | None) -> str:
+    if not isinstance(x, dict) or not x.get("tipo"):
+        return "vacía"
+    texto = f"{x['tipo']} {_color_en_palabras(x.get('color'))}".strip()
+    return f"{texto} (Bambu con chip)" if x.get("tag") else texto
+
+
+def _texto_actividad(accion: str, d: dict) -> str:
+    ranura = titulo_ranura(str(d["ranura"])) if d.get("ranura") is not None else "Ranura"
+    n = f"n.º {d['spool_id']}" if d.get("spool_id") is not None else "sin número"
+    nombre = f"«{d['bobina']}» ({n})" if d.get("bobina") else n
+    if accion == "ams_cambio":
+        antes, despues = _rollo(d.get("antes")), _rollo(d.get("despues"))
+        if antes == despues:
+            despues += ", otro rollo"
+        return f"{ranura}: {antes} → {despues}"
+    if accion == "spoolman_ranura_autovinculada":
+        return f"{ranura}: se unió sola a {nombre}"
+    if accion == "spoolman_bobina_autoregistrada":
+        return f"{ranura}: rollo Bambu registrado en Spoolman como {nombre}"
+    if accion == "spoolman_bobina_adoptada":
+        return f"{ranura}: el chip del rollo Bambu se vinculó a {nombre}"
+    if accion == "spoolman_vinculo":
+        if d.get("spool_id") is None:
+            return f"{ranura}: se quitó la bobina asociada"
+        return f"{ranura}: se asoció a mano la bobina {n}"
+    if accion == "spoolman_bobina_creada":
+        return f"{ranura}: se creó en Spoolman la bobina {n}"
+    cambios = []  # spoolman_bobina_editada
+    if d.get("restante_g") is not None:
+        cambios.append(f"quedan {d['restante_g']:g} g")
+    if d.get("precio") is not None:
+        cambios.append(f"precio {d['precio']:g}")
+    if d.get("archivar") is True:
+        cambios.append("archivada (rollo terminado)")
+    elif d.get("archivar") is False and not cambios:
+        cambios.append("restaurada")
+    return f"Bobina {n}: " + (", ".join(cambios) or "corregida")
+
+
+@router.get("/actividad", response_model=list[ActividadOut])
+async def actividad(
+    db: DB, limite: Annotated[int, Query(ge=1, le=100)] = 20
+) -> list[ActividadOut]:
+    """Lo más reciente que pasó con los rollos: cambios en el AMS, vínculos hechos por la app o a
+    mano, bobinas registradas o corregidas. Lo más nuevo primero."""
+    filas = (
+        (
+            await db.execute(
+                select(RegistroAuditoria)
+                .where(RegistroAuditoria.accion.in_(ACTIVIDAD))
+                .order_by(RegistroAuditoria.creado_en.desc(), RegistroAuditoria.id.desc())
+                .limit(limite)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        ActividadOut(
+            id=f.id,
+            en=f.creado_en,
+            tipo=ACTIVIDAD[f.accion],
+            texto=_texto_actividad(f.accion, f.detalle if isinstance(f.detalle, dict) else {}),
+        )
+        for f in filas
+    ]

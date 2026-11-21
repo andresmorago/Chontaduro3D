@@ -5,9 +5,9 @@ import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { api, ErrorApi } from "@/lib/api";
 import { fechaCorta, hace } from "@/lib/format";
-import { ETIQUETA_CONSUMO, gramosTexto, muestra } from "@/lib/impresora";
+import { ETIQUETA_CONSUMO, colorParecido, distanciaColor, gramosTexto, muestra, normTipo } from "@/lib/impresora";
 import { mensajeDe, useCargar } from "@/lib/hooks";
-import { AvisoAlcance, DetalleAlcance, EditarRollo, MenuMas, Repuestos, Restante } from "@/components/panel/RollosSpoolman";
+import { Actividad, AvisoAlcance, DetalleAlcance, EditarRollo, MenuMas, Repuestos, Restante } from "@/components/panel/RollosSpoolman";
 import type { BobinaSpoolman, ConsumoFilamento, RanuraSpoolman } from "@/lib/types";
 
 const textoBobina = (b: BobinaSpoolman) => `${b.nombre} · ${b.restante_g != null ? gramosTexto(b.restante_g) : "sin peso"} · n.º ${b.id}`;
@@ -144,7 +144,12 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
           Lo que ves lo informa la impresora en vivo. Cada ranura se une a una bobina de Spoolman, que es la que lleva los gramos. Las bobinas Bambu con chip se unen solas; las demás las eliges una vez.
         </p>
         <p>
-          <strong>Releer chip</strong> (en «Más») hace que el AMS vuelva a leer la etiqueta de esa bobina, como el botón de actualizar de Bambu Studio. Solo funciona con la impresora quieta y sin filamento cargado en el cabezal.
+          Para cambiar un rollo, cárgalo en la impresora (o en Bambu Studio). La app lo ve sola: los rollos Bambu con chip se registran en Spoolman; los demás se unen solos
+          si en Spoolman hay uno del mismo material y color, o te pregunta cuál es. Esta app no cambia el filamento del AMS: el firmware de la impresora solo acepta esas órdenes si van firmadas por Bambu.
+        </p>
+        <p>
+          <strong>Releer chip</strong> (en «Más») pide al AMS que vuelva a leer la etiqueta de esa bobina, como el botón de actualizar de Bambu Studio, y muestra el código leído.
+          Si tu impresora rechaza la orden por la verificación de firmware, el panel te lo dirá.
         </p>
       </details>
       {lista.error && <p className="alerta" role="alert">{lista.error}</p>}
@@ -160,12 +165,28 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
             const necesidades = (alcance.datos?.lineas ?? []).filter((l) => l.ranura === r.ranura);
             const noAlcanza = necesidades.some((l) => l.estado === "no_alcanza");
             const tiene = Boolean(v.bobina && v.estado !== "sin_vincular");
+            // La impresora no sabe que cambiaste el rollo si no tiene chip: sigue informando el color anterior.
+            // Se muestra el de la bobina elegida y se avisa de la diferencia.
+            const d = tiene ? distanciaColor(v.bobina!.color, r.color) : null;
+            const colorDistinto = d !== null && d > 60;
+            // Rollo nuevo sin registrar (o que cambió): si en Spoolman ya hay uno del mismo material y color que no está en el AMS, se ofrece.
+            const sugeridas = !tiene || v.estado === "desactualizado"
+              ? bobinas
+                  .filter((b) => b.id !== v.bobina?.id && !(b.ubicacion ?? "").startsWith("AMS · ") && b.material && normTipo(b.material) === normTipo(r.tipo) && colorParecido(b.color, r.color))
+                  .slice(0, 2)
+              : [];
             return (
               <li key={r.ranura} className={`spool-ranura${r.en_uso ? " spool-ranura--uso" : ""}${noAlcanza ? " spool-ranura--falta" : ""}`}>
-                <Muestra color={r.color} />
+                <Muestra color={tiene && v.bobina!.color ? v.bobina!.color : r.color} />
                 <div className="spool-ranura__texto">
                   <strong className="spool-ranura__titulo">
                     {r.nombre} <span className="muted">· {r.marca ?? r.tipo ?? "Filamento"}</span>
+                    {colorDistinto && (
+                      <span className="pildora pildora--aviso" title="Este rollo no tiene chip y la impresora sigue informando el color anterior. Cámbialo en la pantalla de la impresora o en Bambu Studio para que coincida.">
+                        <span className="muestra-mini" style={{ background: muestra(r.color) }} aria-hidden="true" />
+                        la impresora lo ve así
+                      </span>
+                    )}
                     {r.en_uso && <span className="pildora pildora--ok">En uso</span>}
                   </strong>
                   {tiene && v.bobina ? (
@@ -210,10 +231,20 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
                     </MenuMas>
                   </div>
                 )}
-                {(lectura?.ranura === r.ranura || v.estado === "desactualizado" || necesidades.length > 0 || conflicto?.ranura === r.ranura || creando === r.ranura || abierto || ajustando === r.ranura) && (
+                {(sugeridas.length > 0 || lectura?.ranura === r.ranura || v.estado === "desactualizado" || necesidades.length > 0 || conflicto?.ranura === r.ranura || creando === r.ranura || abierto || ajustando === r.ranura) && (
                   <div className="spool-ranura__extra">
                     {v.estado === "desactualizado" && v.bobina && (
                       <span className="aviso-linea" role="status">La ranura cambió de filamento. ¿Sigue siendo esta bobina?</span>
+                    )}
+                    {sugeridas.length > 0 && (
+                      <span className="lectura-chip">
+                        <span className="muted">{v.estado === "desactualizado" ? "¿Cambiaste el rollo?" : "¿Es un rollo que ya tienes en Spoolman?"}</span>
+                        {sugeridas.map((b) => (
+                          <Boton key={b.id} variante="secondary" pequeno cargando={ocupado === r.ranura} onClick={() => void vincular(r, b.id)}>
+                            Sí, es «{b.nombre}»
+                          </Boton>
+                        ))}
+                      </span>
                     )}
                     {lectura?.ranura === r.ranura && (
                       <span className="lectura-chip" role="status">
@@ -467,6 +498,7 @@ function Conectado({ porResolver, autoregistro, alCambiar, respaldo, impresora }
         <p className="alerta" role="status">Spoolman aún no tiene bobinas. Usa «Crear en Spoolman» en cada ranura (o créalas en Spoolman) y vuelve aquí.</p>
       )}
       <Ranuras bobinas={lista} autoregistro={autoregistro} respaldo={respaldo} impresora={impresora} recargarBobinas={async () => { await bobinas.recargar(); }} />
+      <Actividad />
       <Repuestos alCambiar={async () => { await bobinas.recargar(); }} />
       <div className="spool-bloque">
         <h3 className="spool-sub">

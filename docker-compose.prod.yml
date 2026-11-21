@@ -101,6 +101,8 @@ services:
       SPOOLMAN_URL: ${SPOOLMAN_URL:-http://spoolman:8000}
       # Registra solas en Spoolman las bobinas Bambu con chip que aparezcan en el AMS (0 = apagado).
       SPOOLMAN_AUTOCREAR: ${SPOOLMAN_AUTOCREAR:-1}
+      # Une solo los rollos SIN chip a su bobina de Spoolman cuando hay una única candidata (0 = apagado).
+      SPOOLMAN_AUTOVINCULAR: ${SPOOLMAN_AUTOVINCULAR:-1}
     volumes:
       # Solo lectura de una vez: importa el token viejo de `make bambu-login` (ya retirado), si existe.
       - ./data/nube:/nube

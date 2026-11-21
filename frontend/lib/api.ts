@@ -6,6 +6,7 @@ import type {
   AccionConsumo,
   Articulo,
   ArticuloEntrada,
+  ActividadSpoolman,
   AlcanceTrabajo,
   BobinaSpoolman,
   RepuestosSpoolman,
@@ -186,6 +187,7 @@ export const api = {
     editarBobina: (id: number, d: { restante_g?: number; precio?: number; archivar?: boolean }) =>
       pedir<BobinaSpoolman>(`/spoolman/bobinas/${id}`, { metodo: "PATCH", cuerpo: d }),
     repuestos: () => pedir<RepuestosSpoolman>("/spoolman/repuestos"),
+    actividad: (limite = 15) => pedir<ActividadSpoolman[]>(`/spoolman/actividad${q({ limite })}`),
     alcance: () => pedir<AlcanceTrabajo>("/spoolman/alcance"),
     ranuras: () => pedir<RanuraSpoolman[]>("/spoolman/ranuras"),
     vincular: (ranura: string, spoolId: number | null, mover = false) =>

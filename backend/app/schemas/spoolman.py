@@ -138,3 +138,12 @@ class ConsumoAccionIn(Entrada):
     spool_id: int | None = Field(default=None, ge=1)
     # Ajustar los gramos a descontar (p. ej. un trabajo cortado). Solo con «asignar».
     gramos: Annotated[Decimal, Field(ge=0, le=Decimal("10000"), decimal_places=2)] | None = None
+
+
+class ActividadOut(Salida):
+    id: int
+    en: datetime
+    # «cambio» (AMS), «autovinculada», «registrada», «adoptada», «vinculo», «creada», «editada».
+    tipo: str
+    # Ya redactado para una persona: «Ranura 3: PLA negro → PLA violeta».
+    texto: str

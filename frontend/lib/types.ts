@@ -480,6 +480,14 @@ export interface BobinaSpoolman {
   bajo: boolean;
 }
 
+/** Un evento reciente del AMS o de Spoolman, ya redactado para una persona. */
+export interface ActividadSpoolman {
+  id: number | string;
+  en: string;
+  tipo: string;
+  texto: string;
+}
+
 export interface RepuestosSpoolman {
   umbral_g: number;
   bobinas: BobinaSpoolman[];

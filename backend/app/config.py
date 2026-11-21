@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # Registrar solas en Spoolman las bobinas Bambu con chip del AMS (el UID del chip
     # es único: no se duplican). Apágalo (0) si prefieres crearlas tú a mano.
     spoolman_autocrear: bool = True
+    # Vincular solo a su ranura el rollo SIN chip (p. ej. un Sunlu) cuando hay UNA sola bobina
+    # sin chip del mismo material y color en Spoolman. Apágalo (0) para vincularlos tú.
+    spoolman_autovincular: bool = True
 
     @field_validator("cookie_secure", mode="before")
     @classmethod

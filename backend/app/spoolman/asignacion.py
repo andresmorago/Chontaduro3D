@@ -5,6 +5,7 @@ Lógica pura. La A1 no informa el mapeo del trabajo, solo en qué bandeja estaba
 emparejan con los filamentos del .3mf. Es conservador a propósito: si hay duda devuelve None y la
 persona elige la bobina; descontar de la bobina equivocada es peor que pedir una confirmación."""
 
+import colorsys
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +35,38 @@ def distancia(a: str | None, b: str | None) -> float | None:
     if x is None or y is None:
         return None
     return sum((p - q) ** 2 for p, q in zip(x, y, strict=True)) ** 0.5
+
+
+# Tono (grados) y mínimos de saturación y brillo para comparar colores «de paleta» por su tono.
+TONO_PARECIDO = 28.0
+SATURACION_MIN = 0.2
+BRILLO_MIN = 0.15
+
+
+def _tono(c: str | None) -> float | None:
+    """Tono (0–360°) de un color con color propio; None para negros, blancos y grises."""
+    rgb = _rgb(c)
+    if rgb is None:
+        return None
+    h, sat, val = colorsys.rgb_to_hsv(*(x / 255 for x in rgb))
+    return h * 360 if sat >= SATURACION_MIN and val >= BRILLO_MIN else None
+
+
+def color_parecido(a: str | None, b: str | None) -> bool:
+    """¿Es el «mismo» color? Cerca en RGB, o —para colores con color propio— del mismo tono. Quien
+    elige el color de un rollo en la impresora o en Bambu Studio lo toma de una paleta, y rara vez
+    coincide con el de Spoolman (un violeta #443089 frente a un #753bbd): el tono sí. Los negros,
+    blancos y grises solo cuentan por cercanía."""
+    d = distancia(a, b)
+    if d is None:
+        return False
+    if d <= COLOR_IGUAL:
+        return True
+    ta, tb = _tono(a), _tono(b)
+    if ta is None or tb is None:
+        return False
+    dif = abs(ta - tb)
+    return min(dif, 360 - dif) <= TONO_PARECIDO
 
 
 def misma_bobina(tipo_a, color_a, tipo_b, color_b) -> bool:
