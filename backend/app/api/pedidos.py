@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 
 from app.core import auditoria
-from app.core.inventario import colores_de_articulos, stock_por_clave
 from app.core.deps import DB, PROTEGIDO, Admin
+from app.core.inventario import colores_de_articulos, stock_por_clave
 from app.models import Articulo, ArticuloColor, Pedido, PedidoItem, Venta, VentaItem
 from app.schemas.dominio import (
     DemandaArticuloOut,
@@ -97,12 +97,16 @@ async def demanda(db: DB) -> list[DemandaArticuloOut]:
     if not filas:
         return []
     ids_pedidos = {i.pedido_id for i, _ in filas}
-    ids_articulos = {a.id for _, a in filas}
 
     # Piezas ya vendidas a cada pedido, por (pedido, artículo, color en minúsculas).
     vendidas: dict[tuple[UUID, UUID, str | None], int] = {}
     for pedido_id, articulo_id, color, n in await db.execute(
-        select(Venta.pedido_id, VentaItem.articulo_id, ArticuloColor.nombre, func.sum(VentaItem.cantidad))
+        select(
+            Venta.pedido_id,
+            VentaItem.articulo_id,
+            ArticuloColor.nombre,
+            func.sum(VentaItem.cantidad),
+        )
         .join(Venta, Venta.id == VentaItem.venta_id)
         .outerjoin(ArticuloColor, ArticuloColor.id == VentaItem.color_id)
         .where(Venta.pedido_id.in_(ids_pedidos), Venta.anulada.is_(False))
@@ -145,7 +149,9 @@ async def demanda(db: DB) -> list[DemandaArticuloOut]:
             nombre = next((v for v in colores[articulo_id].values() if v.lower() == color), color)
             renglones.append(DemandaColorOut(color=nombre, pendiente=n, stock=hay, faltan=faltan))
         # El stock sin color asignado que sobra cubre lo que falte de los colores con nombre.
-        sobrante = max(0, sin_color - por_color.get(None, 0)) if None in por_color else max(0, sin_color)
+        sobrante = (
+            max(0, sin_color - por_color.get(None, 0)) if None in por_color else max(0, sin_color)
+        )
         faltan = faltan_sin_color + max(0, faltan_con_color - sobrante)
         salida.append(
             DemandaArticuloOut(
