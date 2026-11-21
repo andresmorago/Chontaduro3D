@@ -30,6 +30,9 @@ GESTION_TRABAJO = ("pendiente", "importado", "ignorado")
 COMANDOS = (
     "pausar", "reanudar", "cancelar", "luz", "velocidad",
     "temp_boquilla", "temp_cama", "ventilador_pieza", "ventilador_aux", "leer_rfid",
+    # «ajustar_ranura» se retiró de la app (la impresora exige órdenes firmadas por Bambu para escribir en el AMS),
+    # pero la migración u1e8f4a6b2c7 ya la puso en la restricción de la base: se conserva para que coincidan.
+    "ajustar_ranura",
 )  # fmt: skip
 ESTADOS_COMANDO = ("pendiente", "enviado", "fallido", "vencido")
 
@@ -130,7 +133,7 @@ class ComandoImpresora(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
     comando: Mapped[str] = mapped_column(String(20), nullable=False)
-    valor: Mapped[str | None] = mapped_column(String(12))
+    valor: Mapped[str | None] = mapped_column(String(40))
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL")
     )

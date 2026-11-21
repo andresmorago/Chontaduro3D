@@ -12,6 +12,7 @@ import contextlib
 import logging
 import signal
 from datetime import UTC, datetime, timedelta
+import time
 from pathlib import Path
 
 from sqlalchemy import select, update
@@ -21,6 +22,7 @@ from app.core import auditoria, secretos
 from app.db import SessionLocal, engine
 from app.impresora import ajustes, bambu, lector3mf, maquina, nube, sincronizacion
 from app.models import (
+from app.impresora.bambu import RESPUESTA_ESPERADA
     ChipBobina,
     ComandoImpresora,
     EstadoImpresora,
@@ -653,3 +655,34 @@ async def principal() -> None:
 
 if __name__ == "__main__":
     asyncio.run(principal())
+                    desde = time.monotonic()
+                    rechazo_previo = _verificacion_rechazada(self.cliente)
+                    esperado = RESPUESTA_ESPERADA.get(orden.comando)
+                    if ok and esperado and hasattr(self.cliente, "esperar_respuesta"):
+                        # Estas órdenes pueden ser rechazadas por la impresora: se espera su respuesta.
+                        resp = await asyncio.to_thread(
+                            self.cliente.esperar_respuesta, esperado, desde
+                        )
+                        if resp is None and not rechazo_previo and _verificacion_rechazada(self.cliente):
+                            orden.estado, orden.detalle = "fallido", MENSAJE_VERIFICACION[:200]
+                            log.warning("La impresora rechazó %s: %s", orden.comando, MENSAJE_VERIFICACION)
+                        elif resp is None:
+                            log.warning("Sin respuesta de la impresora a %s.", orden.comando)
+                        elif resp["result"].lower() not in ("success", "ok", ""):
+                            orden.estado = "fallido"
+                            orden.detalle = (
+                                f"La impresora rechazó la orden ({resp['result']}"
+                                f"{': ' + resp['reason'] if resp['reason'] else ''})."
+                            )[:200]
+# La columna `detalle` admite 200 caracteres.
+MENSAJE_VERIFICACION = (
+    "La impresora rechazó la orden (verificación MQTT): su firmware exige órdenes firmadas por Bambu. "
+    "Activa el Modo LAN y el Modo desarrollador en la impresora."
+)
+
+
+def _verificacion_rechazada(cliente) -> bool:
+    f = getattr(cliente, "verificacion_rechazada", None)
+    return bool(f()) if f else False
+
+

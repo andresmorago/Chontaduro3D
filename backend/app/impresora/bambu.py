@@ -6,8 +6,11 @@ La impresora publica en `device/<serie>/report` y recibe en `device/<serie>/requ
 import json
 import re
 import ssl
+import logging
 import threading
+import time
 import uuid
+from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,8 +35,9 @@ LIMITES = {
     "ventilador_aux": (0, 100, "%"),
 }
 BOQUILLA_MIN = 150
-# Ranuras del AMS que se pueden releer: 4 por unidad (el id de la ranura ya es unidad × 4 + posición).
+# Ranuras del AMS cuyo chip se puede releer: 4 por unidad (el id de la ranura ya es unidad × 4 + posición).
 RANURA_RFID_MAX = 15
+
 SIN_RESPUESTA_S = 10  # tras esto sin conectar, se informa «red» aunque el sistema siga esperando
 NOMBRES_NUMERICOS = {
     "temp_boquilla": "La temperatura de la boquilla",
@@ -253,6 +257,21 @@ def mezclar_estado(base: Any, nuevo: Any) -> Any:
     return nuevo
 
 
+log = logging.getLogger("impresora")
+
+# Código HMS «MQTT Command verification failed» (0500-0500-0001-0007): el firmware con «control de
+# autorización» rechaza las órdenes que no vienen firmadas por Bambu Studio / Handy. La impresora no
+# contesta a la orden: solo muestra este aviso (y lo publica en la lista `hms` de su reporte).
+HMS_VERIFICACION = (0x05000500, 0x00010007)
+
+# Comando MQTT con el que la impresora responde a cada orden de la app (`result`: success | fail, y `reason`).
+RESPUESTA_ESPERADA = {
+    "pausar": "pause", "reanudar": "resume", "cancelar": "stop", "luz": "ledctrl",
+    "velocidad": "print_speed", "temp_boquilla": "gcode_line", "temp_cama": "gcode_line",
+    "ventilador_pieza": "gcode_line", "ventilador_aux": "gcode_line", "leer_rfid": "gcode_line",
+}  # fmt: skip
+
+
 class ClienteBambu:
     """Conexión MQTT con reconexión automática. El estado se va completando con cada mensaje
     (la A1 manda solo lo que cambió) y se refresca con un «pushall» periódico."""
@@ -267,6 +286,8 @@ class ClienteBambu:
         self._conectada = False
         self._error: str | None = None
         self._iniciada: datetime | None = None
+        # Respuestas de la impresora a las órdenes (las últimas): {"comando", "result", "reason", "en"}.
+        self._respuestas: deque[dict[str, Any]] = deque(maxlen=20)
         # Cliente único por proceso: dos con el mismo id se expulsan entre sí.
         self._c = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, client_id=f"misimpresiones-{uuid.uuid4().hex[:8]}"
@@ -318,13 +339,33 @@ class ClienteBambu:
 
     def _al_mensaje(self, _c, _u, m) -> None:
         try:
-            datos = json.loads(m.payload).get("print")
+            mensaje = json.loads(m.payload)
+            datos = mensaje.get("print")
+            sistema = mensaje.get("system")
         except (ValueError, AttributeError):
             return
+        if isinstance(sistema, dict) and sistema.get("command") and sistema.get("result") is not None:
+            # La luz es una orden «system»: su respuesta no es un reporte de estado.
+            with self._lock:
+                self._respuestas.append({
+                    "comando": str(sistema.get("command")), "result": str(sistema.get("result")),
+                    "reason": str(sistema.get("reason") or ""), "en": time.monotonic(),
+                })  # fmt: skip
         if isinstance(datos, dict):
             with self._lock:
                 self._estado = mezclar_estado(self._estado, datos)
                 self._ultimo = datetime.now(UTC)
+                # Una respuesta a una orden trae `command` y `result` (los reportes de estado no).
+                if datos.get("command") and datos.get("result") is not None:
+                    resp = {
+                        "comando": str(datos.get("command")), "result": str(datos.get("result")),
+                        "reason": str(datos.get("reason") or ""), "en": time.monotonic(),
+                    }  # fmt: skip
+                    self._respuestas.append(resp)
+                    log.info(
+                        "La impresora respondió a «%s»: %s %s",
+                        resp["comando"], resp["result"], resp["reason"],
+                    )
 
     # --- uso desde el servicio ---
     def pedir_todo(self) -> None:
@@ -341,6 +382,29 @@ class ClienteBambu:
                 nodo = fila["node"]
                 break
         return self._publicar(construir_orden(comando, valor, nodo))
+
+    def verificacion_rechazada(self) -> bool:
+        """¿La impresora tiene activo el aviso «MQTT Command verification failed»?"""
+        with self._lock:
+            hms = self._estado.get("hms") or []
+        return any(
+            isinstance(h, dict) and (h.get("attr"), h.get("code")) == HMS_VERIFICACION for h in hms
+        )
+
+    def esperar_respuesta(
+        self, comando: str, desde: float, espera_s: float = 4.0
+    ) -> dict[str, Any] | None:
+        """La respuesta de la impresora al comando MQTT `comando` recibida después de `desde`
+        (time.monotonic()), esperando hasta `espera_s`; None si no contestó a tiempo."""
+        limite = time.monotonic() + espera_s
+        while True:
+            with self._lock:
+                for r in reversed(self._respuestas):
+                    if r["comando"] == comando and r["en"] >= desde:
+                        return dict(r)
+            if time.monotonic() >= limite:
+                return None
+            time.sleep(0.2)
 
     @property
     def error_conexion(self) -> str | None:

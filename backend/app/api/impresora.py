@@ -134,8 +134,7 @@ async def ordenar(datos: ComandoIn, db: DB, usuario: Admin) -> ComandoOut:
 
     if datos.comando == "leer_rfid":
         d = fila.datos or {}
-        ranura = str(validar_ranura_rfid(datos.valor))
-        if ranura not in {str(b.get("id")) for b in d.get("ams") or []}:
+        if str(validar_ranura_rfid(datos.valor)) not in {str(b.get("id")) for b in d.get("ams") or []}:
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "Esa ranura no existe en el AMS que informa la impresora."
             )
