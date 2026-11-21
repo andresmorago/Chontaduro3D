@@ -220,14 +220,14 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
                     {tiene && <Boton variante="secondary" pequeno onClick={() => { setAjustando(r.ranura); setConflicto(null); }}>Ajustar</Boton>}
                     <MenuMas>
                       <Boton variante="ghost" pequeno onClick={() => { setEditando(r.ranura); setElegida(v.bobina ? String(v.bobina.id) : ""); setConflicto(null); }}>
-                        {tiene ? "Cambiar de bobina" : "Elegir una existente"}
+                        {tiene ? "Cambiar bobina de Spoolman" : "Elegir una existente"}
                       </Boton>
                       {r.ranura !== "254" && (
                         <Boton variante="ghost" pequeno disabled={sinLeer !== null} title={sinLeer ?? "Pide al AMS que vuelva a leer el chip de esta bobina"} cargando={ocupado === r.ranura} onClick={() => void releer(r)}>
                           Releer chip
                         </Boton>
                       )}
-                      {tiene && <Boton variante="ghost" pequeno cargando={ocupado === r.ranura} onClick={() => void vincular(r, null)}>Quitar de la ranura</Boton>}
+                      {tiene && <Boton variante="ghost" pequeno title="Solo desvincula la bobina en la app y en Spoolman. No cambia nada en la impresora: el rollo se descarga a mano." cargando={ocupado === r.ranura} onClick={() => void vincular(r, null)}>Desvincular de Spoolman</Boton>}
                     </MenuMas>
                   </div>
                 )}

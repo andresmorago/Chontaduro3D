@@ -186,8 +186,8 @@ en unos segundos se ve en el panel y, si es una bobina nueva, el registro autom�
 - **Se ve el código.** Cada ranura con chip muestra su UID (código RFID) junto a la bobina. Al pulsar *Releer chip* aparece «Leyendo…» y, a los pocos
   segundos, «Chip leído: <UID>» con un botón para copiarlo; si la impresora no detecta nada lo dice (rollo sin chip o mal asentado).
 - Sin chip (rollos no Bambu) no hay nada que leer: esas bobinas se asocian a mano.
-- **Puede ser rechazada.** Va por el mismo canal que las demás órdenes (G-code `M620`), y los firmwares con control de autorización rechazan las órdenes no firmadas. El servicio espera la
-  respuesta de la impresora (o su aviso HMS de verificación) y el panel muestra el motivo en vez de quedarse esperando. Lo mismo aplica a pausar, luz, velocidad, temperaturas y ventiladores.
+- **Puede ser rechazada, y en la A1 probada lo fue.** Va por el mismo canal que las temperaturas (G-code), pero el firmware con control de autorización rechaza `M620 R…` si no va firmado. El servicio espera la
+  respuesta de la impresora (o su aviso HMS de verificación) y el panel muestra el motivo en vez de quedarse esperando. El servicio hace esa espera con todas las órdenes del panel (pausar, luz, velocidad, temperaturas, ventiladores), aunque en la práctica el firmware solo rechaza las que tocan el AMS.
 - Es una orden más del panel (`leer_rfid`, ver «Controles»): el backend la deja en `impresora_comandos` y el servicio la envía; queda en la auditoría.
 - Fuente del comando: `MachineObject::command_ams_refresh_rfid` y `StatusPanel::on_ams_refresh_rfid` de Bambu Studio (código abierto). Para impresoras
   de la plataforma nueva (H2D) Studio usa otra orden (`ams_get_rfid`); la A1 usa el G-code.
@@ -195,16 +195,17 @@ en unos segundos se ve en el panel y, si es una bobina nueva, el registro autom�
 ## Cuando el rollo cambia (o llega uno nuevo desde la impresora)
 
 **La impresora manda en lo que hay cargado; Spoolman lleva el inventario.** Para cambiar un rollo lo cargas en la impresora (o en Bambu Studio) y la app lo ve sola. Esta
-app **no escribe el filamento en el AMS**: el firmware de la A1 solo acepta esas órdenes si van firmadas por Bambu Studio o Handy y, si no, muestra
-`HMS_0500-0500-0001-0007 «MQTT Command verification failed»`. Activar el Modo LAN + Modo desarrollador lo evitaría, pero desconecta la impresora de la nube de Bambu
-(Handy a distancia y el historial de Bambu Cloud que alimenta los gramos reales), así que no se usa.
+app **no cambia el filamento del AMS**: el firmware de la A1 rechaza las órdenes que tocan el AMS si no van firmadas por Bambu Studio o Handy (configurar el filamento de una ranura,
+`ams_filament_setting`, y releer un chip, `M620 R…`) y muestra `HMS_0500-0500-0001-0007 «MQTT Command verification failed»`. **No rechaza todo:** la luz y las temperaturas, por ejemplo, sí
+funcionan. Activar el Modo LAN + Modo desarrollador lo evitaría, pero desconecta la impresora de la nube de Bambu (Handy a distancia y el historial de Bambu Cloud que alimenta los gramos
+reales), así que no se usa.
 
 | Situación | Qué pasa |
 | --- | --- |
 | **Rollo Bambu con chip** entra al AMS | La impresora lo lee; en unos segundos se registra solo en Spoolman (o se «adopta» una bobina sin chip del mismo material y color). Si no se lee, *Releer chip*. |
 | **Rollo sin chip** (Sunlu, etc.) configurado en la impresora | Aparece en la ranura con el color y material que le pusiste. Pasados ~15 s estables, si en Spoolman hay **una sola** bobina del mismo material base (PLA+ y PLA Basic cuentan como PLA), con color parecido (cercano en RGB o del mismo tono: el violeta que eliges en la paleta de la impresora rara vez coincide con el de Spoolman), sin chip y que no esté en otra ranura, **se une sola** (`SPOOLMAN_AUTOVINCULAR`). Con dos candidatas o ninguna, el panel pregunta («Sí, es «…»») o deja *Crear en Spoolman*. |
 | **El rollo de una ranura sin chip cambia** | El vínculo anterior queda «desactualizado» y su ubicación en Spoolman se limpia. Si la bobina vinculada sigue siendo del mismo material y de un color parecido al nuevo (cambiaste el color de la ranura en Bambu Studio), el vínculo se **confirma solo**; si no, se repite lo de arriba con el rollo nuevo. |
-| **Cambias la bobina desde el panel** (*Cambiar de bobina*) | Spoolman queda al día (ubicación y consumo). La impresora no se entera: la fila muestra el color de la bobina elegida y una etiqueta «la impresora lo ve así» si el de la impresora es muy distinto. |
+| **Cambias la bobina desde el panel** (*Cambiar bobina de Spoolman*, en «Más») | Spoolman queda al día (ubicación y consumo). La impresora no se entera: la fila muestra el color de la bobina elegida y una etiqueta «la impresora lo ve así» si el de la impresora es muy distinto. |
 
 **Actividad reciente** (desplegable bajo «En la impresora ahora»): cambios de rollo que vio la app («Ranura 3: PLA negro → PLA violeta») y lo que hizo en Spoolman (rollo unido solo, registrado,
 adoptado, ajustado). Sale de la auditoría (`ams_cambio`, `spoolman_ranura_autovinculada`, …); API: `GET /api/spoolman/actividad?limite=20`. Una ranura debe verse igual ~15 s para contar como cambio;
