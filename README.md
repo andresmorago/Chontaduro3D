@@ -86,7 +86,8 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | Ver o controlar la impresora | **Administración → Impresora**: estado, temperaturas, filamento (AMS), pausar/reanudar/cancelar, luz, velocidad y ventiladores. |
 | Ver TODO lo que imprimió la impresora (desde Bambu Studio/web o desde su pantalla) | **Producción → Trabajos de la impresora → Todos** (también *Por revisar*, *Importados*, *Ignorados*). Cada trabajo muestra inicio y fin (hora de Bogotá), quién lo envió y su estado en Spoolman. Los lanzados desde la pantalla no aparecen en Bambu Studio/web: solo los ve este servicio. Los gramos coinciden con Bambu web (la nube corrige lo leído del `.3mf`). |
 | Saber cuánto filamento queda y de qué bobina salió | **Administración → Impresora → Filamento**: asocia la bobina de cada ranura del AMS; cada trabajo terminado descuenta solo y lo dudoso se resuelve ahí. Spoolman se abre desde casa en `http://10.6.0.6:7912`. Ver [Spoolman](#inventario-de-filamento-spoolman) y [docs/spoolman.md](docs/spoolman.md). |
-| Forzar que el AMS vuelva a leer el chip de una bobina | **Administración → Impresora → Filamento → Releer chip** (en el menú *Más* de cada ranura; no hace falta descargar el rollo, solo que no se esté imprimiendo). Muestra el código del chip leído. Es lo mismo que el botón de actualizar de Bambu Studio. Ver [docs/spoolman.md](docs/spoolman.md#releer-el-chip-rfid-de-una-ranura). |
+| Forzar que el AMS vuelva a leer el chip de una bobina | **Administración → Impresora → Filamento → Releer chip** (en el menú *Más* de cada ranura; no hace falta descargar el rollo, solo que no se esté imprimiendo). Muestra el código del chip leído; si el firmware rechaza la orden, el panel lo dice. Es lo mismo que el botón de actualizar de Bambu Studio. Ver [docs/spoolman.md](docs/spoolman.md#releer-el-chip-rfid-de-una-ranura). |
+| Cargar un rollo nuevo (Bambu o Sunlu) | Cárgalo en la **impresora o en Bambu Studio**: la app lo ve sola. Con chip Bambu se registra en Spoolman; sin chip se une solo a la bobina de Spoolman del mismo material y color si hay una única, o te pregunta cuál es. «Actividad reciente» muestra qué vio. La app no escribe en el AMS (el firmware solo acepta órdenes firmadas por Bambu). Ver [docs/spoolman.md](docs/spoolman.md#cuando-el-rollo-cambia-o-llega-uno-nuevo-desde-la-impresora). |
 | Ver el UID del chip RFID de una bobina | En **Spoolman** (`http://10.6.0.6:7912`) es el *tag* de la bobina; por API: `GET /api/v1/spool?allow_archived=true` y campo `tags[].uid`. El panel de Mis impresiones no lo muestra. Los chips ya leídos quedan también en la tabla `chips_bobina`. |
 | Corregir un rollo o ver los de repuesto | **Administración → Impresora → Filamento**: *Ajustar* (cuánto queda, precio, archivar un rollo terminado) y la lista de **Rollos de repuesto** con los que quedan poco primero. Sin entrar a Spoolman. |
 | Saber si el filamento alcanza para lo que imprimo | En la misma sección, mientras hay un trabajo en curso: cada ranura de «En la impresora ahora» dice «Este trabajo usa X g» y si le alcanza, comparando los gramos del archivo con lo que queda en su rollo. |
@@ -111,7 +112,7 @@ Cada movimiento lleva además su **color** (`color_id`): el stock de un artícul
 ## Pruebas
 
 ```bash
-make test    # unas 465 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
+make test    # unas 480 pruebas de backend contra un Postgres desechable (proyecto compose aparte, nunca la base real)
 make e2e     # recorrido completo con navegador real (Playwright) contra el stack de desarrollo; capturas en e2e/out
 make typecheck
 make desbordes  # detector: recorre sitio público y panel a 9 anchos (1800–320 px) y falla si algún texto se sale de su tarjeta
