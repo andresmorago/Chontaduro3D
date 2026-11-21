@@ -56,7 +56,7 @@ const revisar = () => {
   for (const e of document.querySelectorAll("td, th, .num, strong, .etiqueta, .chip, .btn")) {
     if (!visible(e) || e.closest(".visually-hidden, .trampa") || e.children.length > 0) continue;
     const texto = e.textContent.trim();
-    if (!texto || texto.length > 24 || texto.split(/\s+/).length > 3 || e.matches("th.t-nombre, [class*='nombre']")) continue; // los nombres y frases largas pueden bajar de línea
+    if (!texto || texto.length > 24 || texto.split(/\s+/).length > 3 || e.matches("th.t-nombre, [class*='nombre'], .t-sec .etiqueta")) continue; // los nombres y frases largas pueden bajar de línea
     const r = document.createRange(); r.selectNodeContents(e);
     if (lineas(r) > 1) out.push({ tipo: "texto corto partido en varias líneas", donde: camino(e), texto, sobra: 0 });
   }

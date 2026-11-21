@@ -82,7 +82,7 @@ export function TrabajosImpresora({ usandoId, onUsar, refrescar }: Props) {
     <section className="seccion seccion--trabajos" aria-labelledby="t-trabajos-imp">
       <h2 id="t-trabajos-imp">Trabajos de la impresora</h2>
       <p className="muted">Lo que la impresora fue haciendo. Importa los que son producción para traer sus gramos y su tiempo; ignora el resto (pruebas, fallos).</p>
-      <Segmentado etiqueta="Qué trabajos ver" valor={vista} opciones={[{ valor: "pendiente", etiqueta: "Por revisar" }, { valor: "importado", etiqueta: "Importados" }, { valor: "ignorado", etiqueta: "Ignorados" }, { valor: "todos", etiqueta: "Todos" }]} onCambio={setVista} />
+      <Segmentado rejilla etiqueta="Qué trabajos ver" valor={vista} opciones={[{ valor: "pendiente", etiqueta: "Por revisar" }, { valor: "importado", etiqueta: "Importados" }, { valor: "ignorado", etiqueta: "Ignorados" }, { valor: "todos", etiqueta: "Todos" }]} onCambio={setVista} />
       {lista.error && <p className="alerta" role="alert">{lista.error}</p>}
       {lista.cargando ? (
         <p className="muted" role="status">Cargando…</p>
@@ -116,11 +116,11 @@ export function TrabajosImpresora({ usandoId, onUsar, refrescar }: Props) {
                       {t.nombre}
                       <span className="t-sec c-mov-no num">{fechaCorta(t.fecha)}</span>
                       {t.estado === "interrumpido" && <span className="t-sec">Se cortó antes de terminar: gramos del archivo completo, ajústalos si hace falta.</span>}
-                      <span className="t-sec num">
-                        {fechaHora(t.inicio_en)}{t.fin_en ? ` → ${hora(t.fin_en)}` : ""}
-                        {t.desde && <> · <span className="etiqueta etiqueta--tenue">{t.desde === "web" ? "Bambu Studio / web" : "Desde la impresora"}</span></>}
-                        {t.gestion === "importado" && <> · <span className="etiqueta etiqueta--ok">Importado</span></>}
-                        {t.gestion === "ignorado" && vista === "todos" && <> · <span className="etiqueta etiqueta--tenue">Ignorado</span></>}
+                      <span className="t-sec t-sec--fila num">
+                        <span>{fechaHora(t.inicio_en)}{t.fin_en ? ` → ${hora(t.fin_en)}` : ""}</span>
+                        {t.desde && <span className="etiqueta etiqueta--tenue">{t.desde === "web" ? "Bambu Studio / web" : "Desde la impresora"}</span>}
+                        {t.gestion === "importado" && <span className="etiqueta etiqueta--ok">Importado</span>}
+                        {t.gestion === "ignorado" && vista === "todos" && <span className="etiqueta etiqueta--tenue">Ignorado</span>}
                       </span>
                       <span className="t-sec"><EstadoSpoolman t={t} /></span>
                       <span className="t-meta num">{fechaCorta(t.fecha)} · {tiempo} · {peso} <Muestras t={t} /></span>

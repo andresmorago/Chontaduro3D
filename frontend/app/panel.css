@@ -464,6 +464,9 @@ button.fila:hover { background: var(--color-paper-2); }
 /* Filamento de un lote: una línea por bobina (o texto libre), con su gramaje. */
 .tabla-datos .lote-filamentos { display: flex; flex-wrap: wrap; gap: 0 var(--space-sm); }
 .lote-filamento { display: inline-flex; align-items: center; gap: var(--space-2xs); white-space: nowrap; }
+.tabla-datos .t-sec--fila { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-xs); }
+.tabla-datos .t-sec--fila .etiqueta { white-space: normal; text-align: left; padding-inline: 6px; } /* en una columna angosta la etiqueta parte entre palabras, no se sale */
+
 /* Ventas por día: calendario a la izquierda (escritorio) o plegable (móvil) y la lista del día. */
 .ventas-dia__cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); }
 .ventas-dia__cuerpo { display: grid; gap: var(--space-md); align-items: start; min-width: 0; }
