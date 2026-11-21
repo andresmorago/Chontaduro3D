@@ -40,6 +40,7 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [creando, setCreando] = useState<string | null>(null);
   const [ajustando, setAjustando] = useState<string | null>(null);
+  const [lectura, setLectura] = useState<Lectura | null>(null);
   const [form, setForm] = useState({ peso: "1000", restante: "", precio: "" });
   const [conflicto, setConflicto] = useState<{ ranura: string; spoolId: number; mensaje: string } | null>(null);
 
@@ -72,23 +73,31 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
   /** Pide al AMS que vuelva a leer el chip de esa ranura (lo mismo que el botón «actualizar» de Bambu Studio). */
   async function releer(r: RanuraSpoolman) {
     setOcupado(r.ranura);
+    setLectura({ ranura: r.ranura, fase: "leyendo", tag: null });
     try {
       let orden = await api.impresora.ordenar("leer_rfid", r.ranura);
       for (let i = 0; i < 10 && orden.estado === "pendiente"; i++) {
         await new Promise((ok) => setTimeout(ok, 700));
         orden = await api.impresora.orden(orden.id);
       }
-      if (orden.estado === "enviado") {
-        mostrar(`${r.nombre}: el AMS está leyendo el chip. Tarda unos segundos en verse aquí.`);
-        // La impresora informa el resultado sola; se refresca la lista unas veces para verlo.
-        for (const espera of [3000, 6000]) {
-          await new Promise((ok) => setTimeout(ok, espera));
-          await Promise.all([lista.recargar(), recargarBobinas()]);
-        }
-      } else {
+      if (orden.estado !== "enviado") {
+        setLectura(null);
         mostrar(orden.detalle ?? "La impresora no recibió la orden.", { tipo: "error" });
+        return;
       }
+      // El AMS lee y la impresora informa sola: se consulta cada pocos segundos hasta ver un cambio (o ~12 s).
+      const antes = r.tag;
+      let tag = antes;
+      for (let i = 0; i < 5; i++) {
+        await new Promise((ok) => setTimeout(ok, 2500));
+        const filas = await api.spoolman.ranuras();
+        tag = filas.find((f) => f.ranura === r.ranura)?.tag ?? null;
+        if (tag !== antes) break;
+      }
+      setLectura({ ranura: r.ranura, fase: "listo", tag });
+      await Promise.all([lista.recargar(), recargarBobinas()]);
     } catch (e) {
+      setLectura(null);
       mostrar(mensajeDe(e), { tipo: "error" });
     } finally {
       setOcupado(null);
@@ -163,6 +172,7 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
                     <span className="spool-ranura__sub">
                       {v.bobina.nombre} <span className="muted">· n.º {v.bobina.id}</span>
                       <span className="pildora" title={v.tipo === "rfid" ? "Se reconoce sola por el chip RFID" : "La asociaste a mano a esta ranura"}>{v.tipo === "rfid" ? "chip" : "a mano"}</span>
+                      {r.tag && <code className="chip-uid" title="Código (UID) del chip RFID">{r.tag}</code>}
                     </span>
                   ) : (
                     <span className="spool-ranura__sub muted">
@@ -171,6 +181,7 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
                           ? "Bobina Bambu nueva: se registra sola en unos segundos."
                           : "Bobina Bambu con chip: aún no está en Spoolman."
                         : "Sin bobina asociada."}
+                      {r.tag && <code className="chip-uid" title="Código (UID) del chip RFID">{r.tag}</code>}
                     </span>
                   )}
                 </div>
@@ -199,10 +210,26 @@ function Ranuras({ bobinas, recargarBobinas, autoregistro, respaldo, impresora }
                     </MenuMas>
                   </div>
                 )}
-                {(v.estado === "desactualizado" || necesidades.length > 0 || conflicto?.ranura === r.ranura || creando === r.ranura || abierto || ajustando === r.ranura) && (
+                {(lectura?.ranura === r.ranura || v.estado === "desactualizado" || necesidades.length > 0 || conflicto?.ranura === r.ranura || creando === r.ranura || abierto || ajustando === r.ranura) && (
                   <div className="spool-ranura__extra">
                     {v.estado === "desactualizado" && v.bobina && (
                       <span className="aviso-linea" role="status">La ranura cambió de filamento. ¿Sigue siendo esta bobina?</span>
+                    )}
+                    {lectura?.ranura === r.ranura && (
+                      <span className="lectura-chip" role="status">
+                        {lectura.fase === "leyendo" ? (
+                          <span className="muted">Leyendo el chip de {r.nombre}… tarda unos segundos.</span>
+                        ) : lectura.tag ? (
+                          <>
+                            <span>Chip leído:</span>
+                            <code className="chip-uid chip-uid--grande">{lectura.tag}</code>
+                            <Boton variante="secondary" pequeno onClick={() => void navigator.clipboard?.writeText(lectura.tag!).then(() => mostrar("Código copiado."))}>Copiar</Boton>
+                          </>
+                        ) : (
+                          <span>La impresora no detectó ningún chip en esta ranura. Puede ser un rollo sin chip (no Bambu) o que esté mal asentado.</span>
+                        )}
+                        {lectura.fase === "listo" && <Boton variante="ghost" pequeno onClick={() => setLectura(null)}>Cerrar</Boton>}
+                      </span>
                     )}
                     {necesidades.map((l, i) => <DetalleAlcance key={i} l={l} />)}
                     {ajustando === r.ranura && v.bobina && (
@@ -358,15 +385,20 @@ function Historial({ bobinas }: { bobinas: BobinaSpoolman[] }) {
 export interface EstadoParaLeer {
   estado: string;
   conectada: boolean;
-  enExtrusor: boolean | null;
 }
 
-/** Por qué no se puede releer un chip ahora (null = se puede). */
+/** Por qué no se puede releer un chip ahora (null = se puede). Como en Bambu Studio, el rollo que está en uso NO hay que descargarlo. */
 function motivoSinLeer(i: EstadoParaLeer | undefined): string | null {
   if (!i || !i.conectada) return "La impresora no está conectada.";
-  if (!["lista", "terminada", "fallida"].includes(i.estado)) return "La impresora está trabajando: espera a que termine.";
-  if (i.enExtrusor === true) return "Hay filamento cargado en el cabezal: descárgalo (retráelo al AMS) y vuelve a intentar.";
+  if (["preparando", "imprimiendo", "pausada"].includes(i.estado)) return "La impresora está imprimiendo: espera a que termine.";
   return null;
+}
+
+/** Resultado de «Releer chip» en una ranura: leyendo… y luego el código que informó la impresora. */
+interface Lectura {
+  ranura: string;
+  fase: "leyendo" | "listo";
+  tag: string | null;
 }
 
 export function SpoolmanSeccion({ respaldo, impresora }: { respaldo?: ReactNode; impresora?: EstadoParaLeer }) {

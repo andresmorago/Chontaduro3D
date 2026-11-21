@@ -268,6 +268,7 @@ async def ranuras(db: DB, cliente: Cliente) -> list[RanuraOut]:
             marca=b.get("marca"),
             color=b.get("color"),
             en_uso=bool(b.get("en_uso")),
+            tag=b.get("tag"),
             vinculo=_vinculo(b, spools, por_tag, filas.get(b["id"])),
         )  # fmt: skip
         for b in bandejas

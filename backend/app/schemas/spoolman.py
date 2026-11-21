@@ -95,6 +95,8 @@ class RanuraOut(Salida):
     marca: str | None = None
     color: str | None = None
     en_uso: bool = False
+    # UID del chip RFID que la impresora leyó en esta ranura (None = sin chip o aún no lo lee).
+    tag: str | None = None
     vinculo: VinculoOut
 
 

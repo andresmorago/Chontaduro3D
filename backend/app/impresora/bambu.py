@@ -172,9 +172,6 @@ def normalizar(raw: dict[str, Any]) -> dict[str, Any]:
         "ventilador_aux": _ventilador(raw.get("big_fan1_speed")),
         "luz": luz if luz in ("on", "off") else None,
         "wifi": raw.get("wifi_signal") or None,
-        # ¿Hay filamento cargado en el cabezal? (hw_switch_state: 1 sí, 0 no). Con filamento puesto el
-        # AMS no puede releer un chip. None = la impresora no lo informa.
-        "en_extrusor": {1: True, 0: False}.get(_entero(raw.get("hw_switch_state"))),
         "error": _entero(raw.get("print_error")) or 0,
         "alertas": len(raw.get("hms") or []),
         "ams": ams,

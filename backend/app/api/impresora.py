@@ -79,8 +79,9 @@ _REQUIERE = {
     "reanudar": ("pausada",),
     "cancelar": ("imprimiendo", "pausada", "preparando"),
     "velocidad": ("imprimiendo", "pausada"),
-    # Releer un chip mueve el AMS: solo con la impresora quieta.
-    "leer_rfid": ("lista", "terminada", "fallida"),
+    # Releer un chip mueve el AMS: no mientras se imprime. (Bambu Studio lo permite con el filamento
+    # cargado en el cabezal, así que aquí tampoco se exige descargarlo.)
+    "leer_rfid": ("lista", "terminada", "fallida", "desconocido"),
 }
 _NOMBRE = {
     "pausar": "Pausar",
@@ -137,12 +138,6 @@ async def ordenar(datos: ComandoIn, db: DB, usuario: Admin) -> ComandoOut:
         if ranura not in {str(b.get("id")) for b in d.get("ams") or []}:
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "Esa ranura no existe en el AMS que informa la impresora."
-            )
-        if d.get("en_extrusor") is True:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "No se puede releer el chip: hay filamento cargado en el cabezal. Descárgalo "
-                "(retráelo al AMS) y vuelve a intentarlo.",
             )
 
     # Dos clics seguidos no mandan dos órdenes iguales.

@@ -180,9 +180,10 @@ El botón **Releer chip** de cada ranura del AMS hace lo mismo que el botón de 
 `M620 R<ranura>` (`gcode_line`), y el AMS vuelve a leer la etiqueta de esa bobina. La impresora informa el resultado sola (color, tipo y UID del chip);
 en unos segundos se ve en el panel y, si es una bobina nueva, el registro automático la crea en Spoolman.
 
-- **Solo con la impresora quieta** (lista, terminada o con fallo) y **sin filamento cargado en el cabezal** (`hw_switch_state` de la impresora). Con
-  filamento puesto el AMS no puede leer: descárgalo (retráelo al AMS) y repite. Es la misma condición que pone Bambu Studio.
-- Si la impresora no informa si hay filamento en el cabezal, el botón se permite y la orden se manda igual.
+- **Solo mientras NO se imprime** (preparando, imprimiendo o en pausa se desactiva). **No hay que descargar el rollo que está en uso**: igual que en
+  Bambu Studio, se puede releer con el filamento cargado.
+- **Se ve el código.** Cada ranura con chip muestra su UID (código RFID) junto a la bobina. Al pulsar *Releer chip* aparece «Leyendo…» y, a los pocos
+  segundos, «Chip leído: <UID>» con un botón para copiarlo; si la impresora no detecta nada lo dice (rollo sin chip o mal asentado).
 - Sin chip (rollos no Bambu) no hay nada que leer: esas bobinas se asocian a mano.
 - Es una orden más del panel (`leer_rfid`, ver «Controles»): el backend la deja en `impresora_comandos` y el servicio la envía; queda en la auditoría.
 - Fuente del comando: `MachineObject::command_ams_refresh_rfid` y `StatusPanel::on_ams_refresh_rfid` de Bambu Studio (código abierto). Para impresoras

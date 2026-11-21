@@ -481,6 +481,9 @@ button.fila:hover { background: var(--color-paper-2); }
 .menu-mas__lista { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; display: grid; gap: 2px; min-width: 12rem; padding: var(--space-2xs); border-radius: var(--radius-control); background: var(--color-paper-2); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
 .menu-mas__lista .btn { justify-content: flex-start; width: 100%; }
 
+.chip-uid { font-family: var(--font-outlier, ui-monospace, monospace); font-size: 0.75rem; letter-spacing: 0.03em; padding: 0 var(--space-xs); border-radius: var(--radius-pill); background: color-mix(in oklab, var(--color-ink) 14%, transparent); user-select: all; }
+.chip-uid--grande { font-size: var(--text-sm); padding: 2px var(--space-sm); }
+.lectura-chip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--text-sm); }
 .spool-ayuda { font-size: var(--text-xs); color: var(--color-muted); }
 .spool-ayuda summary { cursor: pointer; width: fit-content; }
 .spool-ayuda p { margin: var(--space-2xs) 0 0; max-width: 60ch; }

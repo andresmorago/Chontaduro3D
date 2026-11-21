@@ -359,8 +359,6 @@ export interface DatosImpresora {
   ventilador_pieza: number | null;
   ventilador_aux: number | null;
   luz: "on" | "off" | null;
-  /** Filamento cargado en el cabezal (impide releer un chip); null si la impresora no lo informa. */
-  en_extrusor: boolean | null;
   wifi: string | null;
   error: number;
   alertas: number;
@@ -522,6 +520,8 @@ export interface RanuraSpoolman {
   marca: string | null;
   color: string | null;
   en_uso: boolean;
+  /** UID del chip RFID que la impresora leyó en esta ranura (null = sin chip o aún no lo lee). */
+  tag: string | null;
   vinculo: VinculoRanura;
 }
 

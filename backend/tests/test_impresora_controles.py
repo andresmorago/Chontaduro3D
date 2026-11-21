@@ -141,22 +141,17 @@ def test_releer_el_chip_rechaza_ranuras_raras(valor):
         bambu.construir_orden("leer_rfid", valor)
 
 
-def test_el_estado_informa_si_hay_filamento_en_el_cabezal():
-    assert bambu.normalizar({"hw_switch_state": 1})["en_extrusor"] is True
-    assert bambu.normalizar({"hw_switch_state": "0"})["en_extrusor"] is False
-    assert bambu.normalizar({})["en_extrusor"] is None
-
-
 async def test_releer_el_chip_se_encola_con_la_impresora_quieta(admin, db):
-    await poner_estado(db, {"estado": "lista", "ams": AMS, "en_extrusor": False})
+    await poner_estado(db, {"estado": "lista", "ams": AMS})
     r = await admin.post("/api/impresora/comandos", json={"comando": "leer_rfid", "valor": "2"})
     assert r.status_code == 202, r.text
     (o,) = (await db.execute(select(ComandoImpresora))).scalars().all()
     assert (o.comando, o.valor) == ("leer_rfid", "2")
 
 
-async def test_releer_el_chip_se_permite_si_la_impresora_no_informa_el_cabezal(admin, db):
-    await poner_estado(db, {"estado": "lista", "ams": AMS})  # sin «en_extrusor»
+async def test_releer_el_chip_se_permite_con_filamento_cargado_en_el_cabezal(admin, db):
+    # Como en Bambu Studio: no se exige descargar el rollo que está en uso.
+    await poner_estado(db, {"estado": "lista", "ams": AMS, "en_extrusor": True})
     r = await admin.post("/api/impresora/comandos", json={"comando": "leer_rfid", "valor": "0"})
     assert r.status_code == 202, r.text
 
@@ -167,10 +162,7 @@ async def test_releer_el_chip_se_rechaza_si_algo_lo_impide(admin, db):
 
     await poner_estado(db, {"estado": "imprimiendo", "ams": AMS})
     assert (await intentar()).status_code == 409  # imprimiendo: el AMS está trabajando
-    await poner_estado(db, {"estado": "lista", "ams": AMS, "en_extrusor": True})
-    r = await intentar()
-    assert r.status_code == 409 and "cabezal" in r.json()["detail"]
-    await poner_estado(db, {"estado": "lista", "ams": AMS, "en_extrusor": False})
+    await poner_estado(db, {"estado": "lista", "ams": AMS})
     assert (await intentar("9")).status_code == 409  # esa ranura no existe
     assert (await intentar("99")).status_code == 422
     assert (await intentar("x")).status_code == 422

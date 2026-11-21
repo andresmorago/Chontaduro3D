@@ -173,7 +173,7 @@ export default function Impresora() {
       </section>
 
       <SpoolmanSeccion
-        impresora={{ estado: maquina, conectada, enExtrusor: d?.en_extrusor ?? null }}
+        impresora={{ estado: maquina, conectada }}
         respaldo={
           d && conectada && (d.ams.length > 0 || d.externa) ? (
             <ul className="bandejas">

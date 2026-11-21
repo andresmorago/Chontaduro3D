@@ -799,6 +799,7 @@ async def test_ranuras_muestran_la_bobina_asociada(admin, con_spoolman, db):
         "bobina": r["0"]["vinculo"]["bobina"],
     }
     assert r["0"]["vinculo"]["bobina"]["id"] == 4 and r["0"]["nombre"] == "Ranura 1"
+    assert r["1"]["tag"] == TAG and r["0"]["tag"] is None  # el código del chip que leyó la impresora
     assert (
         r["1"]["vinculo"]["tipo"] == "rfid"
         and r["1"]["vinculo"]["estado"] == "ok"
