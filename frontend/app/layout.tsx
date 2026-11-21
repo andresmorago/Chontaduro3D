@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Gabarito, Manrope } from "next/font/google";
+import localFont from "next/font/local";
 import { headers } from "next/headers";
 import { ProveedorAvisos } from "@/components/ui/Avisos";
 import "./globals.css";
 
-const gabarito = Gabarito({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-gabarito", display: "swap" });
-const manrope = Manrope({ subsets: ["latin"], weight: ["500", "700", "800"], variable: "--font-manrope", display: "swap" });
+// Fuentes alojadas en el repositorio (variables, subconjunto latino; licencia OFL): el build no depende de Google Fonts.
+// Antes se descargaban al compilar con next/font/google y el build fallaba si Google respondía algo inesperado.
+const gabarito = localFont({ src: "./fonts/gabarito-latin.woff2", weight: "400 900", variable: "--font-gabarito", display: "swap" });
+const manrope = localFont({ src: "./fonts/manrope-latin.woff2", weight: "200 800", variable: "--font-manrope", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "Piezas impresas en 3D", template: "%s · Impresiones 3D" },
