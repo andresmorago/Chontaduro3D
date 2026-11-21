@@ -1266,3 +1266,94 @@ async def test_alcance_distingue_justo_sin_bobina_y_dudoso(admin, con_spoolman, 
     await crear_trabajo(db, estado="en_curso", filamentos=[{"tipo": "PLA", "color": ROJO, "gramos": 30.0}])
     r = (await admin.get("/api/spoolman/alcance")).json()
     assert r["lineas"][0]["estado"] == "dudoso" and r["alerta"] is False
+
+
+# ============================================================ auditoría: topes, reclamo y chips
+async def test_una_linea_omitida_entre_la_lectura_y_el_envio_no_se_descuenta(spool, db):
+    spool.agregar(7, tags=[TAG])
+    t = await crear_trabajo(db)
+    c = ConsumoFilamento(
+        trabajo_id=t.id, orden=0, tipo="PLA", color=ROJO, gramos_plan=Decimal("10"),
+        gramos=Decimal("10"), spool_id=7, estado="por_enviar",
+    )  # fmt: skip
+    db.add(c)
+    await db.commit()
+
+    class DbConCarrera:
+        """Tras leer las pendientes, el admin «omite» la línea en otra sesión."""
+
+        def __init__(self, base):
+            self._base, self._hecho = base, False
+
+        async def execute(self, consulta, *a, **kw):
+            if getattr(consulta, "is_update", False) and not self._hecho:
+                self._hecho = True
+                async with SessionLocal() as otra:
+                    fila = await otra.get(ConsumoFilamento, c.id)
+                    fila.estado = "omitido"
+                    await otra.commit()
+            return await self._base.execute(consulta, *a, **kw)
+
+        def __getattr__(self, nombre):
+            return getattr(self._base, nombre)
+
+    cuenta = await consumo_mod.enviar(DbConCarrera(db), spool)
+    assert spool.usos == [] and cuenta["descontadas"] == 0
+    (fila,) = await lineas(db)
+    assert fila.estado == "omitido"
+
+
+async def test_el_reclamo_normal_sigue_descontando_una_vez(spool, db):
+    spool.agregar(7, tags=[TAG])
+    t = await crear_trabajo(db)
+    db.add(
+        ConsumoFilamento(
+            trabajo_id=t.id, orden=0, tipo="PLA", color=ROJO, gramos_plan=Decimal("10"),
+            gramos=Decimal("10"), spool_id=7, estado="por_enviar",
+        )
+    )  # fmt: skip
+    await db.commit()
+    for _ in range(2):
+        await consumo_mod.enviar(db, spool)
+    assert spool.usos == [(7, 10.0)]
+    (fila,) = await lineas(db)
+    assert fila.estado == "descontado" and fila.intentos == 1
+
+
+async def test_gramos_absurdos_no_generan_lineas_de_consumo(spool, db):
+    spool.agregar(7, tags=[TAG])
+    t = await crear_trabajo(
+        db,
+        filamentos=[
+            {"tipo": "PLA", "color": ROJO, "gramos": 1e6},
+            {"tipo": "PLA", "color": AZUL, "gramos": 12},
+        ],
+        bandejas=[{"ranura": "0", "tipo": "PLA", "color": AZUL, "tag": TAG}],
+    )
+    t.gramos_total = Decimal("1000012")
+    await db.commit()
+    assert consumo_mod._lineas_de(t) == [("PLA", AZUL, Decimal("12.00"))]
+    t.filamentos = [{"tipo": "PLA", "color": ROJO, "gramos": 4000}] * 6  # suma 24000 > 20000
+    assert consumo_mod._lineas_de(t) == []  # y el total absurdo tampoco se usa de respaldo
+
+
+@pytest.mark.parametrize(("progreso", "esperado"), [(250, "10.00"), (-5, "0.00")])
+async def test_progreso_fuera_de_rango_se_acota(progreso, esperado):
+    t = TrabajoImpresora(nombre="x", estado="interrumpido", progreso=progreso)
+    gramos, _ = consumo_mod._gramos_a_descontar(t, Decimal("10"))
+    assert gramos == Decimal(esperado)
+
+
+async def test_desvincular_tag_escapa_el_uid_en_la_ruta():
+    vistas = []
+
+    def responder(peticion: httpx.Request) -> httpx.Response:
+        vistas.append(peticion.url.raw_path.decode())
+        return httpx.Response(204)
+
+    cli = ClienteSpoolman("http://spoolman:8000", transporte=httpx.MockTransport(responder))
+    await cli.desvincular_tag(7, "AB/../../spool/9?x=1")
+    await cli.desvincular_tag(7, TAG)
+    await cli.cerrar()
+    assert vistas[0] == "/api/v1/spool/7/tag/AB%2F..%2F..%2Fspool%2F9%3Fx%3D1"
+    assert vistas[1] == f"/api/v1/spool/7/tag/{TAG}"

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from sqlalchemy import select, update
 
-from app.config import settings
+from app.config import CLAVE_DESARROLLO, settings
 from app.core import auditoria, secretos
 from app.db import SessionLocal, engine
 from app.impresora import ajustes, bambu, lector3mf, maquina, nube, sincronizacion
@@ -627,7 +627,18 @@ class Servicio:
         self._parar.set()
 
 
+def exigir_clave_secreta() -> None:
+    """Este servicio descifra la configuración con SECRET_KEY, también fuera de producción
+    (corre con APP_ENV=development): con una clave corta o la de relleno no puede leerla."""
+    if len(settings.secret_key) < 32 or settings.secret_key == CLAVE_DESARROLLO:
+        raise SystemExit(
+            "SECRET_KEY debe tener al menos 32 caracteres (la misma del backend): el servicio "
+            "de impresora la necesita para descifrar la configuración. No arranca."
+        )
+
+
 async def principal() -> None:
+    exigir_clave_secreta()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )

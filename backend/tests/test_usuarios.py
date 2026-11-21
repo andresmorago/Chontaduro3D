@@ -196,3 +196,19 @@ async def test_las_acciones_quedan_auditadas_sin_secretos(admin, db):
     assert {"usuario_creado", "contrasena_restablecida", "usuario_desactivado"} <= set(acciones)
     assert "ClaveSegura" not in str([a.detalle for a in acciones.values()])
     assert "ClaveRestablecida" not in str([a.detalle for a in acciones.values()])
+
+
+@pytest.mark.parametrize(
+    "clave", ["password12", "Password123", "QWERTYUIOP", "1q2w3e4r5t", "luisa@ejemplo.co"]
+)
+async def test_contrasenas_comunes_o_iguales_al_correo_se_rechazan(admin, clave):
+    r = await admin.post("/api/usuarios", json={**NUEVO, "password": clave})
+    assert r.status_code == 422, clave
+
+
+def test_fortaleza_mensajes():
+    from app.core.security import validar_fortaleza
+
+    assert "más usadas" in validar_fortaleza("Password12")
+    assert "correo" in validar_fortaleza("Luisa.Gomez.Larga", "luisa.gomez.larga@ejemplo.co")
+    assert validar_fortaleza("ClaveSegura-2468", "luisa@ejemplo.co") is None

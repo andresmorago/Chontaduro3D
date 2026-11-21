@@ -6,7 +6,7 @@ significado propio tienen su excepción (`NoExiste`, `TagEnUso`)."""
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -254,6 +254,6 @@ class ClienteSpoolman:
 
     async def desvincular_tag(self, spool_id: int, uid: str) -> None:
         try:
-            await self._pedir("DELETE", f"/spool/{spool_id}/tag/{uid}")
+            await self._pedir("DELETE", f"/spool/{spool_id}/tag/{quote(uid, safe='')}")
         except NoExiste:
             return  # ya no estaba: es lo que se quería

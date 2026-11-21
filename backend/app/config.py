@@ -1,9 +1,14 @@
 """Configuración, leída del entorno (.env en desarrollo)."""
 
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Clave de relleno para desarrollo/pruebas: pública, nunca válida en producción.
+CLAVE_DESARROLLO = "desarrollo-no-usar-en-produccion-0123456789abcdef"
 
 
 class Settings(BaseSettings):
@@ -43,6 +48,10 @@ class Settings(BaseSettings):
     # base). Estas variables solo se leen UNA vez, para importar a la base lo que ya tenías en el
     # .env; después se pueden borrar. Solo las recibe el servicio `impresora`.
     bambu_ip: str = ""
+    # Redes (CIDR separados por coma) donde puede estar la impresora, p. ej. 192.168.1.0/24. Si se
+    # define, la IP DEBE caer en alguna y esto reemplaza la regla por defecto, que rechaza
+    # 172.16.0.0/12 (las redes internas de Docker: db, backend, spoolman…).
+    bambu_redes_permitidas: str = ""
     bambu_serial: str = ""
     bambu_access_code: str = ""
     # Historial de Bambu Cloud: el token se vincula en el panel. Este archivo (el de
@@ -66,6 +75,14 @@ class Settings(BaseSettings):
         # Compose pasa `COOKIE_SECURE=` (vacío) cuando no se define: vacío = decidir por petición.
         return None if isinstance(v, str) and not v.strip() else v
 
+    @property
+    def bambu_redes(self) -> list[IPv4Network | IPv6Network]:
+        return [
+            ip_network(r.strip(), strict=False)
+            for r in self.bambu_redes_permitidas.split(",")
+            if r.strip()
+        ]
+
     @model_validator(mode="after")
     def _validar(self) -> "Settings":
         if self.app_env == "production" and len(self.secret_key) < 32:
@@ -77,7 +94,27 @@ class Settings(BaseSettings):
                     "público no se puede firmar con la clave de desarrollo, que es pública."
                 )
             # Desarrollo/pruebas: clave fija y evidente; nunca válida en producción.
-            self.secret_key = "desarrollo-no-usar-en-produccion-0123456789abcdef"
+            self.secret_key = CLAVE_DESARROLLO
+        try:
+            _ = self.bambu_redes
+        except ValueError:
+            raise ValueError(
+                "BAMBU_REDES_PERMITIDAS debe ser una lista de redes CIDR separadas por coma "
+                "(p. ej. 192.168.1.0/24,10.0.4.0/24)."
+            ) from None
+        if self.es_produccion:
+            # En producción la API cuelga del Worker de Cloudflare: sin estas piezas, el límite de
+            # intentos por origen vería solo la IP del túnel y el captcha quedaría apagado.
+            if not (self.trust_proxy and self.proxy_shared_secret):
+                raise ValueError(
+                    "En producción se exige TRUST_PROXY activo y PROXY_SHARED_SECRET no vacío "
+                    "(si no, la IP de origen no es confiable)."
+                )
+            if not self.turnstile_activo:
+                raise ValueError(
+                    "En producción se exigen TURNSTILE_SITEKEY y TURNSTILE_SECRETKEY "
+                    "(sin ellas el inicio de sesión queda sin verificación anti-robots)."
+                )
         return self
 
     @property

@@ -93,8 +93,10 @@ async def test_rechaza_datos_peligrosos_o_mal_formados(admin, malo):
 
 
 async def test_acepta_ips_de_vpn(admin):
-    for ip in ("10.0.4.244", "172.16.5.4", "192.168.0.7", "100.64.1.2"):
+    for ip in ("10.0.4.244", "192.168.0.7", "100.64.1.2"):
         assert (await admin.put(URL, json={**BUENA, "ip": ip})).status_code == 200, ip
+    # 172.16.0.0/12 son las redes internas de Docker: por defecto no se aceptan.
+    assert (await admin.put(URL, json={**BUENA, "ip": "172.16.5.4"})).status_code == 422
 
 
 async def test_pendiente_hasta_que_el_servicio_aplica_la_version(admin, db):
@@ -307,3 +309,32 @@ async def test_si_esta_conectada_dice_cuando_respondio_y_que_hace(admin, db):
 
 async def test_probar_exige_sesion_y_cabecera(publico):
     assert (await publico.post(f"{URL}/probar")).status_code == 401
+
+
+def test_ip_de_las_redes_internas_de_docker_se_rechaza():
+    for malas in ("172.18.0.3", "172.16.0.1", "172.31.255.254", "::ffff:172.18.0.3"):
+        with pytest.raises(ValueError, match="Docker"):
+            ajustes.validar_ip(malas)
+    assert ajustes.validar_ip("10.0.4.244") == "10.0.4.244"
+    assert ajustes.validar_ip("192.168.1.50") == "192.168.1.50"
+
+
+def test_redes_permitidas_reemplazan_la_regla_por_defecto(monkeypatch):
+    monkeypatch.setattr(ajustes.settings, "bambu_redes_permitidas", "192.168.1.0/24, 172.20.0.0/16")
+    assert ajustes.validar_ip("192.168.1.50") == "192.168.1.50"
+    assert ajustes.validar_ip("172.20.4.4") == "172.20.4.4"  # la lista manda sobre la regla Docker
+    for fuera in ("10.0.4.244", "192.168.2.1", "172.18.0.3"):
+        with pytest.raises(ValueError, match="redes permitidas"):
+            ajustes.validar_ip(fuera)
+    with pytest.raises(ValueError):  # lo no privado se rechaza aunque la lista lo cubra
+        monkeypatch.setattr(ajustes.settings, "bambu_redes_permitidas", "0.0.0.0/0")
+        ajustes.validar_ip("8.8.8.8")
+
+
+def test_redes_permitidas_mal_escritas_impiden_arrancar():
+    from app.config import Settings
+
+    with pytest.raises(ValueError, match="BAMBU_REDES_PERMITIDAS"):
+        Settings(secret_key="", bambu_redes_permitidas="no-es-una-red")
+    ok = Settings(secret_key="", bambu_redes_permitidas="10.0.0.0/8,192.168.0.0/16")
+    assert len(ok.bambu_redes) == 2

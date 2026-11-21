@@ -18,7 +18,8 @@ def ip_cliente(request: Request) -> str:
     """
     if settings.trust_proxy and settings.proxy_shared_secret:
         enviado = request.headers.get("x-proxy-secret", "")
-        if hmac.compare_digest(enviado, settings.proxy_shared_secret):
+        # Bytes: con str, un carácter no ASCII (p. ej. «ñ») haría lanzar TypeError (500).
+        if hmac.compare_digest(enviado.encode(), settings.proxy_shared_secret.encode()):
             real = request.headers.get("x-real-client-ip", "").strip()
             if real:
                 return real[:64]

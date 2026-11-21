@@ -6,6 +6,7 @@ informa (estado de la sincronización) sin afectar al resto de la app. El token 
 
 import contextlib
 import json
+import math
 import os
 import tempfile
 import time
@@ -15,6 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+from app.impresora.topes import acotar_filamentos, acotar_total
 
 AGENTE = "misimpresiones/1.0 (uso personal)"
 REVINCULAR = "vuelve a vincular tu cuenta en Administración → Conexión."
@@ -139,7 +142,7 @@ def _numero(v: Any) -> float | None:
         n = float(v)
     except (TypeError, ValueError):
         return None
-    return n if n > 0 else None
+    return n if math.isfinite(n) and n > 0 else None
 
 
 def _color(v: Any) -> str | None:
@@ -175,7 +178,8 @@ def tarea_de(t: dict[str, Any]) -> Tarea | None:
             "color": _color(m.get("targetColor") or m.get("sourceColor")),
             "gramos": round(g, 2),
         })  # fmt: skip
-    gramos = _numero(t.get("weight")) or (
+    filamentos = acotar_filamentos(filamentos, "Bambu Cloud")
+    gramos = acotar_total(_numero(t.get("weight")), "Bambu Cloud") or (
         round(sum(f["gramos"] for f in filamentos), 2) if filamentos else None
     )
     segundos = _numero(t.get("costTime"))

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core import secretos
 from app.impresora.nube import Sesion
 from app.models import ConfigImpresora
@@ -18,6 +19,11 @@ _SERIE = re.compile(r"[A-Za-z0-9]{8,20}")
 _CODIGO = re.compile(r"[\x21-\x7e]{4,32}")  # ASCII visible, sin espacios
 
 
+# Redes internas de Docker (db, backend, spoolman…): una IP de aquí no es una impresora, y
+# aceptarla dejaría a un administrador sondear los servicios internos desde el servicio.
+_DOCKER = ipaddress.ip_network("172.16.0.0/12")
+
+
 def validar_ip(valor: str) -> str:
     """IP de la impresora. Debe ser de la red local o de una VPN (privada o compartida): el
     servicio abre conexiones hacia ella, y esto impide apuntarlo a internet o a sí mismo."""
@@ -25,8 +31,19 @@ def validar_ip(valor: str) -> str:
         ip = ipaddress.ip_address(valor.strip())
     except ValueError:
         raise ValueError("Escribe la IP con números, p. ej. 192.168.1.50.") from None
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped  # ::ffff:172.18.0.3 es la misma IP: se juzga como IPv4
     if ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_global:
         raise ValueError("La IP debe ser de tu red local o VPN (p. ej. 192.168.x.x o 10.x.x.x).")
+    redes = settings.bambu_redes
+    if redes:
+        if not any(ip.version == r.version and ip in r for r in redes):
+            raise ValueError("Esa IP no está en las redes permitidas para la impresora.")
+    elif ip in _DOCKER:
+        raise ValueError(
+            "Esa IP (172.16.x.x a 172.31.x.x) es de las redes internas de Docker, no de tu "
+            "impresora. Usa la IP de tu red local (p. ej. 192.168.x.x o 10.x.x.x)."
+        )
     return str(ip)
 
 

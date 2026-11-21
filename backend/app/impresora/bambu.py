@@ -4,6 +4,7 @@ La impresora publica en `device/<serie>/report` y recibe en `device/<serie>/requ
 `bblp`, contraseña = código de acceso. Estas funciones son puras (sin red) para poder probarlas."""
 
 import json
+import re
 import ssl
 import threading
 import uuid
@@ -31,9 +32,9 @@ LIMITES = {
     "ventilador_aux": (0, 100, "%"),
 }
 BOQUILLA_MIN = 150
-SIN_RESPUESTA_S = 10  # tras esto sin conectar, se informa «red» aunque el sistema siga esperando
 # Ranuras del AMS que se pueden releer: 4 por unidad (el id de la ranura ya es unidad × 4 + posición).
 RANURA_RFID_MAX = 15
+SIN_RESPUESTA_S = 10  # tras esto sin conectar, se informa «red» aunque el sistema siga esperando
 NOMBRES_NUMERICOS = {
     "temp_boquilla": "La temperatura de la boquilla",
     "temp_cama": "La temperatura de la cama",
@@ -56,7 +57,6 @@ def validar_numero(comando: str, valor: str | None) -> int:
     return n
 
 
-def _entero(v: Any) -> int | None:
 def validar_ranura_rfid(valor: str | None) -> int:
     """El número de ranura (0–15) cuyo chip se va a releer, o ValueError con un mensaje claro."""
     try:
@@ -68,6 +68,7 @@ def validar_ranura_rfid(valor: str | None) -> int:
     return n
 
 
+def _entero(v: Any) -> int | None:
     try:
         return int(float(v))
     except (TypeError, ValueError):
@@ -95,12 +96,30 @@ def _color(v: Any) -> str | None:
     return None
 
 
+_TAG_UID = re.compile(r"[0-9A-F]{4,32}")
+
+
+def _tag_uid(valor: Any) -> str | None:
+    """UID del chip RFID en mayúsculas hexadecimales, o None (sin chip, todo ceros o con basura).
+    Llega de la red local y acaba en URLs de Spoolman y en la base: solo se acepta hexadecimal."""
+    v = str(valor or "").strip().upper()
+    if not _TAG_UID.fullmatch(v) or not v.strip("0"):
+        return None
+    return v
+
+
+def _progreso(valor: Any) -> int | None:
+    n = _entero(valor)
+    return None if n is None else max(0, min(n, 100))
+
+
 def _bandeja(t: dict[str, Any], en_uso: bool) -> dict[str, Any]:
     tipo = str(t.get("tray_type") or "").strip()
     restante = _entero(t.get("remain"))
     # El «restante» solo es una medición real en bobinas Bambu con chip RFID (tag_uid ≠ 0). Sin chip
     # la impresora no sabe cuánto queda: informa 100 por defecto (ranuras) o 0 (bobina externa).
-    medido = bool(str(t.get("tag_uid") or "").strip("0"))
+    tag = _tag_uid(t.get("tag_uid"))
+    medido = tag is not None
     return {
         "id": str(t.get("id", "")),
         "vacia": not tipo,
@@ -109,7 +128,7 @@ def _bandeja(t: dict[str, Any], en_uso: bool) -> dict[str, Any]:
         "color": _color(t.get("tray_color")) if tipo else None,
         "medido": medido,
         # UID del chip RFID (solo bobinas Bambu con chip): con él Spoolman reconoce la bobina.
-        "tag": str(t.get("tag_uid")).strip().upper() if medido else None,
+        "tag": tag,
         # Peso neto de la bobina que declara el chip (g); sin chip la impresora informa 0.
         "peso": _entero(t.get("tray_weight")) or None,
         "restante": restante if medido and restante is not None and restante >= 0 else None,
@@ -139,7 +158,7 @@ def normalizar(raw: dict[str, Any]) -> dict[str, Any]:
         "gcode_state": gcode_state,
         "trabajo": raw.get("subtask_name") or None,
         "archivo": raw.get("gcode_file") or None,
-        "progreso": _entero(raw.get("mc_percent")),
+        "progreso": _progreso(raw.get("mc_percent")),
         "capa": _entero(raw.get("layer_num")),
         "capas": _entero(raw.get("total_layer_num")),
         "restante_min": _entero(raw.get("mc_remaining_time")),
@@ -153,6 +172,9 @@ def normalizar(raw: dict[str, Any]) -> dict[str, Any]:
         "ventilador_aux": _ventilador(raw.get("big_fan1_speed")),
         "luz": luz if luz in ("on", "off") else None,
         "wifi": raw.get("wifi_signal") or None,
+        # ¿Hay filamento cargado en el cabezal? (hw_switch_state: 1 sí, 0 no). Con filamento puesto el
+        # AMS no puede releer un chip. None = la impresora no lo informa.
+        "en_extrusor": {1: True, 0: False}.get(_entero(raw.get("hw_switch_state"))),
         "error": _entero(raw.get("print_error")) or 0,
         "alertas": len(raw.get("hms") or []),
         "ams": ams,
@@ -172,9 +194,6 @@ def construir_orden(
         if valor not in ("on", "off"):
             raise ValueError("La luz admite «on» u «off».")
         return {
-        # ¿Hay filamento cargado en el cabezal? (hw_switch_state: 1 sí, 0 no). Con filamento puesto el
-        # AMS no puede releer un chip. None = la impresora no lo informa.
-        "en_extrusor": {1: True, 0: False}.get(_entero(raw.get("hw_switch_state"))),
             "system": {
                 "sequence_id": sec, "command": "ledctrl", "led_node": nodo_luz,
                 "led_mode": valor, "led_on_time": 500, "led_off_time": 500,
@@ -195,6 +214,13 @@ def construir_orden(
             "ventilador_aux": f"M106 P2 S{(n * 255 + 50) // 100}",
         }[comando]
         return {"print": {"sequence_id": sec, "command": "gcode_line", "param": gcode + "\n"}}
+    if comando == "leer_rfid":
+        # Lo mismo que el botón «actualizar» de Bambu Studio en cada ranura del AMS (impresoras A1/P1/X1):
+        # M620 R<unidad × 4 + ranura> hace que el AMS vuelva a leer el chip de esa bobina.
+        return {
+            "print": {"sequence_id": sec, "command": "gcode_line",
+                      "param": f"M620 R{validar_ranura_rfid(valor)}\n"}
+        }  # fmt: skip
     raise ValueError(f"Orden desconocida: {comando}")
 
 
@@ -214,13 +240,6 @@ def mezclar_estado(base: Any, nuevo: Any) -> Any:
             salida[k] = mezclar_estado(base[k], v) if k in base else v
         return salida
     if (
-    if comando == "leer_rfid":
-        # Lo mismo que el botón «actualizar» de Bambu Studio en cada ranura del AMS (impresoras A1/P1/X1):
-        # M620 R<unidad × 4 + ranura> hace que el AMS vuelva a leer el chip de esa bobina.
-        return {
-            "print": {"sequence_id": sec, "command": "gcode_line",
-                      "param": f"M620 R{validar_ranura_rfid(valor)}\n"}
-        }  # fmt: skip
         isinstance(base, list) and isinstance(nuevo, list) and base and nuevo
         and all(isinstance(x, dict) and "id" in x for x in (*base, *nuevo))
     ):  # fmt: skip

@@ -3,17 +3,18 @@
 
 import asyncio
 import io
+from datetime import timedelta
 
 import jwt
 import pytest
 from PIL import Image
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.config import Settings, settings
 from app.core import imagenes
 from app.core.cliente import _agrupar
-from app.core.tokens import ALGORITMO
-from app.models import Pedido, RegistroAuditoria
+from app.core.tokens import ALGORITMO, ahora
+from app.models import Pedido, RegistroAuditoria, SesionRefresh
 from app.seeds.create_admin import crear_o_actualizar
 from tests.conftest import CSRF, EMAIL, PASSWORD, crear_articulo
 
@@ -32,10 +33,15 @@ async def test_reset_de_contrasena_cierra_todas_las_sesiones(admin):
     assert (await admin.post("/api/auth/refresh")).status_code == 401
 
 
-async def test_reutilizar_un_refresh_tambien_invalida_los_jwt_de_acceso(admin):
+async def test_reutilizar_un_refresh_tambien_invalida_los_jwt_de_acceso(admin, db):
     viejo = admin.cookies.get("mi_refresh")
     assert (await admin.post("/api/auth/refresh")).status_code == 204  # rota
     assert (await admin.get("/api/auth/yo")).status_code == 200
+    # Fuera de la ventana de gracia de la rotación (si no, es un reintento legítimo).
+    await db.execute(
+        update(SesionRefresh).values(revocada_en=ahora() - timedelta(seconds=60))
+    )
+    await db.commit()
     admin.cookies.set("mi_refresh", viejo)  # el token ya usado reaparece = robo
     assert (await admin.post("/api/auth/refresh")).status_code == 401
     # El JWT de acceso vigente (de la sesión legítima) también murió.
@@ -174,6 +180,62 @@ def test_no_se_firma_con_la_clave_publica_detras_de_un_tunel():
     with pytest.raises(ValueError, match="SECRET_KEY vacía"):
         Settings(secret_key="", proxy_shared_secret="x" * 20)
     Settings(secret_key="")  # desarrollo normal sigue funcionando
+
+
+CLAVE = "k" * 40
+PROD_OK = dict(
+    app_env="production", secret_key=CLAVE, trust_proxy=True, proxy_shared_secret="s" * 20,
+    turnstile_sitekey="sitio", turnstile_secretkey="secreta",
+)  # fmt: skip
+
+
+def test_produccion_exige_proxy_confiable_y_turnstile():
+    assert Settings(**PROD_OK).es_produccion
+    with pytest.raises(ValueError, match="TRUST_PROXY"):
+        Settings(**{**PROD_OK, "trust_proxy": False})
+    with pytest.raises(ValueError, match="PROXY_SHARED_SECRET"):
+        Settings(**{**PROD_OK, "proxy_shared_secret": ""})
+    with pytest.raises(ValueError, match="TURNSTILE"):
+        Settings(**{**PROD_OK, "turnstile_secretkey": ""})
+    with pytest.raises(ValueError, match="TURNSTILE"):
+        Settings(**{**PROD_OK, "turnstile_sitekey": ""})
+    # Fuera de producción nada de esto es obligatorio (desarrollo, pruebas, servicio impresora).
+    Settings(app_env="development", secret_key=CLAVE)
+
+
+def test_servicio_impresora_exige_clave_larga(monkeypatch):
+    from app.config import CLAVE_DESARROLLO
+    from app.impresora import servicio
+
+    monkeypatch.setattr(servicio.settings, "secret_key", "corta")
+    with pytest.raises(SystemExit, match="SECRET_KEY"):
+        servicio.exigir_clave_secreta()
+    monkeypatch.setattr(servicio.settings, "secret_key", CLAVE_DESARROLLO)
+    with pytest.raises(SystemExit, match="SECRET_KEY"):
+        servicio.exigir_clave_secreta()
+    monkeypatch.setattr(servicio.settings, "secret_key", CLAVE)
+    servicio.exigir_clave_secreta()
+
+
+def test_secreto_de_proxy_con_no_ascii_no_da_500(monkeypatch):
+    from starlette.requests import Request
+
+    from app.core import cliente
+
+    monkeypatch.setattr(cliente.settings, "trust_proxy", True)
+    monkeypatch.setattr(cliente.settings, "proxy_shared_secret", "secreto-correcto")
+
+    def peticion(secreto: str) -> Request:
+        cabeceras = [
+            (b"x-proxy-secret", secreto.encode("utf-8")),
+            (b"x-real-client-ip", b"203.0.113.7"),
+        ]
+        return Request(
+            {"type": "http", "headers": cabeceras, "client": ("10.0.0.1", 1234)}
+        )
+
+    assert cliente.ip_cliente(peticion("secreto-correcto")) == "203.0.113.7"
+    assert cliente.ip_cliente(peticion("secretoñ")) == "10.0.0.1"
 
 
 async def test_cabecera_csrf_sigue_siendo_obligatoria_en_login(publico):

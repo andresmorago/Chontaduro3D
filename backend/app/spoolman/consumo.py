@@ -15,9 +15,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.impresora.topes import acotar_filamentos, acotar_progreso, acotar_total
 from app.models import ConsumoFilamento, EstadoSpoolman, RanuraBobina, TrabajoImpresora
 from app.spoolman import asignacion
 from app.spoolman.cliente import (
@@ -79,9 +80,10 @@ def _gramos_a_descontar(t: TrabajoImpresora, plan: Decimal) -> tuple[Decimal, st
     """Un trabajo terminado gasta lo del archivo; uno cortado, la parte hecha (progreso)."""
     if t.estado == "terminado":
         return plan, None
-    if t.progreso and t.progreso > 0:
-        parte = (plan * Decimal(t.progreso) / 100).quantize(CENTAVO)
-        return parte, f"Se cortó al {t.progreso} %: se descuenta esa parte."
+    progreso = acotar_progreso(t.progreso)  # 0–100: un dato fuera de rango no infla el descuento
+    if progreso > 0:
+        parte = (plan * Decimal(progreso) / 100).quantize(CENTAVO)
+        return parte, f"Se cortó al {progreso} %: se descuenta esa parte."
     return Decimal(0), "Se cortó sin dato de avance: revisa en Spoolman si gastó filamento."
 
 
@@ -89,12 +91,14 @@ def _lineas_de(t: TrabajoImpresora) -> list[tuple[str | None, str | None, Decima
     """(tipo, color, gramos del archivo) por filamento. Si el trabajo solo trae el total, una
     línea sin tipo; si no trae nada, ninguna (no hay qué descontar)."""
     filas = []
-    for f in t.filamentos or []:
+    # Tope también aquí: los filamentos guardados antes del tope o por otra vía no se descuentan.
+    for f in acotar_filamentos(t.filamentos or [], "Consumo"):
         g = Decimal(str(f.get("gramos") or 0)).quantize(CENTAVO)
         if g > 0:
             filas.append(((f.get("tipo") or None), (f.get("color") or None), g))
-    if not filas and t.gramos_total and t.gramos_total > 0:
-        filas.append((None, None, Decimal(t.gramos_total).quantize(CENTAVO)))
+    total = acotar_total(t.gramos_total, "Consumo")
+    if not filas and total and total > 0:
+        filas.append((None, None, Decimal(total).quantize(CENTAVO)))
     return filas
 
 
@@ -244,12 +248,24 @@ async def enviar(db: AsyncSession, cliente: ClienteSpoolman) -> dict[str, int]:
         .all()
     )
     for c in pendientes:
+        # Reclamo atómico: el admin puede «omitir» o recambiar la bobina en paralelo. Solo quien
+        # logra pasar la línea de `por_enviar` a `enviando` la envía; si afectó 0 filas, otro la
+        # tocó entre la lectura y ahora y se salta.
+        reclamo = await db.execute(
+            update(ConsumoFilamento)
+            .where(ConsumoFilamento.id == c.id, ConsumoFilamento.estado == "por_enviar")
+            .values(estado="enviando", intentos=ConsumoFilamento.intentos + 1)
+            .execution_options(synchronize_session=False)
+        )
+        await db.commit()
+        if reclamo.rowcount != 1:
+            continue
+        await db.refresh(c)  # con lo último que dejó el admin (bobina, gramos)
         if c.spool_id is None or c.gramos <= 0:
             c.estado = "sin_bobina" if c.spool_id is None else "omitido"
+            c.intentos -= 1
             await db.commit()
             continue
-        c.estado, c.intentos = "enviando", c.intentos + 1
-        await db.commit()
         try:
             await cliente.usar(c.spool_id, float(c.gramos))
         except NoExiste:

@@ -324,3 +324,48 @@ def test_el_cliente_acumula_los_mensajes_sin_perder_las_bandejas():
         llenas = [b for b in bambu.normalizar(c.crudo())["ams"] if not b["vacia"]]
         assert len(llenas) == 2, "las ranuras no deben desaparecer entre mensajes"
     assert c.crudo()["mc_percent"] == 86 and c.ultimo_mensaje is not None
+
+
+# ------------------------------------------------------------ auditoría: validar datos externos
+@pytest.mark.parametrize(
+    ("tag", "esperado"),
+    [
+        ("b9656cfe00000100", "B9656CFE00000100"),
+        (" 0E45AABB ", "0E45AABB"),
+        ("0000000000000000", None),
+        ("", None),
+        ("ABC", None),  # muy corto
+        ("A" * 33, None),  # muy largo
+        ("../spool/1", None),
+        ("ZZZZ1234", None),  # no hexadecimal
+        ("AB12\n34", None),
+    ],
+)
+def test_tag_uid_solo_hexadecimal(tag, esperado):
+    b = bambu._bandeja({"id": "0", "tray_type": "PLA", "tag_uid": tag, "remain": 50}, False)
+    assert b["tag"] == esperado and b["medido"] is (esperado is not None)
+
+
+def test_gramos_absurdos_del_3mf_se_descartan():
+    datos = hacer_3mf(
+        [{"index": 1, "peso": "1e6", "filamentos": [("PLA", "#000", "1e6"), ("PLA", "#fff", "8")]}]
+    )
+    info = lector3mf.analizar_3mf(datos)
+    assert info.filamentos == [{"tipo": "PLA", "color": "#fff", "gramos": 8.0}]
+    assert info.gramos == Decimal("8.00")  # el peso total absurdo se ignora; sale de lo válido
+    # Cada línea cabe, pero el total pasa de 20000 g: no hay en qué confiar.
+    muchas = [("PLA", "#000", "4000")] * 6
+    info = lector3mf.analizar_3mf(hacer_3mf([{"index": 1, "peso": "24000", "filamentos": muchas}]))
+    assert info.filamentos == [] and info.gramos is None
+    # NaN e infinito tampoco pasan.
+    info = lector3mf.analizar_3mf(
+        hacer_3mf([{"index": 1, "peso": "nan", "filamentos": [("PLA", "#000", "inf")]}])
+    )
+    assert info.filamentos == [] and info.gramos is None
+
+
+@pytest.mark.parametrize(("crudo", "esperado"), [(250, 100), (-5, 0), (42, 42), ("x", 0)])
+def test_progreso_se_acota_a_0_100(crudo, esperado):
+    assert maquina.instantanea_de({"mc_percent": crudo}).progreso == esperado
+    n = bambu.normalizar({"mc_percent": crudo, "gcode_state": "RUNNING"})
+    assert n["progreso"] == (esperado if crudo != "x" else None)

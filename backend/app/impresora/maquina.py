@@ -6,6 +6,7 @@ abierto que ya hay en la base, y dice qué hacer."""
 from dataclasses import dataclass
 
 from app.impresora.bambu import ACTIVOS
+from app.impresora.topes import acotar_progreso
 
 
 @dataclass(frozen=True)
@@ -37,13 +38,12 @@ NADA = Accion()
 
 
 def instantanea_de(crudo: dict) -> Instantanea:
-    p = crudo.get("mc_percent")
     return Instantanea(
         gcode_state=crudo.get("gcode_state"),
         nombre=str(crudo.get("subtask_name") or ""),
         archivo=str(crudo.get("gcode_file") or ""),
         tarea_id=str(crudo.get("task_id") or ""),
-        progreso=p if isinstance(p, int) else 0,
+        progreso=acotar_progreso(crudo.get("mc_percent")),
     )
 
 

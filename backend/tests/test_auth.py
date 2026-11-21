@@ -1,6 +1,10 @@
-import pytest
-from sqlalchemy import select
+from datetime import timedelta
 
+import pytest
+from sqlalchemy import select, update
+
+from app.api.auth import GRACIA_ROTACION_S
+from app.core.tokens import ahora
 from app.models import SesionRefresh
 from tests.conftest import CSRF, EMAIL, PASSWORD
 
@@ -63,19 +67,60 @@ async def test_mutaciones_exigen_cabecera_csrf(admin):
     assert r.status_code == 403
 
 
+async def _envejecer_revocacion(db, segundos: int) -> None:
+    """Simula que la revocación ocurrió hace `segundos`."""
+    await db.execute(
+        update(SesionRefresh)
+        .where(SesionRefresh.revocada.is_(True))
+        .values(revocada_en=ahora() - timedelta(seconds=segundos))
+    )
+    await db.commit()
+
+
+async def _activas(db) -> list:
+    return (
+        await db.execute(select(SesionRefresh).where(SesionRefresh.revocada.is_(False)))
+    ).all()
+
+
 async def test_refresh_rota_y_detecta_reutilizacion(admin, db):
     viejo = admin.cookies.get("mi_refresh")
     assert (await admin.post("/api/auth/refresh")).status_code == 204
     nuevo = admin.cookies.get("mi_refresh")
     assert nuevo != viejo
 
-    # Presentar el token ya usado = robo: se cierran TODAS las sesiones.
+    # Token ya usado y fuera de la ventana de gracia = robo: se cierran TODAS las sesiones.
+    await _envejecer_revocacion(db, GRACIA_ROTACION_S + 5)
     admin.cookies.set("mi_refresh", viejo)
     assert (await admin.post("/api/auth/refresh")).status_code == 401
-    activas = (
-        await db.execute(select(SesionRefresh).where(SesionRefresh.revocada.is_(False)))
-    ).all()
-    assert activas == []
+    assert await _activas(db) == []
+
+
+async def test_reuso_dentro_de_la_gracia_no_cierra_sesiones(admin, db):
+    viejo = admin.cookies.get("mi_refresh")
+    assert (await admin.post("/api/auth/refresh")).status_code == 204
+    nuevo = admin.cookies.get("mi_refresh")
+
+    # Segunda pestaña con el mismo refresh, de inmediato: 200 y solo un acceso nuevo.
+    admin.cookies.set("mi_refresh", viejo)
+    r = await admin.post("/api/auth/refresh")
+    assert r.status_code == 200
+    assert "mi_access" in r.headers.get("set-cookie", "")
+    assert "mi_refresh" not in r.headers.get("set-cookie", "")
+    assert len(await _activas(db)) == 1
+
+    # El refresh vigente (el que rotó) sigue funcionando.
+    admin.cookies.set("mi_refresh", nuevo)
+    assert (await admin.post("/api/auth/refresh")).status_code == 204
+
+
+async def test_reuso_tras_logout_cierra_todo(admin, db):
+    viejo = admin.cookies.get("mi_refresh")
+    assert (await admin.post("/api/auth/logout")).status_code == 204
+    admin.cookies.set("mi_refresh", viejo)
+    # Revocado por logout (no por rotación): sin gracia aunque sea reciente.
+    assert (await admin.post("/api/auth/refresh")).status_code == 401
+    assert await _activas(db) == []
 
 
 async def test_logout_revoca_la_sesion(admin):

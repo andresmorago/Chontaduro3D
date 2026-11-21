@@ -35,3 +35,8 @@ class SesionRefresh(MarcaDeTiempo, Base):
     expira_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revocada: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
     user_agent: Mapped[str | None] = mapped_column(String(255))
+    # Cuándo y por qué se revocó. motivo = "rotacion" solo cuando el refresco se canjeó por uno
+    # nuevo (da una ventana de gracia a peticiones paralelas); logout, cambio de clave o
+    # desactivación dejan el motivo vacío.
+    revocada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    motivo_revocacion: Mapped[str | None] = mapped_column(String(16))

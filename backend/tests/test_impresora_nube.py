@@ -42,6 +42,24 @@ def test_tarea_terminada():
     assert t.dispositivo == "SERIE1"
 
 
+def test_gramos_absurdos_de_la_nube_se_descartan():
+    t = tarea_de(
+        tarea_cruda(
+            weight=1e6,
+            amsDetailMapping=[
+                {"weight": 1e6, "targetFilamentType": "PLA", "targetColor": "FF0000FF"},
+                {"weight": 9.5, "targetFilamentType": "PLA", "targetColor": "0000FFFF"},
+            ],
+        )
+    )
+    assert [f["gramos"] for f in t.filamentos] == [9.5] and t.gramos == 9.5
+    t = tarea_de(tarea_cruda(weight=float("inf"), amsDetailMapping=None))
+    assert t.gramos is None
+    seis = [{"weight": 4000, "targetFilamentType": "PLA"}] * 6  # suman 24000 g
+    t = tarea_de(tarea_cruda(weight=24000, amsDetailMapping=seis))
+    assert t.filamentos == [] and t.gramos is None
+
+
 def test_estados_de_la_nube():
     assert tarea_de(tarea_cruda(status=2)).estado == "terminado"
     assert tarea_de(tarea_cruda(status=3)).estado == "interrumpido"

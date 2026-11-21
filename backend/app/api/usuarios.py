@@ -40,9 +40,7 @@ def _salida(u: Usuario, yo: Usuario) -> UsuarioAdminOut:
 
 
 def _exigir_fortaleza(clave: str, email: str) -> None:
-    motivo = validar_fortaleza(clave)
-    if motivo is None and clave.strip().lower() in (email.lower(), email.split("@")[0].lower()):
-        motivo = "La contraseña no puede ser igual al correo. Elige otra."
+    motivo = validar_fortaleza(clave, email)
     if motivo:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, motivo)
 
@@ -51,7 +49,9 @@ async def _cortar_sesiones(db, usuario: Usuario) -> None:
     """Invalida los JWT de acceso (versión) y los refrescos (revocados) de un usuario."""
     usuario.version_sesion += 1
     await db.execute(
-        update(SesionRefresh).where(SesionRefresh.usuario_id == usuario.id).values(revocada=True)
+        update(SesionRefresh)
+        .where(SesionRefresh.usuario_id == usuario.id)
+        .values(revocada=True, revocada_en=ahora())
     )
 
 

@@ -25,6 +25,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 VENTANA = timedelta(minutes=15)
 MAX_FALLOS_POR_ORIGEN = 10
 MAX_FALLOS_POR_CORREO = 5
+# Un refresh recién rotado puede llegar otra vez (dos pestañas, reintento de red): dentro de
+# esta ventana no es robo, se responde con un acceso nuevo y nada más.
+GRACIA_ROTACION_S = 15
 
 
 def _seguras(request: Request) -> bool:
@@ -38,11 +41,21 @@ def _seguras(request: Request) -> bool:
 
 def _poner_cookies(response: Response, request: Request, access: str, refresh: str) -> None:
     comunes = {"httponly": True, "secure": _seguras(request), "samesite": "lax", "path": "/"}
-    response.set_cookie(
-        COOKIE_ACCESO, access, max_age=settings.access_token_minutes * 60, **comunes
-    )
+    _poner_acceso(response, request, access)
     response.set_cookie(
         COOKIE_REFRESCO, refresh, max_age=settings.refresh_token_days * 86400, **comunes
+    )
+
+
+def _poner_acceso(response: Response, request: Request, access: str) -> None:
+    response.set_cookie(
+        COOKIE_ACCESO,
+        access,
+        max_age=settings.access_token_minutes * 60,
+        httponly=True,
+        secure=_seguras(request),
+        samesite="lax",
+        path="/",
     )
 
 
@@ -145,12 +158,27 @@ async def refrescar(request: Request, response: Response, db: DB):
         return _sesion_vencida()
 
     if sesion.revocada:
+        usuario = await db.get(Usuario, sesion.usuario_id)
+        if (
+            sesion.motivo_revocacion == "rotacion"
+            and sesion.revocada_en is not None
+            and (ahora() - sesion.revocada_en).total_seconds() < GRACIA_ROTACION_S
+            and usuario is not None
+            and usuario.activo
+        ):
+            # Reuso legítimo justo tras rotar: solo un acceso nuevo; el refresco vigente es el
+            # que la primera petición ya entregó, y las demás sesiones no se tocan.
+            respuesta = Response(status_code=status.HTTP_200_OK)
+            _poner_acceso(
+                respuesta, request, crear_access_token(str(usuario.id), usuario.version_sesion)
+            )
+            return respuesta
         # Un token ya usado reapareció: alguien lo copió. Se cierran todas las sesiones y se
         # invalidan también los JWT de acceso vigentes.
         await db.execute(
             update(SesionRefresh)
             .where(SesionRefresh.usuario_id == sesion.usuario_id)
-            .values(revocada=True)
+            .values(revocada=True, revocada_en=ahora())
         )
         duenio = await db.get(Usuario, sesion.usuario_id)
         if duenio is not None:
@@ -164,6 +192,8 @@ async def refrescar(request: Request, response: Response, db: DB):
         return _sesion_vencida()
 
     sesion.revocada = True
+    sesion.revocada_en = ahora()
+    sesion.motivo_revocacion = "rotacion"
     await _abrir_sesion(db, response, request, usuario)
     await db.commit()
 
@@ -176,7 +206,7 @@ async def salir(request: Request, response: Response, db: DB) -> None:
         await db.execute(
             update(SesionRefresh)
             .where(SesionRefresh.token_hash == hash_token(crudo))
-            .values(revocada=True)
+            .values(revocada=True, revocada_en=ahora())
         )
         await db.commit()
     _borrar_cookies(response)

@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from ftplib import FTP, FTP_TLS
 
+from app.impresora.topes import acotar_filamentos, acotar_total
+
 LIMITE_BYTES = 80 * 1024 * 1024  # un .3mf de impresora doméstica pesa unos pocos MB
 LIMITE_XML = 5 * 1024 * 1024
 CARPETAS = ("/", "/cache")
@@ -32,7 +34,7 @@ def _decimal(v: str | None) -> Decimal | None:
         d = Decimal(str(v))
     except (InvalidOperation, TypeError):
         return None
-    return d if d > 0 else None
+    return d if d.is_finite() and d > 0 else None
 
 
 def plate_de(*textos: str | None) -> int | None:
@@ -78,8 +80,9 @@ def analizar_3mf(contenido: bytes, plate: int | None = None) -> InfoArchivo | No
             filamentos.append(
                 {"tipo": (f.get("type") or "").strip(), "color": color or None, "gramos": float(g)}
             )
+    filamentos = acotar_filamentos(filamentos, "Archivo .3mf")
     segundos = _entero(meta.get("prediction"))
-    gramos = _decimal(meta.get("weight"))
+    gramos = acotar_total(_decimal(meta.get("weight")), "Archivo .3mf")
     if gramos is None and filamentos:
         gramos = sum((Decimal(str(f["gramos"])) for f in filamentos), Decimal(0))
     return InfoArchivo(

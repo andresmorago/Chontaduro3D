@@ -1,5 +1,7 @@
 """Aplicación FastAPI. Todo cuelga de /api: el frontend la expone en el mismo origen."""
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -24,6 +26,7 @@ from app.api import (
 )
 from app.config import settings
 from app.core.limite_cuerpo import LimiteDeCuerpo
+from app.core.limpieza import bucle_limpieza
 from app.db import engine
 
 CABECERAS = {
@@ -37,7 +40,13 @@ CABECERAS = {
 
 @asynccontextmanager
 async def ciclo(_: FastAPI):
-    yield
+    limpieza = asyncio.create_task(bucle_limpieza(), name="limpieza-periodica")
+    try:
+        yield
+    finally:
+        limpieza.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await limpieza
     await engine.dispose()
 
 

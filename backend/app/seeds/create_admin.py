@@ -7,12 +7,13 @@ from sqlalchemy import select, update
 
 from app.config import settings
 from app.core.security import hash_password, validar_fortaleza
+from app.core.tokens import ahora
 from app.db import SessionLocal, engine
 from app.models import SesionRefresh, Usuario
 
 
 async def crear_o_actualizar(email: str, password: str) -> str:
-    motivo = validar_fortaleza(password)
+    motivo = validar_fortaleza(password, email)
     if motivo:
         raise SystemExit(motivo)
     email = email.strip().lower()
@@ -32,7 +33,7 @@ async def crear_o_actualizar(email: str, password: str) -> str:
             await db.execute(
                 update(SesionRefresh)
                 .where(SesionRefresh.usuario_id == usuario.id)
-                .values(revocada=True)
+                .values(revocada=True, revocada_en=ahora())
             )
             accion = "actualizado"
         await db.commit()
