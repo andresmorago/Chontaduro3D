@@ -269,6 +269,14 @@ class VentaItemOut(Salida):
     precio_unitario: DineroSalida
 
 
+class VentaDiaOut(Salida):
+    """Un día del calendario de ventas: cuántas ventas vigentes tuvo y cuánto sumaron."""
+
+    fecha: date
+    ventas: int
+    total: DineroSalida
+
+
 class VentaOut(Salida):
     id: UUID
     fecha: date

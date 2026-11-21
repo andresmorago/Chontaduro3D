@@ -4,7 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.produccion import hoy, validar_fecha
 from app.core import auditoria
@@ -26,7 +26,7 @@ from app.models import (
     Venta,
     VentaItem,
 )
-from app.schemas.dominio import VentaIn, VentaItemOut, VentaOut
+from app.schemas.dominio import VentaDiaOut, VentaIn, VentaItemOut, VentaOut
 
 router = APIRouter(prefix="/ventas", tags=["ventas"], dependencies=PROTEGIDO)
 
@@ -157,6 +157,24 @@ async def listar(
     if hasta:
         consulta = consulta.where(Venta.fecha <= hasta)
     return [await _salida(db, v) for v in (await db.execute(consulta)).scalars()]
+
+
+@router.get("/resumen", response_model=list[VentaDiaOut])
+async def resumen(db: DB, desde: date, hasta: date) -> list[VentaDiaOut]:
+    """Ventas vigentes (sin las anuladas) por día en un rango, para pintar el calendario. Solo
+    salen los días que tuvieron ventas."""
+    if hasta < desde or (hasta - desde).days > 400:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El rango de fechas no es válido (máximo 400 días).",
+        )
+    filas = await db.execute(
+        select(Venta.fecha, func.count(Venta.id), func.sum(Venta.total))
+        .where(Venta.fecha >= desde, Venta.fecha <= hasta, Venta.anulada.is_(False))
+        .group_by(Venta.fecha)
+        .order_by(Venta.fecha)
+    )
+    return [VentaDiaOut(fecha=f, ventas=n, total=t or Decimal(0)) for f, n, t in filas]
 
 
 @router.post("/{venta_id}/anular", response_model=VentaOut)

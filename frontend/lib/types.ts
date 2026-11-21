@@ -190,6 +190,13 @@ export interface Venta {
   pedido_nombre: string | null;
 }
 
+/** Un día del calendario de ventas: ventas vigentes (sin anuladas) y su total. */
+export interface VentaDia {
+  fecha: string;
+  ventas: number;
+  total: number;
+}
+
 export interface Movimiento {
   id: number;
   articulo_id: string;

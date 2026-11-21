@@ -14,6 +14,7 @@ import type {
   ConsumoFilamento,
   DemandaArticulo,
   EstadoPedido,
+  VentaDia,
   EstadoSpoolman,
   ExtraProduccion,
   Impresora,
@@ -234,6 +235,10 @@ export const api = {
   },
   ventas: {
     deHoy: () => pedir<Venta[]>("/ventas"),
+    /** Las ventas de un día (YYYY-MM-DD). */
+    deDia: (dia: string) => pedir<Venta[]>(`/ventas${q({ desde: dia, hasta: dia, limite: 200 })}`),
+    /** Por día, las ventas vigentes y su total en un rango (para pintar el calendario). */
+    resumen: (desde: string, hasta: string) => pedir<VentaDia[]>(`/ventas/resumen${q({ desde, hasta })}`),
     registrar: (d: VentaEntrada) => pedir<Venta>("/ventas", { metodo: "POST", cuerpo: d }),
     anular: (id: string) => pedir<Venta>(`/ventas/${id}/anular`, { metodo: "POST" }),
   },

@@ -9,9 +9,11 @@ import { Segmentado } from "@/components/ui/Segmentado";
 import { Selector } from "@/components/panel/Selector";
 import { api } from "@/lib/api";
 import { clave, hexColor, nombreColor, partirClave, stockDe } from "@/lib/lineas";
-import { dinero, etiquetaPago, hora } from "@/lib/format";
+import { CalendarioVentas } from "@/components/panel/CalendarioVentas";
+import { dinero, diaISO, etiquetaPago, fechaConDia, fechaCorta, hora, hoyISO } from "@/lib/format";
 import { mensajeDe, useCargar } from "@/lib/hooks";
 import { lineasDePedido, type LineaVenta as Linea } from "@/lib/pedidoAVenta";
+import { useVentasDelDia } from "@/lib/ventasDia";
 import type { Articulo, MetodoPago, Venta } from "@/lib/types";
 
 const METODOS = [
@@ -23,7 +25,12 @@ const METODOS = [
 export default function Vender() {
   const { mostrar } = useAvisos();
   const articulos = useCargar(() => api.articulos.listar());
-  const ventas = useCargar(api.ventas.deHoy);
+  // Ventas por día: el día elegido en el calendario (hoy al abrir) y el mes que se ve.
+  const hoy = hoyISO();
+  const [dia, setDia] = useState(hoy);
+  const [mes, setMes] = useState(hoy.slice(0, 7));
+  const [calAbierto, setCalAbierto] = useState(false);
+  const ventas = useVentasDelDia(dia, mes);
   const pedidos = useCargar(() => api.pedidos.listar());
   // Pedido que esta venta atiende (opcional). Llega por ?pedido= desde Pedidos → «Atender».
   const [pedidoId, setPedidoId] = useState("");
@@ -124,6 +131,8 @@ export default function Vender() {
       setCliente("");
       setPedidoId("");
       mostrar(`Venta registrada${cerrado ? " y pedido cerrado" : ""} · ${dinero(v.total)}`, { accion: { etiqueta: "Deshacer", alPulsar: () => deshacer(v.id) } });
+      setDia(hoy);
+      setMes(hoy.slice(0, 7)); // lo que se acaba de vender es de hoy: que se vea
       await Promise.all([articulos.recargar(), ventas.recargar(), pedidos.recargar()]);
     } catch (e) {
       mostrar(mensajeDe(e), { tipo: "error" });
@@ -145,6 +154,7 @@ export default function Vender() {
     }
   }
 
+  const esHoy = dia === hoy;
   const delDia = (ventas.datos ?? []).filter((v) => !v.anulada);
   const totalDia = delDia.reduce((s, v) => s + v.total, 0);
 
@@ -242,15 +252,27 @@ export default function Vender() {
         </div>
       )}
 
-      <section className="seccion" aria-labelledby="t-hoy">
-        <h2 id="t-hoy">Ventas de hoy {delDia.length > 0 && <span className="muted num">· {delDia.length} · {dinero(totalDia)}</span>}</h2>
+      <section className="seccion ventas-dia" aria-labelledby="t-hoy">
+        <div className="ventas-dia__cab">
+          <h2 id="t-hoy">{esHoy ? "Ventas de hoy" : `Ventas del ${fechaConDia(dia)}`} {delDia.length > 0 && <span className="muted num">· {delDia.length} · {dinero(totalDia)}</span>}</h2>
+          <Boton variante="secondary" pequeno className="cal-toggle" aria-expanded={calAbierto} aria-controls="cal-ventas" onClick={() => setCalAbierto((v) => !v)}>
+            {calAbierto ? "Cerrar calendario" : "Elegir otro día"}
+          </Boton>
+        </div>
         {ventas.error && <p className="alerta" role="alert">{ventas.error}</p>}
-        {(ventas.datos ?? []).length === 0 ? (
-          <div className="vacio"><p>Todavía no registraste ventas hoy.</p></div>
+        <div className="ventas-dia__cuerpo">
+          <div id="cal-ventas" className="cal-panel" data-abierto={calAbierto}>
+            <CalendarioVentas dia={dia} hoy={hoy} mes={mes} onMes={setMes} onDia={(d) => { setDia(d); setMes(d.slice(0, 7)); setCalAbierto(false); }} resumen={ventas.resumen} />
+          </div>
+          <div className="ventas-dia__lista">
+        {ventas.datos === null ? (
+          <p className="muted" role="status">Cargando…</p>
+        ) : ventas.datos.length === 0 ? (
+          <div className="vacio"><p>{esHoy ? "Todavía no registraste ventas hoy." : `No hubo ventas el ${fechaConDia(dia)}.`}</p></div>
         ) : (
           <div className="tabla-caja">
             <table className="tabla-datos tabla-ventas">
-              <caption className="visually-hidden">Ventas de hoy</caption>
+              <caption className="visually-hidden">{esHoy ? "Ventas de hoy" : `Ventas del ${fechaConDia(dia)}`}</caption>
               <thead>
                 <tr>
                   <th scope="col">Hora y artículos</th>
@@ -268,9 +290,9 @@ export default function Vender() {
                     <Fragment key={v.id}>
                       <tr className={`t-cab t-con-sub${v.anulada ? " t-anulada" : ""}`}>
                         <th scope="row" className="t-nombre">
-                          <span className="v-hora num">{hora(v.creado_en)}</span>
+                          {v.fecha === diaISO(v.creado_en) ? <span className="v-hora num">{hora(v.creado_en)}</span> : <span className="v-hora v-hora--sin muted">Sin hora</span>}
                           {v.anulada && <span className="etiqueta etiqueta--tenue v-anulada">Anulada</span>}
-                          <span className="t-sec">{[v.cliente, v.pedido_nombre ? `Pedido de ${v.pedido_nombre}` : null, unidades].filter(Boolean).join(" · ")}</span>
+                          <span className="t-sec">{[v.cliente, v.pedido_nombre ? `Pedido de ${v.pedido_nombre}` : null, unidades, v.fecha !== diaISO(v.creado_en) ? `Registrada el ${fechaCorta(diaISO(v.creado_en))}` : null].filter(Boolean).join(" · ")}</span>
                           <span className="t-meta">{etiquetaPago(v.metodo_pago)}</span>
                         </th>
                         <td className="c-mov-no c-nw">{etiquetaPago(v.metodo_pago)}</td>
@@ -309,6 +331,8 @@ export default function Vender() {
             </table>
           </div>
         )}
+          </div>
+        </div>
       </section>
     </>
   );

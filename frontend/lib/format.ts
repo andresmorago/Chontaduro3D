@@ -83,3 +83,15 @@ export function enlaceWhatsapp(numero: string, mensaje: string): string {
   if (digitos.length === 10 && digitos.startsWith("3")) digitos = `57${digitos}`;
   return `https://wa.me/${digitos}?text=${encodeURIComponent(mensaje)}`;
 }
+
+/** YYYY-MM-DD (en Bogotá) de un instante, p. ej. el día en que se registró una venta. */
+export function diaISO(instante: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: ZONA }).format(new Date(instante));
+}
+
+/** «sábado 14 de noviembre» (con el año si no es el actual). */
+export function fechaConDia(iso: string): string {
+  const [a] = iso.split("-").map(Number);
+  const base = fechaLarga(iso).replace(",", "");
+  return a === Number(hoyISO().slice(0, 4)) ? base : `${base} de ${a}`;
+}
