@@ -4,6 +4,23 @@
 Mis impresiones y Spoolman se hablan siempre: **todo lo que imprime la impresora descuenta filamento de la bobina
 correspondiente**, se importe o no como lote de producción.
 
+## La vida de un rollo, paso a paso
+
+**Regla de oro: la impresora manda en lo que hay cargado; Spoolman lleva el inventario** (gramos, precio, repuestos). La app mira la impresora y mantiene Spoolman al día.
+La app **no escribe en la impresora** (no carga, no descarga, no cambia el color de una ranura): eso lo haces tú en la impresora o en Bambu Studio.
+
+1. **Tener el rollo en Spoolman** (una vez por rollo físico).
+   - *Bambu con chip*: no haces nada; se registra solo la primera vez que lo cargas.
+   - *Sin chip* (Sunlu, etc.): créalo en Spoolman o con *Crear en Spoolman* en la ranura (peso, cuánto queda, precio). Anota su **n.º** en el carrete.
+2. **Cargarlo.** Pones el rollo en el AMS. Si no tiene chip, le dices el material y el color en la impresora o en Studio. En unos segundos aparece en Administración → Impresora → *Filamento*:
+   - *Con chip*: se une solo a su bobina.
+   - *Sin chip*: se une solo si en Spoolman hay **un único** rollo de ese material y color parecido. Si hay dos o ninguno, el panel te pregunta («Sí, es «…»») o te deja *Crear en Spoolman*.
+3. **Usarlo.** Imprimes normal. Al terminar el trabajo, el servicio descuenta los gramos de la bobina de esa ranura. Ves «Quedan X g»; lo dudoso queda en *Descuentos por resolver*. Un lote de producción puede citar la bobina y guarda su costo.
+4. **Cambiarlo o descargarlo.** Descargas a mano en la impresora y cargas el otro (paso 2). Si el color o el material de la ranura cambió, el vínculo viejo se suelta solo (o se confirma si era el mismo rollo con otro color de la paleta).
+   - ⚠ Si cambias un rollo por **otro igual** (mismo material y color) sin tocar nada en la impresora, la app no lo puede notar: usa *Más → Cambiar bobina de Spoolman* para decirle cuál es.
+   - *Desvincular de Spoolman* solo suelta el vínculo en la app; no toca la impresora.
+5. **Terminarlo.** Cuando se acaba: *Ajustar → Archivar (se terminó)*. Los rollos fuera del AMS aparecen en *Rollos de repuesto*, con aviso de «queda poco».
+
 ## Qué hace
 
 | Quién | Hace |
