@@ -3,14 +3,18 @@
 // En el servidor (componentes de servidor) se llama directo a la red interna.
 
 import type {
+  AccionConsumo,
   Articulo,
   ArticuloEntrada,
+  BobinaSpoolman,
   CatalogoPublico,
   ComandoImpresora,
   ConexionImpresora,
   ConfigPublica,
+  ConsumoFilamento,
   DemandaArticulo,
   EstadoPedido,
+  EstadoSpoolman,
   ExtraProduccion,
   Impresora,
   ItemCantidad,
@@ -22,11 +26,13 @@ import type {
   Pedido,
   PrecioHistorial,
   Produccion,
+  RanuraSpoolman,
   TrabajoImpresora,
   Usuario,
   UsuarioAdmin,
   Venta,
   VentaEntrada,
+  VinculoRanura,
 } from "./types";
 
 const EN_SERVIDOR = typeof window === "undefined";
@@ -152,7 +158,8 @@ export const api = {
     ordenar: (comando: ComandoImpresora, valor?: string) =>
       pedir<OrdenImpresora>("/impresora/comandos", { metodo: "POST", cuerpo: { comando, valor: valor ?? null } }),
     orden: (id: number) => pedir<OrdenImpresora>(`/impresora/comandos/${id}`),
-    trabajos: (gestion: TrabajoImpresora["gestion"] = "pendiente") => pedir<TrabajoImpresora[]>(`/impresora/trabajos${q({ gestion })}`),
+    trabajos: (gestion: TrabajoImpresora["gestion"] | "todos" = "pendiente", limite = 50) =>
+      pedir<TrabajoImpresora[]>(`/impresora/trabajos${q({ gestion, limite })}`),
     ignorar: (id: string) => pedir<TrabajoImpresora>(`/impresora/trabajos/${id}/ignorar`, { metodo: "POST" }),
     restaurar: (id: string) => pedir<TrabajoImpresora>(`/impresora/trabajos/${id}/restaurar`, { metodo: "POST" }),
     conexion: {
@@ -169,6 +176,18 @@ export const api = {
       nubeSincronizar: () => pedir<ConexionImpresora>("/impresora/conexion/nube/sincronizar", { metodo: "POST" }),
       nubeDesvincular: () => pedir<ConexionImpresora>("/impresora/conexion/nube", { metodo: "DELETE" }),
     },
+  },
+  spoolman: {
+    estado: () => pedir<EstadoSpoolman>("/spoolman"),
+    bobinas: () => pedir<BobinaSpoolman[]>("/spoolman/bobinas"),
+    ranuras: () => pedir<RanuraSpoolman[]>("/spoolman/ranuras"),
+    vincular: (ranura: string, spoolId: number | null, mover = false) =>
+      pedir<VinculoRanura>(`/spoolman/ranuras/${ranura}`, { metodo: "PUT", cuerpo: { spool_id: spoolId, mover } }),
+    crearDesdeRanura: (ranura: string, d: { peso_g?: number; precio?: number; restante_g?: number }) =>
+      pedir<VinculoRanura>(`/spoolman/ranuras/${ranura}/crear`, { metodo: "POST", cuerpo: d }),
+    consumos: (pendientes = true) => pedir<ConsumoFilamento[]>(`/spoolman/consumos${q({ pendientes, limite: 30 })}`),
+    decidir: (id: string, d: { accion: AccionConsumo; spool_id?: number; gramos?: number }) =>
+      pedir<ConsumoFilamento>(`/spoolman/consumos/${id}`, { metodo: "PUT", cuerpo: d }),
   },
   panel: () => pedir<Panel>("/panel"),
   usuarios: {

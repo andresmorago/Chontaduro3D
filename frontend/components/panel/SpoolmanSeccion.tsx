@@ -1,0 +1,368 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useAvisos } from "@/components/ui/Avisos";
+import { Boton } from "@/components/ui/Boton";
+import { api, ErrorApi } from "@/lib/api";
+import { fechaCorta, hace } from "@/lib/format";
+import { ETIQUETA_CONSUMO, gramosTexto, muestra } from "@/lib/impresora";
+import { mensajeDe, useCargar } from "@/lib/hooks";
+import type { BobinaSpoolman, ConsumoFilamento, RanuraSpoolman } from "@/lib/types";
+
+const textoBobina = (b: BobinaSpoolman) => `${b.nombre} · ${b.restante_g != null ? gramosTexto(b.restante_g) : "sin peso"} · n.º ${b.id}`;
+
+function Opciones({ bobinas }: { bobinas: BobinaSpoolman[] }) {
+  return (
+    <>
+      <option value="">Elige una bobina…</option>
+      {bobinas.map((b) => (
+        <option key={b.id} value={b.id}>
+          {textoBobina(b)}
+        </option>
+      ))}
+    </>
+  );
+}
+
+function Muestra({ color }: { color: string | null }) {
+  return <span className="bandeja__color" style={{ background: muestra(color) }} aria-hidden="true" />;
+}
+
+/** Qué bobina de Spoolman hay en cada ranura del AMS. Las Bambu con chip se reconocen solas una vez vinculadas
+ *  (el chip queda guardado en Spoolman); las demás se eligen a mano y se vuelven a confirmar si la ranura cambia. */
+function Ranuras({ bobinas, recargarBobinas, autoregistro }: { bobinas: BobinaSpoolman[]; recargarBobinas: () => Promise<void>; autoregistro: boolean }) {
+  const { mostrar } = useAvisos();
+  const lista = useCargar(api.spoolman.ranuras);
+  const [editando, setEditando] = useState<string | null>(null);
+  const [elegida, setElegida] = useState("");
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [creando, setCreando] = useState<string | null>(null);
+  const [form, setForm] = useState({ peso: "1000", restante: "", precio: "" });
+  const [conflicto, setConflicto] = useState<{ ranura: string; spoolId: number; mensaje: string } | null>(null);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden && editando === null) void lista.recargar();
+    }, 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editando]);
+
+  async function vincular(r: RanuraSpoolman, spoolId: number | null, mover = false) {
+    setOcupado(r.ranura);
+    try {
+      await api.spoolman.vincular(r.ranura, spoolId, mover);
+      mostrar(spoolId == null ? `${r.nombre}: bobina quitada.` : `${r.nombre}: bobina asociada.`);
+      setEditando(null);
+      setElegida("");
+      setConflicto(null);
+      await Promise.all([lista.recargar(), recargarBobinas()]);
+    } catch (e) {
+      if (e instanceof ErrorApi && e.status === 409 && spoolId != null) setConflicto({ ranura: r.ranura, spoolId, mensaje: e.message });
+      else mostrar(mensajeDe(e), { tipo: "error" });
+    } finally {
+      setOcupado(null);
+    }
+  }
+
+  async function crear(r: RanuraSpoolman) {
+    const num = (t: string) => (t.trim() === "" ? undefined : Number(t.replace(",", ".")));
+    const peso = num(form.peso), restante = num(form.restante), precio = num(form.precio);
+    if ([peso, restante, precio].some((n) => n !== undefined && (!Number.isFinite(n) || n < 0)) || peso === 0) {
+      mostrar("Revisa los números: pesos y precio deben ser positivos.", { tipo: "error" });
+      return;
+    }
+    setOcupado(r.ranura);
+    try {
+      await api.spoolman.crearDesdeRanura(r.ranura, { peso_g: peso, restante_g: restante, precio });
+      mostrar(`${r.nombre}: bobina creada en Spoolman y asociada.`);
+      setCreando(null);
+      await Promise.all([lista.recargar(), recargarBobinas()]);
+    } catch (e) {
+      mostrar(mensajeDe(e), { tipo: "error" });
+    } finally {
+      setOcupado(null);
+    }
+  }
+
+  const filas = lista.datos ?? [];
+  return (
+    <div className="spool-bloque">
+      <h3 className="spool-sub">Bobinas en el AMS</h3>
+      {lista.error && <p className="alerta" role="alert">{lista.error}</p>}
+      {lista.cargando ? (
+        <p className="muted" role="status">Cargando…</p>
+      ) : filas.length === 0 ? (
+        <p className="muted">No hay filamento a la vista en la impresora. Cuando esté conectada y con ranuras cargadas, aparecen aquí.</p>
+      ) : (
+        <ul className="spool-ranuras">
+          {filas.map((r) => {
+            const v = r.vinculo;
+            const abierto = editando === r.ranura;
+            return (
+              <li key={r.ranura} className={`spool-ranura${r.en_uso ? " spool-ranura--uso" : ""}`}>
+                <Muestra color={r.color} />
+                <div className="spool-ranura__texto">
+                  <strong>
+                    {r.nombre} <span className="muted">· {r.marca ?? r.tipo ?? "Filamento"}</span>
+                  </strong>
+                  {r.en_uso && <span className="etiqueta etiqueta--ok">En uso</span>}
+                  {v.bobina && v.estado !== "sin_vincular" ? (
+                    <span className="spool-ranura__bobina">
+                      {textoBobina(v.bobina)}{" "}
+                      <span className="etiqueta etiqueta--tenue">{v.tipo === "rfid" ? "Chip Bambu" : "A mano"}</span>
+                    </span>
+                  ) : (
+                    <span className="muted">
+                      {v.tipo === "rfid"
+                        ? autoregistro
+                          ? "Bobina Bambu nueva: se registra sola en Spoolman en unos segundos."
+                          : "Bobina Bambu con chip: aún no está en Spoolman."
+                        : "Sin bobina asociada."}
+                    </span>
+                  )}
+                  {v.estado === "desactualizado" && v.bobina && (
+                    <span className="aviso-linea" role="status">La ranura cambió de filamento. ¿Sigue siendo esta bobina?</span>
+                  )}
+                  {conflicto?.ranura === r.ranura && (
+                    <span className="aviso-linea" role="alert">
+                      {conflicto.mensaje}{" "}
+                      <Boton variante="secondary" pequeno cargando={ocupado === r.ranura} onClick={() => void vincular(r, conflicto.spoolId, true)}>
+                        Mover el chip
+                      </Boton>
+                    </span>
+                  )}
+                  {creando === r.ranura && (
+                    <span className="spool-edicion spool-crear">
+                      <label className="spool-gramos">
+                        <span>Peso del rollo nuevo</span>
+                        <input className="input num" inputMode="decimal" value={form.peso} onChange={(e) => setForm({ ...form, peso: e.target.value })} />
+                        <span aria-hidden="true">g</span>
+                      </label>
+                      <label className="spool-gramos">
+                        <span>Cuánto queda</span>
+                        <input className="input num" inputMode="decimal" placeholder="lleno" value={form.restante} onChange={(e) => setForm({ ...form, restante: e.target.value })} />
+                        <span aria-hidden="true">g</span>
+                      </label>
+                      <label className="spool-gramos">
+                        <span>Precio</span>
+                        <input className="input num" inputMode="decimal" placeholder="opcional" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
+                      </label>
+                      <Boton variante="accent" pequeno cargando={ocupado === r.ranura} onClick={() => void crear(r)}>Crear y asociar</Boton>
+                      <Boton variante="ghost" pequeno onClick={() => setCreando(null)}>Cancelar</Boton>
+                      <span className="field__hint">Se crea con la marca, el material y el color que informa la impresora. El precio va en la moneda que tenga Spoolman.</span>
+                    </span>
+                  )}
+                  {abierto && (
+                    <span className="spool-edicion">
+                      <select className="select" aria-label={`Bobina de ${r.nombre}`} value={elegida} onChange={(e) => setElegida(e.target.value)}>
+                        <Opciones bobinas={bobinas} />
+                      </select>
+                      <Boton variante="accent" pequeno disabled={!elegida} cargando={ocupado === r.ranura} onClick={() => void vincular(r, Number(elegida))}>
+                        Guardar
+                      </Boton>
+                      <Boton variante="ghost" pequeno onClick={() => { setEditando(null); setConflicto(null); }}>Cancelar</Boton>
+                    </span>
+                  )}
+                </div>
+                {!abierto && creando !== r.ranura && (
+                  <div className="spool-ranura__acciones">
+                    {v.estado === "desactualizado" && v.bobina && (
+                      <Boton variante="accent" pequeno cargando={ocupado === r.ranura} onClick={() => void vincular(r, v.bobina!.id)}>Sí, la misma</Boton>
+                    )}
+                    {(!v.bobina || v.estado === "sin_vincular") && (
+                      <Boton variante="accent" pequeno onClick={() => { setCreando(r.ranura); setForm({ peso: "1000", restante: "", precio: "" }); setConflicto(null); }}>
+                        Crear en Spoolman
+                      </Boton>
+                    )}
+                    <Boton variante="secondary" pequeno onClick={() => { setEditando(r.ranura); setElegida(v.bobina ? String(v.bobina.id) : ""); setConflicto(null); }}>
+                      {v.bobina && v.estado !== "sin_vincular" ? "Cambiar" : "Elegir existente"}
+                    </Boton>
+                    {v.bobina && v.estado !== "sin_vincular" && (
+                      <Boton variante="ghost" pequeno cargando={ocupado === r.ranura} onClick={() => void vincular(r, null)}>Quitar</Boton>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function FilaPendiente({ c, bobinas, alResolver }: { c: ConsumoFilamento; bobinas: BobinaSpoolman[]; alResolver: () => Promise<void> }) {
+  const { mostrar } = useAvisos();
+  const [spool, setSpool] = useState(c.spool_id ? String(c.spool_id) : "");
+  const [g, setG] = useState(String(c.gramos));
+  const [ocupado, setOcupado] = useState<string | null>(null);
+
+  async function decidir(accion: "asignar" | "omitir" | "reintentar" | "confirmar", texto: string) {
+    const gramos = Number(g.replace(",", "."));
+    if (accion === "asignar" && (!spool || !Number.isFinite(gramos) || gramos < 0)) {
+      mostrar("Elige la bobina e indica cuántos gramos descontar.", { tipo: "error" });
+      return;
+    }
+    setOcupado(accion);
+    try {
+      await api.spoolman.decidir(c.id, accion === "asignar" ? { accion, spool_id: Number(spool), gramos } : { accion });
+      mostrar(texto);
+      await alResolver();
+    } catch (e) {
+      mostrar(mensajeDe(e), { tipo: "error" });
+    } finally {
+      setOcupado(null);
+    }
+  }
+
+  return (
+    <li className="spool-pendiente">
+      <div className="spool-pendiente__cab">
+        <Muestra color={c.color} />
+        <div>
+          <strong>{c.trabajo ?? "Trabajo"}</strong>
+          <span className="muted num">
+            {c.fecha ? ` · ${fechaCorta(c.fecha.slice(0, 10))}` : ""} · {c.tipo ?? "Filamento"} · {gramosTexto(c.gramos_plan)} en el archivo
+          </span>
+          <span className="etiqueta etiqueta--aviso">{ETIQUETA_CONSUMO[c.estado]}</span>
+        </div>
+      </div>
+      {c.detalle && <p className="muted spool-pendiente__detalle">{c.detalle}</p>}
+      {c.estado === "revisar" ? (
+        <div className="spool-edicion">
+          <Boton variante="accent" pequeno cargando={ocupado === "confirmar"} onClick={() => void decidir("confirmar", "Marcado como descontado.")}>Ya se descontó</Boton>
+          <Boton variante="secondary" pequeno cargando={ocupado === "reintentar"} onClick={() => void decidir("reintentar", "Se descontará de nuevo en unos segundos.")}>Descontar otra vez</Boton>
+          <Boton variante="ghost" pequeno cargando={ocupado === "omitir"} onClick={() => void decidir("omitir", "Omitido.")}>Omitir</Boton>
+        </div>
+      ) : (
+        <div className="spool-edicion">
+          <select className="select" aria-label="Bobina de la que salió el filamento" value={spool} onChange={(e) => setSpool(e.target.value)}>
+            <Opciones bobinas={bobinas} />
+          </select>
+          <label className="spool-gramos">
+            <span className="visually-hidden">Gramos a descontar</span>
+            <input className="input num" inputMode="decimal" value={g} onChange={(e) => setG(e.target.value)} aria-label="Gramos a descontar" />
+            <span aria-hidden="true">g</span>
+          </label>
+          <Boton variante="accent" pequeno cargando={ocupado === "asignar"} onClick={() => void decidir("asignar", "Se descontará de Spoolman en unos segundos.")}>Descontar</Boton>
+          <Boton variante="ghost" pequeno cargando={ocupado === "omitir"} onClick={() => void decidir("omitir", "Omitido: no se descuenta.")}>Omitir</Boton>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Historial({ bobinas }: { bobinas: BobinaSpoolman[] }) {
+  const [abierto, setAbierto] = useState(false);
+  const lista = useCargar(() => (abierto ? api.spoolman.consumos(false) : Promise.resolve([] as ConsumoFilamento[])));
+  useEffect(() => {
+    if (abierto) void lista.recargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto]);
+  const nombre = (id: number | null) => (id == null ? "—" : (bobinas.find((b) => b.id === id)?.nombre ?? `n.º ${id}`));
+  return (
+    <details className="spool-historial" onToggle={(e) => setAbierto(e.currentTarget.open)}>
+      <summary>Últimos descuentos</summary>
+      {abierto && lista.cargando ? (
+        <p className="muted" role="status">Cargando…</p>
+      ) : (
+        <ul className="spool-historial__lista">
+          {(lista.datos ?? []).length === 0 && <li className="muted">Todavía no hay descuentos.</li>}
+          {(lista.datos ?? []).map((c) => (
+            <li key={c.id}>
+              <Muestra color={c.color} />
+              <span>
+                <strong>{c.trabajo}</strong>{" "}
+                <span className="muted num">
+                  {gramosTexto(c.gramos)} · {nombre(c.spool_id)} · {c.estado === "descontado" && c.descontado_en ? `descontado ${hace(c.descontado_en)}` : ETIQUETA_CONSUMO[c.estado]}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
+}
+
+/** Spoolman en Administración → Impresora: estado, bobinas por ranura y descuentos que esperan una decisión. */
+export function SpoolmanSeccion() {
+  const estado = useCargar(api.spoolman.estado);
+  const e = estado.datos;
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) void estado.recargar();
+    }, 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <section className="seccion seccion--ancha" id="spoolman" aria-labelledby="t-spoolman">
+      <h2 id="t-spoolman">Bobinas (Spoolman)</h2>
+      {estado.error && <p className="alerta" role="alert">{estado.error}</p>}
+      {estado.cargando && <p className="muted" role="status">Cargando…</p>}
+      {e && !e.configurado && <p className="muted">Spoolman no está configurado en este servidor (falta <code>SPOOLMAN_URL</code>).</p>}
+      {e?.configurado && (
+        <div className="tarjeta spool-tarjeta">
+          <div className="spool-cab">
+            <span className={`etiqueta ${e.conectado ? "etiqueta--ok" : "etiqueta--aviso"}`}>{e.conectado ? `En línea${e.version ? ` · v${e.version}` : ""}` : "Sin conexión"}</span>
+            {!e.conectado && e.detalle && <span className="muted">{e.detalle}</span>}
+            {e.url_web && (
+              <a className="btn btn--secondary btn--small" href={e.url_web} target="_blank" rel="noopener noreferrer">
+                Abrir Spoolman
+              </a>
+            )}
+          </div>
+          {e.url_web && <p className="field__hint">Spoolman solo se abre desde la red de casa (por la VPN).</p>}
+          {e.conectado && <Conectado porResolver={e.por_resolver} autoregistro={e.autoregistro} alCambiar={estado.recargar} />}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Conectado({ porResolver, autoregistro, alCambiar }: { porResolver: number; autoregistro: boolean; alCambiar: () => Promise<void> }) {
+  const bobinas = useCargar(api.spoolman.bobinas);
+  const pendientes = useCargar(() => api.spoolman.consumos(true));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) void pendientes.recargar();
+    }, 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const lista = bobinas.datos ?? [];
+  const alResolver = async () => {
+    await Promise.all([pendientes.recargar(), alCambiar()]);
+  };
+  const pend = pendientes.datos ?? [];
+  return (
+    <>
+      {bobinas.error && <p className="alerta" role="alert">{bobinas.error}</p>}
+      {!bobinas.cargando && lista.length === 0 && !bobinas.error && (
+        <p className="alerta" role="status">Spoolman aún no tiene bobinas. Usa «Crear en Spoolman» en cada ranura (o créalas en Spoolman) y vuelve aquí.</p>
+      )}
+      <Ranuras bobinas={lista} autoregistro={autoregistro} recargarBobinas={async () => { await bobinas.recargar(); }} />
+      <div className="spool-bloque">
+        <h3 className="spool-sub">
+          Descuentos por resolver {porResolver > 0 && <span className="etiqueta etiqueta--aviso">{porResolver}</span>}
+        </h3>
+        {pend.length === 0 ? (
+          <p className="muted">Nada pendiente: cada trabajo terminado descuenta su filamento solo.</p>
+        ) : (
+          <ul className="spool-pendientes">
+            {pend.map((c) => (
+              <FilaPendiente key={`${c.id}-${c.estado}`} c={c} bobinas={lista} alResolver={alResolver} />
+            ))}
+          </ul>
+        )}
+      </div>
+      <Historial bobinas={lista} />
+    </>
+  );
+}

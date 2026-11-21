@@ -83,15 +83,19 @@ async def aplicar(db: AsyncSession, tareas: list[Tarea]) -> dict[str, int]:
         if existente.nube_id is None:
             existente.nube_id, cambio = t.id, True
         if existente.gestion != "importado":
-            # Lo que da la nube completa lo que falta; no pisa lo ya leído del .3mf.
+            # La nube manda: es lo que muestra Bambu Studio/web (el .3mf leído en vivo pudo ser de
+            # otra versión del archivo). Un trabajo ya importado a producción conserva sus datos.
             # Tiempo MEDIDO = inicio→fin de la nube. El `costTime` es solo la estimación.
             if existente.minutos_medidos != t.minutos_reales:
                 existente.minutos_medidos, cambio = t.minutos_reales, True
-            if existente.minutos_estimados is None and t.minutos:
+            if t.minutos and existente.minutos_estimados != t.minutos:
                 existente.minutos_estimados, cambio = t.minutos, True
-            if existente.gramos_total is None and t.gramos:
+            if t.gramos and (
+                existente.gramos_total is None
+                or abs(float(existente.gramos_total) - float(t.gramos)) >= 0.005
+            ):
                 existente.gramos_total, cambio = t.gramos, True
-            if not existente.filamentos and t.filamentos:
+            if t.filamentos and existente.filamentos != t.filamentos:
                 existente.filamentos, cambio = t.filamentos, True
         completadas += int(cambio)
     await db.flush()

@@ -95,6 +95,10 @@ def _bandeja(t: dict[str, Any], en_uso: bool) -> dict[str, Any]:
         "marca": str(t.get("tray_sub_brands") or "").strip() or None,
         "color": _color(t.get("tray_color")) if tipo else None,
         "medido": medido,
+        # UID del chip RFID (solo bobinas Bambu con chip): con él Spoolman reconoce la bobina.
+        "tag": str(t.get("tag_uid")).strip().upper() if medido else None,
+        # Peso neto de la bobina que declara el chip (g); sin chip la impresora informa 0.
+        "peso": _entero(t.get("tray_weight")) or None,
         "restante": restante if medido and restante is not None and restante >= 0 else None,
         "en_uso": en_uso,
     }

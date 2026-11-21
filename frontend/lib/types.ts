@@ -419,7 +419,75 @@ export interface TrabajoImpresora {
   minutos_origen: "medido" | "estimado" | null;
   minutos_estimados: number | null;
   origen: "impresora" | "nube";
+  /** «web»: enviado desde Bambu Studio/Handy; «impresora»: lanzado desde su pantalla; null: aún sin saber. */
+  desde: "web" | "impresora" | null;
   gramos_total: number | null;
   filamentos: FilamentoTrabajo[];
   produccion_id: string | null;
+  /** Descuento de filamento en Spoolman, por filamento. */
+  consumos: ConsumoFilamento[];
 }
+
+// --- Spoolman (inventario de bobinas) ------------------------------------------------
+export interface EstadoSpoolman {
+  configurado: boolean;
+  conectado: boolean;
+  version: string | null;
+  ultimo_ok_en: string | null;
+  detalle: string | null;
+  /** Enlace para abrir Spoolman desde la red de casa. */
+  url_web: string | null;
+  /** Descuentos que esperan una decisión. */
+  por_resolver: number;
+  /** Las bobinas Bambu con chip se registran solas en Spoolman al verlas en el AMS. */
+  autoregistro: boolean;
+}
+
+export interface BobinaSpoolman {
+  id: number;
+  nombre: string;
+  material: string | null;
+  color: string | null;
+  restante_g: number | null;
+  inicial_g: number | null;
+  ubicacion: string | null;
+}
+
+export interface VinculoRanura {
+  /** «rfid»: el chip de la bobina Bambu está vinculado en Spoolman; «manual»: elegida a mano para la ranura. */
+  tipo: "rfid" | "manual";
+  /** «desactualizado»: la ranura cambió de tipo o color desde que se vinculó. */
+  estado: "ok" | "desactualizado" | "sin_vincular";
+  bobina: BobinaSpoolman | null;
+}
+
+export interface RanuraSpoolman {
+  ranura: string;
+  nombre: string;
+  tipo: string | null;
+  marca: string | null;
+  color: string | null;
+  en_uso: boolean;
+  vinculo: VinculoRanura;
+}
+
+export type EstadoConsumo = "sin_bobina" | "por_enviar" | "enviando" | "descontado" | "omitido" | "revisar";
+
+export interface ConsumoFilamento {
+  id: string;
+  trabajo_id: string;
+  trabajo: string | null;
+  fecha: string | null;
+  orden: number;
+  tipo: string | null;
+  color: string | null;
+  gramos_plan: number;
+  gramos: number;
+  ranura: string | null;
+  spool_id: number | null;
+  estado: EstadoConsumo;
+  detalle: string | null;
+  descontado_en: string | null;
+}
+
+export type AccionConsumo = "asignar" | "omitir" | "reintentar" | "confirmar";

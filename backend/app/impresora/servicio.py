@@ -4,8 +4,8 @@ La configuración (IP, serial, código de acceso, cuenta de Bambu Cloud) sale de
 deja Administración → Conexión: el servicio reconecta solo cuando cambia. Cada pocos segundos:
 (1) guarda el estado en `impresora_estado`, (2) detecta trabajos nuevos o
 terminados y los guarda en `trabajos_impresora` (con gramos y tiempo del .3mf), (3) envía las
-órdenes pendientes que dejó el backend. Nunca se cae por un error de la impresora o de la red:
-registra y reintenta."""
+órdenes pendientes que dejó el backend, (4) descuenta de Spoolman el filamento de cada trabajo.
+Nunca se cae por un error de la impresora o de la red: registra y reintenta."""
 
 import asyncio
 import contextlib
@@ -17,10 +17,19 @@ from pathlib import Path
 from sqlalchemy import select, update
 
 from app.config import settings
-from app.core import secretos
+from app.core import auditoria, secretos
 from app.db import SessionLocal, engine
 from app.impresora import ajustes, bambu, lector3mf, maquina, nube, sincronizacion
-from app.models import ComandoImpresora, EstadoImpresora, TrabajoImpresora
+from app.models import (
+    ChipBobina,
+    ComandoImpresora,
+    EstadoImpresora,
+    RanuraBobina,
+    TrabajoImpresora,
+)
+from app.spoolman import cliente as spoolman
+from app.spoolman import consumo as spoolman_consumo
+from app.spoolman import registro as spoolman_registro
 
 log = logging.getLogger("impresora")
 
@@ -33,6 +42,11 @@ REINTENTO_ARCHIVO_S = 60
 INTENTOS_ARCHIVO = 6
 NUBE_CADA_S = 600  # el historial de la nube cambia poco: cada 10 minutos basta
 NUBE_REINTENTO_S = 120  # tras un fallo, se reintenta antes
+SPOOLMAN_CADA_S = 5  # lo asignado en el panel se descuenta en unos segundos
+AUTOREGISTRO_ESPERA_S = 15  # un chip debe verse estable este tiempo antes de registrar la bobina
+AUTOREGISTRO_REINTENTO_S = 60
+AUTOREGISTRO_DUDA_S = 3600  # una duda (varias bobinas que podrían ser) se vuelve a avisar cada hora
+UBICACIONES_CADA_S = 30  # con qué frecuencia se pone al día la ubicación de las bobinas
 
 
 def _progreso(snap: maquina.Instantanea) -> int:
@@ -47,7 +61,7 @@ def _ahora() -> datetime:
 
 
 class Servicio:
-    def __init__(self, cliente=None, nube_cliente=None) -> None:
+    def __init__(self, cliente=None, nube_cliente=None, spoolman_cliente=None) -> None:
         # `cliente` se inyecta en las pruebas y entonces no se reconecta con la configuración;
         # en producción es la conexión MQTT real, creada con lo guardado en la base.
         self.cliente = cliente
@@ -68,6 +82,15 @@ class Servicio:
         self._memoria = nube.AlmacenMemoria()
         self._nube = nube_cliente or nube.ClienteNube(settings.bambu_nube_url, self._memoria)
         self._nube_proxima = datetime.min.replace(tzinfo=UTC)
+        # Spoolman (opcional: solo si hay SPOOLMAN_URL). Se inyecta en las pruebas.
+        self._spoolman = spoolman_cliente
+        self._spoolman_proximo = datetime.min.replace(tzinfo=UTC)
+        self._spoolman_url_mala = False
+        self._tags_vistos: dict[str, datetime] = {}
+        self._tags_reintento: dict[str, datetime] = {}
+        self._chips_avisados: set[str] = set()
+        self._ubicaciones_proximo = datetime.min.replace(tzinfo=UTC)
+        self._ubicaciones_vistas: dict[int, str] | None = None
 
     # ------------------------------------------------------------- configuración
     async def _importar_heredado(self, db, fila):
@@ -228,6 +251,7 @@ class Servicio:
                         await self._leer_archivo(abierto, crudo, forzar=True)
                     abierto.estado = accion.cerrar
                     abierto.fin_en = ahora
+                    self._avisar_si_no_cuadra(abierto)
                     abierto.progreso = 100 if accion.cerrar == "terminado" else abierto.progreso
                     self._intentos.pop(str(abierto.id), None)
                     log.info("Trabajo «%s»: %s", abierto.nombre, accion.cerrar)
@@ -250,7 +274,226 @@ class Servicio:
                 and abierto.estado == "en_curso"
             ):
                 await self._leer_archivo(abierto, crudo)
+            if abierto is not None and abierto.estado == "en_curso":
+                self._anotar_bandeja(abierto, crudo)
             await db.commit()
+
+    @staticmethod
+    def _avisar_si_no_cuadra(t: TrabajoImpresora) -> None:
+        """Un trabajo terminado que duró muy distinto de lo estimado suele ser señal de que el .3mf
+        leído no es el que se imprimió (o de una pausa larga): se deja constancia en el registro."""
+        if t.estado != "en_curso" and t.inicio_observado and t.minutos_estimados and t.fin_en:
+            real = (t.fin_en - t.inicio_en).total_seconds() / 60
+            if t.progreso >= 100 and not 0.4 <= real / t.minutos_estimados <= 2.5:
+                log.warning(
+                    "«%s»: duró %d min y el .3mf decía %d: revisa que los gramos sean los de este "
+                    "trabajo.", t.nombre, real, t.minutos_estimados,
+                )  # fmt: skip
+
+    @staticmethod
+    def _anotar_bandeja(trabajo: TrabajoImpresora, crudo: dict) -> None:
+        """Guarda la bandeja del AMS en la que está la impresora (si es nueva para este trabajo):
+        el .3mf no dice en qué bandeja iba cada filamento; con esto se sabe de qué bobina sale."""
+        datos = bambu.normalizar(crudo)
+        usadas = [
+            b for b in [*datos["ams"], datos["externa"]] if b and b["en_uso"] and not b["vacia"]
+        ]
+        vistas = list(trabajo.bandejas or [])
+        for b in usadas:
+            if any(v.get("ranura") == b["id"] for v in vistas):
+                continue
+            vistas.append(
+                {"ranura": b["id"], "tipo": b["tipo"], "color": b["color"], "tag": b["tag"]}
+            )
+        if len(vistas) != len(trabajo.bandejas or []):
+            trabajo.bandejas = vistas  # asignación nueva: SQLAlchemy no detecta cambios en sitio
+
+    # ------------------------------------------------------------------ Spoolman
+    async def _autoregistrar_bobinas(self, db) -> None:
+        """Para cada chip Bambu visto de forma estable en el AMS (no a media lectura):
+        · ya vinculado a una bobina de Spoolman (incluso archivada): no se hace nada;
+        · ya leído antes pero su bobina ya no está (se borró): NO se vuelve a crear, para que quitar
+          y poner el rollo no duplique (se avisa; se recrea a mano desde el panel);
+        · nuevo y hay UNA bobina de Bambu Lab sin chip del mismo material y color: se le vincula;
+        · nuevo y hay varias candidatas: no se adivina (se avisa);
+        · nuevo y no hay candidata: se crea la bobina y se vincula el chip.
+        Todo chip que se resuelve queda en `chips_bobina` (la memoria del servicio)."""
+        if not settings.spoolman_autocrear or self.cliente is None:
+            return
+        crudo = self.cliente.crudo()
+        if not crudo:
+            return
+        datos = bambu.normalizar(crudo)
+        con_chip = [
+            b for b in [*datos["ams"], datos["externa"]] if b and not b["vacia"] and b["tag"]
+        ]
+        ahora = _ahora()
+        self._tags_vistos = {
+            t: v for t, v in self._tags_vistos.items() if t in {b["tag"] for b in con_chip}
+        }
+        for b in con_chip:
+            self._tags_vistos.setdefault(b["tag"], ahora)
+        listas = [
+            b for b in con_chip
+            if (ahora - self._tags_vistos[b["tag"]]).total_seconds() >= AUTOREGISTRO_ESPERA_S
+            and ahora >= self._tags_reintento.get(b["tag"], datetime.min.replace(tzinfo=UTC))
+        ]  # fmt: skip
+        if not listas:
+            return
+        bobinas = await self._spoolman.bobinas(archivadas=True)
+        en_spoolman = {t: s for s in bobinas for t in s.tags}  # incluye las archivadas
+        memoria = set((await db.execute(select(ChipBobina.uid))).scalars())
+        for b in listas:
+            tag = b["tag"]
+            ubicacion = (
+                f"{spoolman_registro.PREFIJO_UBICACION}{spoolman_consumo.titulo_ranura(b['id'])}"
+            )
+            if tag in en_spoolman:
+                if (
+                    tag not in memoria
+                ):  # un chip ya vinculado: que se recuerde aunque la bobina se borre
+                    db.add(ChipBobina(uid=tag, spool_id=en_spoolman[tag].id))
+                    await db.commit()
+                continue
+            if tag in memoria:
+                # Este chip ya se leyó antes y su bobina ya no está en Spoolman (se borró): NO se
+                # vuelve a crear sola, así quitar y poner el rollo (o borrar la bobina) no duplica.
+                if tag not in self._chips_avisados:
+                    self._chips_avisados.add(tag)
+                    log.warning(
+                        "El chip de la ranura %s ya se había registrado y su bobina no está en "
+                        "Spoolman. No se crea otra sola: créala o vincúlala en el panel.", b["id"]
+                    )  # fmt: skip
+                continue
+            candidatas = spoolman_registro.candidatas_a_adoptar(bobinas, b, ubicacion)
+            if len(candidatas) > 1:
+                log.warning(
+                    "El chip de la ranura %s podría ser cualquiera de las bobinas %s (mismo "
+                    "material y color, sin chip). No adivino: elige cuál en el panel.",
+                    b["id"], ", ".join(f"n.º {c.id}" for c in candidatas),
+                )  # fmt: skip
+                self._tags_reintento[tag] = ahora + timedelta(seconds=AUTOREGISTRO_DUDA_S)
+                continue
+            try:
+                if candidatas:  # ya existe esa bobina, solo le faltaba el chip: se le vincula
+                    nueva = candidatas[0]
+                    await self._spoolman.vincular_tag(nueva.id, tag)
+                    bobinas = [c for c in bobinas if c.id != nueva.id]
+                    accion, texto = "spoolman_bobina_adoptada", "adoptó el chip"
+                else:
+                    nueva = await spoolman_registro.crear_desde_bandeja(
+                        self._spoolman, b, ubicacion=ubicacion
+                    )
+                    accion, texto = "spoolman_bobina_autoregistrada", "registrada"
+            except spoolman.TagEnUso:
+                continue  # otro proceso la registró justo ahora
+            except spoolman.ErrorSpoolman as e:
+                log.warning("No se pudo registrar la bobina de la ranura %s: %s", b["id"], e)
+                self._tags_reintento[tag] = ahora + timedelta(seconds=AUTOREGISTRO_REINTENTO_S)
+                continue
+            db.add(ChipBobina(uid=tag, spool_id=nueva.id))
+            auditoria.registrar(
+                db, accion,
+                detalle={"ranura": b["id"], "spool_id": nueva.id, "bobina": nueva.nombre},
+            )  # fmt: skip
+            await db.commit()
+            log.info("Bobina n.º %s (%s) %s en Spoolman", nueva.id, nueva.nombre, texto)
+
+    async def _mantener_bobinas(self, db) -> None:
+        """Cada cierto tiempo: (1) recuerda todos los chips que ya tiene Spoolman, y (2) pone la
+        ubicación de cada bobina según lo que hay HOY en el AMS (la ranura para la que está puesta,
+        ninguna para la que salió). Solo toca ubicaciones vacías o «AMS · …»: las que escribió una
+        persona se respetan. Exige ver lo mismo dos revisiones seguidas (no reacciona a una lectura
+        a medias) y no hace nada si la impresora no informa el AMS."""
+        if self.cliente is None or self._spoolman is None or _ahora() < self._ubicaciones_proximo:
+            return
+        self._ubicaciones_proximo = _ahora() + timedelta(seconds=UBICACIONES_CADA_S)
+        bobinas = await self._spoolman.bobinas(archivadas=True)
+        recordados = set((await db.execute(select(ChipBobina.uid))).scalars())
+        for s in bobinas:
+            for t in s.tags:
+                if t not in recordados:
+                    db.add(ChipBobina(uid=t, spool_id=s.id))
+                    recordados.add(t)
+        await db.commit()
+        crudo = self.cliente.crudo()
+        datos = bambu.normalizar(crudo) if crudo else None
+        if not datos or not datos["ams"]:
+            self._ubicaciones_vistas = None
+            return
+        activas = [s for s in bobinas if not s.archivada]
+        ranuras = {r.ranura: r for r in (await db.execute(select(RanuraBobina))).scalars()}
+        por_tag = {t: s for s in activas for t in s.tags}
+        deseado: dict[int, str] = {}
+        for b in [*datos["ams"], datos["externa"]]:
+            if not b or b["vacia"]:
+                continue
+            sid = await spoolman_consumo._bobina_de_bandeja(
+                self._spoolman, ranuras, por_tag, {**b, "ranura": b["id"]}
+            )  # fmt: skip
+            if sid is not None:
+                deseado[sid] = (
+                    f"{spoolman_registro.PREFIJO_UBICACION}{spoolman_consumo.titulo_ranura(b['id'])}"
+                )
+        if deseado != self._ubicaciones_vistas:
+            self._ubicaciones_vistas = deseado  # primera vez que se ve así: se confirma la próxima
+            return
+        prefijo = spoolman_registro.PREFIJO_UBICACION
+        for s in activas:
+            actual = s.ubicacion or ""
+            meta = deseado.get(s.id, "")
+            if actual == meta or not (actual == "" or actual.startswith(prefijo)):
+                continue
+            try:
+                await self._spoolman.ubicar(s.id, meta or None)
+            except spoolman.ErrorSpoolman as e:
+                log.warning("No se pudo actualizar la ubicación de la bobina %s: %s", s.id, e)
+                continue
+            log.info("Bobina n.º %s: ubicación «%s» → «%s»", s.id, actual, meta or "(ninguna)")
+
+    async def _sincronizar_spoolman(self) -> None:
+        """Descuenta de Spoolman el filamento de los trabajos terminados (si hay SPOOLMAN_URL)."""
+        if not settings.spoolman_url and self._spoolman is None:
+            return
+        if _ahora() < self._spoolman_proximo:
+            return
+        self._spoolman_proximo = _ahora() + timedelta(seconds=SPOOLMAN_CADA_S)
+        if self._spoolman is None:
+            try:
+                self._spoolman = spoolman.ClienteSpoolman(settings.spoolman_url)
+            except ValueError as e:
+                if not self._spoolman_url_mala:
+                    log.error("%s Spoolman queda apagado.", e)
+                    self._spoolman_url_mala = True
+                return
+        try:
+            info = await self._spoolman.info()
+        except spoolman.ErrorSpoolman as e:
+            async with SessionLocal() as db:
+                await spoolman_consumo.guardar_estado(
+                    db, conectado=False, version=None, detalle=str(e)[:200]
+                )
+                await db.commit()
+            return
+        async with SessionLocal() as db:
+            fila = await spoolman_consumo.guardar_estado(
+                db, conectado=True, version=str(info.get("version", ""))[:20] or None, detalle=None
+            )
+            await db.commit()
+            try:
+                await self._autoregistrar_bobinas(db)
+                await self._mantener_bobinas(db)
+                creadas = await spoolman_consumo.crear_lineas(db, fila.desde)
+                await db.commit()
+                resueltas = await spoolman_consumo.resolver(db, self._spoolman)
+                await db.commit()
+                r = await spoolman_consumo.enviar(db, self._spoolman)
+            except spoolman.ErrorSpoolman as e:
+                await db.rollback()
+                log.warning("Spoolman: %s", e)
+                return
+            if creadas or resueltas or r["descontadas"] or r["falladas"]:
+                log.info("Spoolman: %d líneas nuevas, %d con bobina, %s", creadas, resueltas, r)
 
     # ------------------------------------------------------------- historial (nube)
     async def _guardar_nube(self, estado: str, detalle: str | None, ok: bool = False) -> None:
@@ -357,6 +600,7 @@ class Servicio:
                 self._cargar_config,
                 self._escribir_estado,
                 self._seguir_trabajos,
+                self._sincronizar_spoolman,
                 self._sincronizar_nube,
                 self._atender_ordenes,
             ):
@@ -375,6 +619,8 @@ class Servicio:
                 await asyncio.wait_for(self._parar.wait(), CICLO_S)
         if self.cliente is not None:
             await asyncio.to_thread(self.cliente.detener)
+        if self._spoolman is not None:
+            await self._spoolman.cerrar()
         await engine.dispose()
 
     def parar(self) -> None:
@@ -385,6 +631,8 @@ async def principal() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+    # httpx registra cada petición en INFO: con la consulta a Spoolman cada pocos segundos, ruido.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     servicio = Servicio()
     bucle = asyncio.get_running_loop()
     for senal in (signal.SIGINT, signal.SIGTERM):

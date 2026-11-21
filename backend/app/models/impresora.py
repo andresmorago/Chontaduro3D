@@ -75,6 +75,10 @@ class TrabajoImpresora(MarcaDeTiempo, Base):
     gramos_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     # [{"tipo": "PLA", "color": "#ffb673", "gramos": 0.88}, …]
     filamentos: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # Bandejas del AMS en las que estuvo la impresora durante el trabajo, en orden:
+    # [{"ranura": "2", "tipo": "PLA", "color": "#f7e6de", "tag": "0E45…" | null}, …]. Con esto (y
+    # los filamentos del .3mf) se sabe de qué bobina descontar; el .3mf no dice en qué bandeja iba.
+    bandejas: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     produccion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("producciones.id", ondelete="SET NULL"), unique=True
     )

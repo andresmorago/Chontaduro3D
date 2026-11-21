@@ -18,6 +18,7 @@ from app.api import (
     pedidos,
     produccion,
     publico,
+    spoolman,
     usuarios,
     ventas,
 )
@@ -75,6 +76,7 @@ for r in (
     panel,
     impresora,
     impresora_conexion,
+    spoolman,
     publico,
     media,
 ):

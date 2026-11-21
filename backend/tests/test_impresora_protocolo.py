@@ -39,11 +39,13 @@ def test_normalizar_estado():
     assert (n["boquilla"], n["cama"], n["velocidad"], n["luz"]) == (230.1, 64.9, 2, "on")
     assert n["ams"][0] == {
         "id": "0", "vacia": False, "tipo": "PLA", "marca": "PLA Basic", "color": "#000000",
-        "medido": True, "restante": 100, "en_uso": False,
+        "medido": True, "tag": "B9656CFE00000100", "peso": None, "restante": 100, "en_uso": False,
     }  # fmt: skip
     # Sin chip RFID la impresora no mide: el 100 de una ranura y el 0 de la externa no son datos.
     assert n["ams"][1]["medido"] is False and n["ams"][1]["restante"] is None
     assert n["externa"]["medido"] is False and n["externa"]["restante"] is None
+    # Y sin chip no hay UID que identifique la bobina (el 0000… no es un identificador).
+    assert n["ams"][1]["tag"] is None and n["externa"]["tag"] is None
     assert n["ams"][1]["en_uso"] is True and n["ams"][1]["color"] == "#ffffff"
     assert n["ams"][2]["vacia"] is True and n["ams"][2]["color"] is None
     assert n["ams"][2]["restante"] is None  # -1 = desconocido
@@ -213,3 +215,24 @@ def test_plate_y_eleccion_de_archivo():
         == "Snowman_Trees_plate_2.3mf"
     )
     assert lector3mf.elegir_archivo(nombres, "nada.3mf", "nada") is None
+
+
+def test_un_nombre_exacto_en_cache_gana_a_uno_parecido_en_la_raiz():
+    # Caso real: `/` tenía un DestapaLatas_plate_2.gcode.3mf nuevo (38 g) y `/cache` el
+    # DestapaLatas_plate_2.3mf que de verdad se imprimió (173 g).
+    listados = {
+        "/": {"DestapaLatas_plate_2.gcode.3mf": 1000},
+        "/cache": {"DestapaLatas_plate_2.3mf": 3767, "otro.3mf": 1},
+    }
+    elegir = lector3mf.elegir_en_carpetas
+    assert elegir(listados, "DestapaLatas_plate_2.3mf", "DestapaLatas_plate_2") == (
+        "/cache", "DestapaLatas_plate_2.3mf",
+    )  # fmt: skip
+    assert elegir(listados, "DestapaLatas_plate_2.gcode.3mf", "DestapaLatas_plate_2") == (
+        "/", "DestapaLatas_plate_2.gcode.3mf",
+    )  # fmt: skip
+    # Sin exacto en ninguna carpeta, sirve el parecido (como antes).
+    assert elegir({"/": {"X_plate_1.gcode.3mf": 1}}, "X_plate_1.3mf", "X") == (
+        "/", "X_plate_1.gcode.3mf",
+    )  # fmt: skip
+    assert elegir(listados, "nada.3mf", "nada") is None

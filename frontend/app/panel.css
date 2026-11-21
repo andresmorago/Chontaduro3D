@@ -431,3 +431,32 @@ button.fila:hover { background: var(--color-paper-2); }
 .tabla-datos .t-importe { white-space: nowrap; }
 .tabla-datos tr.t-anulada { color: var(--color-card-muted); }
 .tabla-datos tr.t-anulada.t-sub .t-nombre, .tabla-datos tr.t-anulada .t-importe { text-decoration: line-through; }
+
+/* --- Spoolman (Administración → Impresora) ----------------------------------------------------- */
+.seccion--ancha { grid-column: 1 / -1; }
+.spool-tarjeta { display: grid; gap: var(--space-md); padding: var(--space-lg); }
+.spool-cab { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.spool-bloque { display: grid; gap: var(--space-sm); }
+.spool-sub { margin: 0; font-size: var(--text-md); display: flex; align-items: center; gap: var(--space-xs); }
+.spool-ranuras, .spool-pendientes, .spool-historial__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-sm); }
+.spool-ranura, .spool-pendiente { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm) var(--space-md); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); background: var(--color-paper-3); }
+.spool-ranura--uso { box-shadow: 0 0 0 3px var(--color-focus); }
+.spool-ranura__texto { display: grid; gap: var(--space-2xs); min-width: 0; flex: 1 1 260px; }
+.spool-ranura__bobina { overflow-wrap: anywhere; }
+.spool-ranura__acciones, .spool-edicion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.spool-edicion .select { flex: 1 1 240px; min-width: 0; }
+.spool-pendiente { display: grid; }
+.spool-pendiente__cab { display: flex; align-items: center; gap: var(--space-sm); }
+.spool-pendiente__cab > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); min-width: 0; }
+.spool-pendiente__detalle { margin: 0; }
+.spool-gramos { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.spool-gramos .input { width: 6.5rem; }
+.spool-historial summary { cursor: pointer; font-weight: 700; }
+.spool-historial__lista { margin-top: var(--space-sm); }
+.spool-historial__lista li { display: flex; align-items: center; gap: var(--space-sm); }
+.spool-historial .bandeja__color, .spool-ranura .bandeja__color, .spool-pendiente .bandeja__color { width: 28px; height: 28px; }
+.aviso-linea { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); color: var(--color-accent); font-weight: 700; }
+.spool-crear { align-items: end; }
+.spool-crear .spool-gramos { flex-direction: column; align-items: flex-start; gap: var(--space-2xs); font-size: var(--text-sm); }
+.spool-crear .spool-gramos .input { width: 8rem; }
+.spool-crear .field__hint { flex-basis: 100%; }

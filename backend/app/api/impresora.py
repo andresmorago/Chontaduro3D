@@ -16,7 +16,7 @@ from app.core import auditoria
 from app.core.deps import DB, PROTEGIDO, Admin
 from app.core.tokens import ahora
 from app.impresora.bambu import LIMITES, VELOCIDADES, validar_numero
-from app.models import ComandoImpresora, EstadoImpresora, TrabajoImpresora
+from app.models import ComandoImpresora, ConsumoFilamento, EstadoImpresora, TrabajoImpresora
 from app.schemas.impresora import (
     ComandoIn,
     ComandoOut,
@@ -26,6 +26,7 @@ from app.schemas.impresora import (
     NubeOut,
     TrabajoOut,
 )
+from app.spoolman.salida import consumo_out
 
 router = APIRouter(prefix="/impresora", tags=["impresora"], dependencies=PROTEGIDO)
 
@@ -158,6 +159,17 @@ async def ver_orden(orden_id: int, db: DB) -> ComandoOut:
 
 
 # -------------------------------------------------------------------------- trabajos
+DESDE_NUBE_ESPERA = timedelta(minutes=25)  # el historial de la nube se consulta cada 10 min
+
+
+def _desde(t: TrabajoImpresora) -> Literal["web", "impresora"] | None:
+    if t.nube_id:
+        return "web"
+    if t.estado == "en_curso" or t.fin_en is None or ahora() - t.fin_en < DESDE_NUBE_ESPERA:
+        return None
+    return "impresora"
+
+
 def _salida(t: TrabajoImpresora) -> TrabajoOut:
     zona = ZoneInfo(settings.app_timezone)
     # Tiempo MEDIDO: el que informa Bambu Cloud; si no, el visto en vivo (si se vio el inicio).
@@ -170,7 +182,7 @@ def _salida(t: TrabajoImpresora) -> TrabajoOut:
         inicio_en=t.inicio_en, fin_en=t.fin_en,
         fecha=(t.fin_en or t.inicio_en).astimezone(zona).date(),
         progreso=t.progreso, minutos=minutos,
-        origen=t.origen,
+        origen=t.origen, desde=_desde(t),
         minutos_origen="medido" if medido is not None else ("estimado" if minutos else None),
         minutos_estimados=t.minutos_estimados, gramos_total=t.gramos_total,
         filamentos=[FilamentoTrabajoOut(**f) for f in (t.filamentos or [])],
@@ -181,17 +193,38 @@ def _salida(t: TrabajoImpresora) -> TrabajoOut:
 @router.get("/trabajos", response_model=list[TrabajoOut])
 async def trabajos(
     db: DB,
-    gestion: Literal["pendiente", "importado", "ignorado"] = "pendiente",
+    gestion: Literal["pendiente", "importado", "ignorado", "todos"] = "pendiente",
     limite: int = 50,
 ) -> list[TrabajoOut]:
+    """`todos`: el historial completo de la impresora, sin importar si se importó o se ignoró."""
     limite = max(1, min(limite, 200))
+    consulta = select(TrabajoImpresora)
+    if gestion != "todos":
+        consulta = consulta.where(TrabajoImpresora.gestion == gestion)
     filas = await db.execute(
-        select(TrabajoImpresora)
-        .where(TrabajoImpresora.gestion == gestion)
-        .order_by(func.coalesce(TrabajoImpresora.fin_en, TrabajoImpresora.inicio_en).desc())
-        .limit(limite)
+        consulta.order_by(
+            func.coalesce(TrabajoImpresora.fin_en, TrabajoImpresora.inicio_en).desc()
+        ).limit(limite)
     )
-    return [_salida(t) for t in filas.scalars()]
+    lista = [_salida(t) for t in filas.scalars()]
+    await _con_consumos(db, lista)
+    return lista
+
+
+async def _con_consumos(db, trabajos_out: list[TrabajoOut]) -> None:
+    """Completa cada trabajo con sus descuentos de Spoolman (una sola consulta)."""
+    if not trabajos_out:
+        return
+    filas = await db.execute(
+        select(ConsumoFilamento)
+        .where(ConsumoFilamento.trabajo_id.in_([t.id for t in trabajos_out]))
+        .order_by(ConsumoFilamento.orden)
+    )
+    por_trabajo: dict[UUID, list] = {}
+    for c in filas.scalars():
+        por_trabajo.setdefault(c.trabajo_id, []).append(consumo_out(c))
+    for t in trabajos_out:
+        t.consumos = por_trabajo.get(t.id, [])
 
 
 async def _cambiar_gestion(
@@ -214,7 +247,9 @@ async def _cambiar_gestion(
     t.gestion = hasta
     auditoria.registrar(db, accion, usuario_id=usuario.id, detalle={"trabajo": t.nombre})
     await db.commit()
-    return _salida(t)
+    salida = _salida(t)
+    await _con_consumos(db, [salida])
+    return salida
 
 
 @router.post("/trabajos/{trabajo_id}/ignorar", response_model=TrabajoOut)

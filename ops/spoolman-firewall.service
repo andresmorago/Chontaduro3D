@@ -1,0 +1,14 @@
+[Unit]
+Description=Cortafuegos de Spoolman (solo la LAN de casa por WireGuard)
+After=docker.service network-online.target
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Copia propiedad de root (instalada por `make spoolman-firewall`), no el archivo del repositorio.
+ExecStart=/usr/local/sbin/spoolman-firewall.sh
+
+[Install]
+WantedBy=multi-user.target

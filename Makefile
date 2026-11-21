@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help up up-tunnel down logs ps build restart shell db-shell migrate makemigration downgrade seed admin demo bootstrap test lint typecheck nuke \
-	prod-build prod-up prod-up-tunnel prod-down prod-logs prod-ps prod-restart prod-shell prod-db-shell prod-admin worker-publicar e2e iphone desbordes impresora-up impresora-logs prod-impresora-logs bambu-nube-prueba
+	prod-build prod-up prod-up-tunnel prod-down prod-logs prod-ps prod-restart prod-shell prod-db-shell prod-admin worker-publicar e2e iphone desbordes impresora-up impresora-logs prod-impresora-logs bambu-nube-prueba prod-spoolman-logs spoolman-firewall spoolman-firewall-estado
 
 PROD := docker compose -p misimpresiones-prod -f docker-compose.prod.yml
 # Las pruebas llevan su propio proyecto: nunca tocan la base de desarrollo ni la de producción.
@@ -131,3 +131,16 @@ desbordes: ## Detecta texto que se sale de su caja (sitio público y panel, 9 an
 
 iphone: ## Prueba en WebKit (motor de Safari) con perfiles de iPhone SE, 13 y 15 Pro Max
 	@set -a && . ./.env && set +a && docker run --rm --network misimpresiones_default -v "$$PWD/e2e:/work" -w /work -e ADMIN_EMAIL -e ADMIN_PASSWORD mcr.microsoft.com/playwright:v1.56.1-noble bash -c "npm i --no-audit --no-fund playwright@1.56.1 >/dev/null 2>&1 && node iphone.mjs"
+
+# --- Spoolman -----------------------------------------------------------------
+prod-spoolman-logs: ## Producción: logs de Spoolman
+	$(PROD) logs -f spoolman
+
+spoolman-firewall: ## Instala (con sudo) el cortafuegos de Spoolman: solo la LAN de casa por wg0
+	sudo install -o root -g root -m 755 ops/spoolman-firewall.sh /usr/local/sbin/spoolman-firewall.sh
+	sudo install -o root -g root -m 644 ops/spoolman-firewall.service /etc/systemd/system/spoolman-firewall.service
+	sudo systemctl daemon-reload && sudo systemctl enable --now spoolman-firewall.service
+	sudo systemctl restart spoolman-firewall.service
+
+spoolman-firewall-estado: ## Muestra las reglas de Spoolman y cuántos paquetes aceptó/descartó
+	@sudo iptables -L DOCKER-USER -n -v --line-numbers | grep -E "spoolman-wg|Chain" || echo "Sin reglas: corre make spoolman-firewall"

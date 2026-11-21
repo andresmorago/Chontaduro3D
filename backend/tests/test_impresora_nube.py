@@ -225,9 +225,8 @@ async def test_une_con_el_trabajo_detectado_en_vivo_por_task_id(db):
     assert r == {"creadas": 0, "completadas": 1}
     await db.refresh(en_vivo)
     assert en_vivo.nube_id == "1440858776" and en_vivo.minutos_medidos == 66
-    assert (
-        float(en_vivo.gramos_total) == 22.6 and en_vivo.origen == "impresora"
-    )  # no pisa lo ya leído
+    # Los gramos de la nube (los que muestra Bambu web) corrigen lo leído en vivo del .3mf.
+    assert float(en_vivo.gramos_total) == 22.57 and en_vivo.origen == "impresora"
     assert len((await db.execute(select(TrabajoImpresora))).scalars().all()) == 1
 
 
@@ -387,3 +386,26 @@ async def test_servicio_informa_login_vencido_y_errores_sin_caerse(db):
     await s._sincronizar_nube()
     assert (await estado_nube(db))[:2] == ("error", "Bambu Cloud bloqueó (403)")
     assert s._nube_proxima < ahora() + timedelta(seconds=300)  # tras un fallo reintenta pronto
+
+
+async def test_la_nube_corrige_gramos_de_un_3mf_equivocado_pero_no_toca_lo_importado(db):
+    t = tarea_de(tarea_cruda())  # la nube dice 22,57 g (lo que ve la persona en Bambu web)
+    mal = TrabajoImpresora(nombre="tfic-angled", tarea_id="1440858776", estado="terminado",
+                           inicio_en=t.inicio, fin_en=t.fin, inicio_observado=True,
+                           gramos_total=4.91, minutos_estimados=20,
+                           filamentos=[{"tipo": "PLA", "color": "#0", "gramos": 4.91}])  # fmt: skip
+    db.add(mal)
+    await db.commit()
+    await sincronizacion.aplicar(db, [t])
+    await db.commit()
+    await db.refresh(mal)
+    assert float(mal.gramos_total) == 22.57 and mal.minutos_estimados == 65
+    assert mal.filamentos == [{"tipo": "PLA", "color": "#443089", "gramos": 22.57}]
+
+    # Ya importado como producción: queda como está (el lote tiene sus propios datos).
+    mal.gestion, mal.gramos_total = "importado", 5
+    await db.commit()
+    await sincronizacion.aplicar(db, [t])
+    await db.commit()
+    await db.refresh(mal)
+    assert float(mal.gramos_total) == 5

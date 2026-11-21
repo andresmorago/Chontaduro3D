@@ -12,6 +12,7 @@ from app.models.inventario import MovimientoInventario
 from app.models.parametros import Parametros
 from app.models.pedido import Pedido, PedidoItem
 from app.models.produccion import Produccion, ProduccionFilamento, ProduccionItem
+from app.models.spoolman import ChipBobina, ConsumoFilamento, EstadoSpoolman, RanuraBobina
 from app.models.usuario import SesionRefresh, Usuario
 from app.models.venta import Venta, VentaItem
 
@@ -19,8 +20,10 @@ __all__ = [
     "Articulo",
     "ArticuloColor",
     "ComandoImpresora",
+    "ConsumoFilamento",
     "ConfigImpresora",
     "EstadoImpresora",
+    "EstadoSpoolman",
     "MovimientoInventario",
     "Parametros",
     "Pedido",
@@ -29,6 +32,8 @@ __all__ = [
     "Produccion",
     "ProduccionFilamento",
     "ProduccionItem",
+    "ChipBobina",
+    "RanuraBobina",
     "RegistroAuditoria",
     "SesionRefresh",
     "TrabajoImpresora",

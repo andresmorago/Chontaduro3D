@@ -8,6 +8,7 @@ y dejan un **pedido** (que no toca el inventario).
 - Frontend: TypeScript · Next.js 15 (App Router) · diseño Hallmark, tema Squeeze (ver [design.md](design.md))
 - Estructura de despliegue replicada de `misturnos` (Docker Compose, migraciones al arrancar con respaldo previo, túnel de Cloudflare)
 - Impresora Bambu Lab A1 integrada (estado, trabajos y controles), configurada desde el propio panel: sin `.env` ni scripts
+- Inventario de filamento con [Spoolman](docs/spoolman.md): cada trabajo de la impresora descuenta de su bobina; Spoolman solo se abre desde la red de casa (WireGuard)
 
 ## Arrancar en desarrollo
 
@@ -35,6 +36,8 @@ make demo                   # (opcional) 3 artículos de EJEMPLO para probar
 | Dar acceso a otra persona o cambiar contraseñas | **Administración → Cuenta y usuarios**: crear usuarios, restablecer la contraseña de otro (cierra sus sesiones), desactivar/activar, y *Mi cuenta* para cambiar la tuya. Sin roles por ahora. |
 | Conectar la impresora y mi cuenta de Bambu Lab | **Administración → Conexión**: IP, número de serie y código de acceso de la impresora, y vincular la cuenta de Bambu (correo, contraseña y código de verificación). Ver [Impresora 3D](#impresora-3d-bambu-lab-a1). |
 | Ver o controlar la impresora | **Administración → Impresora**: estado, temperaturas, filamento (AMS), pausar/reanudar/cancelar, luz, velocidad y ventiladores. |
+| Ver TODO lo que imprimió la impresora (desde Bambu Studio/web o desde su pantalla) | **Producción → Trabajos de la impresora → Todos** (también *Por revisar*, *Importados*, *Ignorados*). Cada trabajo muestra inicio y fin (hora de Bogotá), quién lo envió y su estado en Spoolman. Los lanzados desde la pantalla no aparecen en Bambu Studio/web: solo los ve este servicio. Los gramos coinciden con Bambu web (la nube corrige lo leído del `.3mf`). |
+| Saber cuánto filamento queda y de qué bobina salió | **Administración → Impresora → Bobinas (Spoolman)**: asocia la bobina de cada ranura del AMS; cada trabajo terminado descuenta solo y lo dudoso se resuelve ahí. Spoolman se abre desde casa en `http://10.6.0.6:7912`. Ver [docs/spoolman.md](docs/spoolman.md). |
 | Ver lo que pidieron los clientes | **Pedidos**: un pedido puede traer **varios artículos y colores** (el cliente usa el mini carrito del catálogo); se ven todos los renglones, las piezas y un total estimado a precios de hoy. Botón directo a WhatsApp, estados y **Atender con una venta**. No descuenta inventario por sí solo. Ver [docs/carrito-de-pedidos.md](docs/carrito-de-pedidos.md). |
 
 ## Modelo en una línea

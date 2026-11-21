@@ -6,6 +6,7 @@ from pydantic import ConfigDict, Field, field_validator
 
 from app.impresora.ajustes import validar_codigo, validar_ip, validar_serial
 from app.schemas.comunes import Entrada, Numero, Salida
+from app.schemas.spoolman import ConsumoOut
 
 EstadoTrabajo = Literal["en_curso", "terminado", "interrumpido"]
 GestionTrabajo = Literal["pendiente", "importado", "ignorado"]
@@ -104,9 +105,15 @@ class TrabajoOut(Salida):
     minutos_estimados: int | None
     # «impresora» = detectado en vivo; «nube» = del historial de Bambu Cloud.
     origen: Literal["impresora", "nube"] = "impresora"
+    # Quién lo envió: «web» = Bambu Studio/Handy (está en el historial de Bambu Cloud);
+    # «impresora» = lanzado desde su pantalla (Bambu nunca lo muestra). None = aún sin saber
+    # (la nube tarda unos minutos en aparecer) o sigue en curso.
+    desde: Literal["web", "impresora"] | None = None
     gramos_total: Numero | None
     filamentos: list[FilamentoTrabajoOut]
     produccion_id: UUID | None
+    # Descuento de filamento en Spoolman, por filamento (vacío si no aplica o aún no se crea).
+    consumos: list[ConsumoOut] = []
 
 
 # ------------------------------------------------------------ conexión (Administración → Conexión)

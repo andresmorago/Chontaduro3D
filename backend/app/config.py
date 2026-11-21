@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     bambu_nube_archivo: str = "/nube/bambu.json"
     bambu_nube_dias: int = 7
 
+    # Spoolman (inventario de bobinas). Vacío = integración apagada. Dentro de Docker es
+    # http://spoolman:8000; SPOOLMAN_WEB es solo el enlace que el panel muestra para abrirlo
+    # (desde la red de casa por WireGuard) y no se usa para conectar.
+    spoolman_url: str = ""
+    spoolman_web: str = ""
+    # Registrar solas en Spoolman las bobinas Bambu con chip del AMS (el UID del chip
+    # es único: no se duplican). Apágalo (0) si prefieres crearlas tú a mano.
+    spoolman_autocrear: bool = True
+
     @field_validator("cookie_secure", mode="before")
     @classmethod
     def _cookie_secure_vacio(cls, v):

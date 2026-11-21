@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminPestanas } from "@/components/panel/AdminPestanas";
 import { ControlesTermicos } from "@/components/panel/ControlesTermicos";
+import { SpoolmanSeccion } from "@/components/panel/SpoolmanSeccion";
 import { useAvisos } from "@/components/ui/Avisos";
 import { Boton } from "@/components/ui/Boton";
 import { api } from "@/lib/api";
@@ -182,6 +183,8 @@ export default function Impresora() {
           <p className="muted">Sin datos de filamento por ahora.</p>
         )}
       </section>
+
+      <SpoolmanSeccion />
 
       <section className="seccion" aria-labelledby="t-trabajos">
         <h2 id="t-trabajos">Trabajos</h2>

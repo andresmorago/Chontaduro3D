@@ -50,6 +50,10 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MIGRAR_AL_ARRANCAR: ${MIGRAR_AL_ARRANCAR:-1}
+      # Spoolman por la red interna; SPOOLMAN_WEB es solo el enlace que muestra el panel (vacío = sin enlace).
+      SPOOLMAN_URL: ${SPOOLMAN_URL:-http://spoolman:8000}
+      SPOOLMAN_WEB: ${SPOOLMAN_WEB:-}
+      SPOOLMAN_AUTOCREAR: ${SPOOLMAN_AUTOCREAR:-1}
     # El usuario del anfitrión: respaldos e imágenes quedan legibles por quien administra.
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:
@@ -88,6 +92,10 @@ services:
       BAMBU_SERIAL: ${BAMBU_SERIAL:-}
       BAMBU_ACCESS_CODE: ${BAMBU_ACCESS_CODE:-}
       BAMBU_NUBE_DIAS: ${BAMBU_NUBE_DIAS:-7}
+      # Este servicio es el ÚNICO que descuenta filamento en Spoolman (así no se manda dos veces).
+      SPOOLMAN_URL: ${SPOOLMAN_URL:-http://spoolman:8000}
+      # Registra solas en Spoolman las bobinas Bambu con chip que aparezcan en el AMS (0 = apagado).
+      SPOOLMAN_AUTOCREAR: ${SPOOLMAN_AUTOCREAR:-1}
     volumes:
       # Solo lectura de una vez: importa el token viejo de `make bambu-login` (ya retirado), si existe.
       - ./data/nube:/nube
@@ -95,6 +103,33 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    restart: always
+
+  # Spoolman (inventario de bobinas de filamento). NO tiene autenticación: por eso solo se publica
+  # en la IP del túnel WireGuard de la casa (SPOOLMAN_BIND_IP=10.6.0.6, nunca 0.0.0.0) y el cortafuegos
+  # solo deja pasar 10.0.4.0/24 por wg0 (ver docs/spoolman.md). Nunca va por el Worker/túnel público.
+  # El backend y el servicio `impresora` le hablan por la red interna: http://spoolman:8000.
+  spoolman:
+    image: ghcr.io/donkie/spoolman:0.27.1
+    environment:
+      TZ: America/Bogota
+      SPOOLMAN_DIR_DATA: /data
+      SPOOLMAN_DIR_BACKUPS: /data/backups
+      SPOOLMAN_DIR_LOGS: /data/logs
+      SPOOLMAN_AUTOMATIC_BACKUP: "TRUE"
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    volumes:
+      - ./data/spoolman:/data
+    ports:
+      - "${SPOOLMAN_BIND_IP:-127.0.0.1}:${SPOOLMAN_PORT:-7912}:8000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     restart: always
 
   frontend:

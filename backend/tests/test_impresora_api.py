@@ -249,3 +249,34 @@ async def test_editar_el_lote_no_toca_el_vinculo(admin, db):
         and r.json()["desde_impresora"] == "Soporte"
         and r.json()["nota"] == "corregido"
     )
+
+
+async def test_historial_completo_incluye_importados_ignorados_y_dice_quien_lo_envio(admin, db):
+    ahora_ = ahora()
+    viejo = ahora_ - timedelta(hours=5)
+    await poner_trabajo(db, nombre="Desde Studio", nube_id="777", inicio_en=viejo,
+                        fin_en=viejo + timedelta(hours=1), gestion="importado")  # fmt: skip
+    await poner_trabajo(db, nombre="Desde la pantalla", inicio_en=viejo,
+                        fin_en=viejo + timedelta(hours=1), gestion="pendiente")  # fmt: skip
+    await poner_trabajo(db, nombre="Prueba", inicio_en=viejo, fin_en=viejo + timedelta(hours=1),
+                        gestion="ignorado")  # fmt: skip
+    # Recién terminado: la nube aún puede no tenerlo, no se afirma de dónde vino.
+    await poner_trabajo(db, nombre="Reciente", inicio_en=ahora_ - timedelta(minutes=40),
+                        fin_en=ahora_ - timedelta(minutes=5), gestion="pendiente")  # fmt: skip
+    await poner_trabajo(db, nombre="En curso", estado="en_curso", fin_en=None,
+                        inicio_en=ahora_ - timedelta(minutes=30), gestion="pendiente")  # fmt: skip
+
+    todos = {
+        t["nombre"]: t for t in (await admin.get("/api/impresora/trabajos?gestion=todos")).json()
+    }
+    assert set(todos) == {"Desde Studio", "Desde la pantalla", "Prueba", "Reciente", "En curso"}
+    assert todos["Desde Studio"]["desde"] == "web"
+    assert todos["Desde la pantalla"]["desde"] == "impresora"
+    assert todos["Reciente"]["desde"] is None and todos["En curso"]["desde"] is None
+    # Cada vista por separado sigue funcionando.
+    imp = (await admin.get("/api/impresora/trabajos?gestion=importado")).json()
+    assert [t["nombre"] for t in imp] == ["Desde Studio"]
+    assert {t["nombre"] for t in (await admin.get("/api/impresora/trabajos")).json()} == {
+        "Desde la pantalla", "Reciente", "En curso",
+    }  # fmt: skip
+    assert (await admin.get("/api/impresora/trabajos?gestion=otra")).status_code == 422

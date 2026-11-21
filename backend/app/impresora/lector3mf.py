@@ -102,9 +102,12 @@ def _norm(nombre: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", base.lower()).strip("_")
 
 
-def elegir_archivo(nombres: list[str], archivo: str | None, nombre: str | None) -> str | None:
+def elegir_archivo(
+    nombres: list[str], archivo: str | None, nombre: str | None, solo_exacto: bool = False
+) -> str | None:
     """El .3mf que corresponde al trabajo, entre los que hay en la impresora. Primero el nombre
-    exacto que informa la impresora; después coincidencias por nombre normalizado."""
+    exacto que informa la impresora; después coincidencias por nombre normalizado (salvo que
+    `solo_exacto`)."""
     tres_mf = [n for n in nombres if n.lower().endswith(".3mf")]
     exactos = []
     if archivo:
@@ -115,11 +118,34 @@ def elegir_archivo(nombres: list[str], archivo: str | None, nombre: str | None) 
         for n in tres_mf:
             if n == e:
                 return n
+    if solo_exacto:
+        return None
     objetivos = [t for t in (_norm(archivo or ""), _norm(nombre or "")) if t]
     for t in objetivos:
         for n in tres_mf:
             if _norm(n) == t:
                 return n
+    return None
+
+
+def elegir_en_carpetas(
+    listados: dict[str, dict[str, int]], archivo: str | None, nombre: str | None
+) -> tuple[str, str] | None:
+    """(carpeta, archivo) del trabajo. Un nombre EXACTO en cualquier carpeta gana a uno solo
+    «parecido» de otra: la impresora guarda copias del mismo trabajo en `/` y en `/cache`, y un
+    `X_plate_2.gcode.3mf` más nuevo en `/` no es el `X_plate_2.3mf` que de verdad se imprimió."""
+    # 1) el archivo que informa la impresora, en cualquier carpeta; 2) los derivados del nombre del
+    # trabajo; 3) coincidencias parecidas. Cada nivel mira TODAS las carpetas antes del siguiente.
+    niveles = (
+        {"archivo": archivo, "nombre": None, "solo_exacto": True},
+        {"archivo": None, "nombre": nombre, "solo_exacto": True},
+        {"archivo": archivo, "nombre": nombre, "solo_exacto": False},
+    )
+    for nivel in niveles:
+        for carpeta, tamanos in listados.items():
+            elegido = elegir_archivo(list(tamanos), **nivel)
+            if elegido is not None:
+                return carpeta, elegido
     return None
 
 
@@ -162,6 +188,7 @@ def leer_de_la_impresora(
         ftp.connect(ip, 990, timeout=20)
         ftp.login("bblp", codigo)
         ftp.prot_p()
+        listados: dict[str, dict[str, int]] = {}
         for carpeta in CARPETAS:
             try:
                 filas: list[str] = []
@@ -173,9 +200,12 @@ def leer_de_la_impresora(
                 partes = fila.split(None, 8)
                 if len(partes) == 9 and partes[4].isdigit():
                     tamanos[partes[8]] = int(partes[4])
-            elegido = elegir_archivo(list(tamanos), archivo, nombre)
-            if elegido is None or tamanos.get(elegido, 0) > LIMITE_BYTES:
-                continue
+            listados[carpeta] = tamanos
+        hallado = elegir_en_carpetas(listados, archivo, nombre)
+        if hallado is not None:
+            carpeta, elegido = hallado
+            if listados[carpeta].get(elegido, 0) > LIMITE_BYTES:
+                return None
             buffer = io.BytesIO()
             ftp.retrbinary(f"RETR {carpeta.rstrip('/')}/{elegido}", buffer.write)
             return analizar_3mf(buffer.getvalue(), plate or plate_de(archivo, nombre, elegido))
